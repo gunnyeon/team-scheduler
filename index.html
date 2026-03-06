@@ -179,12 +179,11 @@ function App(){
     }catch(e){setSyncStatus("오류");}
   }
 
-  // 저장/삭제 완료 후 즉시 재조회
+  // 저장/삭제 완료 후 상태만 해제 (로컬 즉시반영 + 폴링이 동기화)
   function afterSave(){
     pendingOps.current=Math.max(0,pendingOps.current-1);
     isSaving.current=false;
     setSyncStatus("동기화됨");
-    loadData(); // API 완료 즉시 최신 데이터 반영
   }
   function beforeSave(){
     pendingOps.current++;

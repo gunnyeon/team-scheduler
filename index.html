@@ -10,7 +10,7 @@
   예) https://script.google.com/macros/s/AKfycb.../exec
 ================================================= -->
 <script>
-  const API_URL = "https://script.google.com/macros/s/AKfycbxWMY7SEv3WTjG1vMeE5r-N7yeXj4APwj_5C3cE3zyiUpuPKAbLfxV7zvMPiRJD-jxYRA/exec";
+  const API_URL = "https://script.google.com/macros/s/AKfycbzkoL9z-bSV_uKG16wDUzZEY7yU3Rru9-TmIKxv-G4-EKGrtPPy8-GY0GboOuylfmRZ/exec";
 </script>
 
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -60,18 +60,31 @@ const PRESENCE_HEADERS = ["id","name","ts"];
 
 // ── API 헬퍼 ────────────────────────────────────────
 async function apiGet(sheet) {
-  const res = await fetch(`${API_URL}?sheet=${sheet}`);
-  const json = await res.json();
-  return json.data || [];
+  try {
+    const res = await fetch(`${API_URL}?sheet=${sheet}`);
+    const json = await res.json();
+    return json.data || [];
+  } catch(e) { return []; }
+}
+async function apiPost(body) {
+  try {
+    // Apps Script는 no-cors 모드 필요 (응답을 읽을 수 없지만 요청은 전달됨)
+    await fetch(API_URL, {
+      method: "POST",
+      mode: "no-cors",
+      headers: { "Content-Type": "text/plain" },
+      body: JSON.stringify(body)
+    });
+  } catch(e) { console.error("API 오류:", e); }
 }
 async function apiUpsert(sheet, row) {
-  await fetch(API_URL, { method:"POST", body: JSON.stringify({ sheet, action:"upsert", row }) });
+  await apiPost({ sheet, action:"upsert", row });
 }
 async function apiDelete(sheet, id) {
-  await fetch(API_URL, { method:"POST", body: JSON.stringify({ sheet, action:"delete", id }) });
+  await apiPost({ sheet, action:"delete", id });
 }
 async function apiInit(sheet, headers) {
-  await fetch(API_URL, { method:"POST", body: JSON.stringify({ sheet, action:"init", headers }) });
+  await apiPost({ sheet, action:"init", headers });
 }
 
 // ── 버튼 스타일 ─────────────────────────────────────
@@ -166,12 +179,13 @@ function App() {
   // ── 일정 CRUD ──────────────────────────────────────
   async function saveSched(data) {
     setSyncStatus("저장중");
-    const row = { ...data, id: editingSched?.id || `s${Date.now()}` };
-    setSchedules(prev => editingSched
+    const isEdit = !!(data.id);
+    const row = { ...data, id: data.id || `s${Date.now()}` };
+    setSchedules(prev => isEdit
       ? prev.map(s => s.id===row.id ? row : s)
       : [...prev, row]);
     await apiUpsert("schedules", row);
-    await logActivity(editingSched?"일정 수정":"일정 추가", data.title);
+    await logActivity(isEdit?"일정 수정":"일정 추가", data.title);
     setSyncStatus("동기화됨");
     setShowSchedModal(false); setEditingSched(null);
   }
@@ -334,13 +348,13 @@ function App() {
           {activeMenu==="대시보드"&&<Dashboard schedules={schedules} tasks={tasks} todaySchedules={todaySchedules} weekSchedules={weekSchedules} urgentSchedules={urgentSchedules} inProgressTasks={inProgressTasks} completedTasks={completedTasks} setActiveMenu={setActiveMenu}/>}
           {activeMenu==="일정 관리"&&<ScheduleBoard schedules={schedules} onEdit={s=>{setEditingSched(s);setShowSchedModal(true);}} onDelete={deleteSched}/>}
           {activeMenu==="업무 관리"&&<TaskBoard tasks={tasks} onEdit={t=>{setEditingTask(t);setShowTaskModal(true);}} onDelete={deleteTask} onStatusChange={updateTaskStatus}/>}
-          {activeMenu==="캘린더"&&<CalendarView schedules={schedules} currentMonth={currentMonth} setCurrentMonth={setCurrentMonth} todayStr={todayStr} selectedSched={selectedSched} setSelectedSched={setSelectedSched} onDateClick={d=>{setEditingSched(null);setShowSchedModal({prefill:d});}} onEditSched={s=>{setEditingSched(s);setShowSchedModal(true);}} onDeleteSched={deleteSched}/>}
+          {activeMenu==="캘린더"&&<CalendarView schedules={schedules} currentMonth={currentMonth} setCurrentMonth={setCurrentMonth} todayStr={todayStr} selectedSched={selectedSched} setSelectedSched={setSelectedSched} onDateClick={d=>{setEditingSched(null);setTimeout(()=>setShowSchedModal({prefill:d}),0);}} onEditSched={s=>{setEditingSched(s);setShowSchedModal(true);}} onDeleteSched={deleteSched}/>}
           {activeMenu==="리포트"&&<Reports schedules={schedules} tasks={tasks}/>}
         </div>
       </div>
 
       {/* 모달들 */}
-      {showSchedModal&&<SchedModal initial={editingSched||(showSchedModal.prefill?{...newSchedDef,start_date:showSchedModal.prefill,end_date:showSchedModal.prefill}:newSchedDef)} onSave={saveSched} onClose={()=>{setShowSchedModal(false);setEditingSched(null);}} isEdit={!!editingSched}/>}
+      {showSchedModal&&<SchedModal initial={editingSched?editingSched:(showSchedModal&&showSchedModal.prefill?{...newSchedDef,start_date:showSchedModal.prefill,end_date:showSchedModal.prefill}:newSchedDef)} onSave={saveSched} onClose={()=>{setShowSchedModal(false);setEditingSched(null);}} isEdit={!!editingSched}/>}
       {showTaskModal&&<TaskModal_ initial={editingTask||newTaskDef} onSave={saveTask} onClose={()=>{setShowTaskModal(false);setEditingTask(null);}} isEdit={!!editingTask}/>}
       {confirmDlg&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200}}>

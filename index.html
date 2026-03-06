@@ -629,7 +629,7 @@ function TaskBoard({tasks,onEdit,onDelete,onStatusChange}){
                 <div style={{width:20,height:20,borderRadius:"50%",background:getAvatarColor(task.owner_name),display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:"#fff",flexShrink:0}}>{(task.owner_name||"?")[0]}</div>
                 <span style={{fontSize:12,color:"#A78BFA",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{task.owner_name}</span>
               </div>
-              <span style={{fontSize:12,color:isOverdue?"#F87171":task.due_date?"#FB923C":"#4B4B6B",fontWeight:isOverdue?700:400}}>{task.due_date?`${task.due_date} (${getDayOfWeek(task.due_date)})`:"—"}{isOverdue&&" ⚠"}</span>
+              <span style={{fontSize:12,color:isOverdue?"#F87171":task.due_date?"#FB923C":"#4B4B6B",fontWeight:isOverdue?700:400}}>{task.due_date?<span>{task.due_date} <span style={{color:"#C4B5FD"}}>({getDayOfWeek(task.due_date)})</span></span>:"—"}{isOverdue&&<span style={{marginLeft:3}}>⚠</span>}</span>
               <div style={{display:"flex",alignItems:"center",gap:6}}>
                 <div style={{flex:1,height:5,background:"#2A2A4A",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${task.progress}%`,background:sc.border,borderRadius:3,transition:"width 0.4s"}}/></div>
                 <span style={{fontSize:10,color:sc.border,fontWeight:700,flexShrink:0}}>{task.progress}%</span>

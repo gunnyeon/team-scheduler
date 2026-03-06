@@ -140,12 +140,43 @@ function App(){
   }
 
   async function loadData(){
-    if(isSaving.current)return; // 저장 중엔 폴링 건너뜀
+    if(isSaving.current)return;
     try{
       const [s,t]=await Promise.all([apiGet("schedules"),apiGet("tasks")]);
       setSchedules(s); setTasks(t);
       setLastSync(new Date()); setSyncStatus("동기화됨");
     }catch(e){setSyncStatus("오류");}
+  }
+
+  // 저장 직후 호출 - Sheets 반영될 때까지 최대 3회 재시도
+  async function loadAfterSave(type, savedId){
+    const maxTry=3;
+    for(let i=0;i<maxTry;i++){
+      await new Promise(r=>setTimeout(r,1500));
+      try{
+        if(type==="schedules"){
+          const s=await apiGet("schedules");
+          // 저장한 항목이 Sheets에 반영됐는지 확인
+          if(s.find(r=>r.id===savedId)){
+            setSchedules(s);
+            setLastSync(new Date()); setSyncStatus("동기화됨");
+            isSaving.current=false;
+            return;
+          }
+        } else {
+          const t=await apiGet("tasks");
+          if(t.find(r=>r.id===savedId)){
+            setTasks(t);
+            setLastSync(new Date()); setSyncStatus("동기화됨");
+            isSaving.current=false;
+            return;
+          }
+        }
+      }catch(e){}
+    }
+    // 3회 실패해도 로컬 상태 유지, 폴링에 위임
+    isSaving.current=false;
+    setSyncStatus("동기화됨");
   }
 
   useEffect(()=>{
@@ -176,12 +207,7 @@ function App(){
     isSaving.current=true;
     setSyncStatus("저장중");
     await apiUpsert("schedules",row);
-    setSyncStatus("동기화됨");
-    // Sheets 반영 대기 후 재조회
-    setTimeout(async()=>{
-      isSaving.current=false;
-      await loadData();
-    }, 3000);
+    loadAfterSave("schedules", row.id);
   }
   async function deleteSched(id){
     const target=schedules.find(s=>s.id===id);
@@ -191,8 +217,8 @@ function App(){
       isSaving.current=true;
       setSyncStatus("저장중");
       await apiDelete("schedules",id);
-      setSyncStatus("동기화됨");
-      setTimeout(async()=>{isSaving.current=false;await loadData();},3000);
+      isSaving.current=false;
+      await loadData();
     }});
   }
   async function saveTask(data){
@@ -205,11 +231,7 @@ function App(){
     isSaving.current=true;
     setSyncStatus("저장중");
     await apiUpsert("tasks",row);
-    setSyncStatus("동기화됨");
-    setTimeout(async()=>{
-      isSaving.current=false;
-      await loadData();
-    }, 3000);
+    loadAfterSave("tasks", row.id);
   }
   async function deleteTask(id){
     const target=tasks.find(t=>t.id===id);
@@ -219,8 +241,8 @@ function App(){
       isSaving.current=true;
       setSyncStatus("저장중");
       await apiDelete("tasks",id);
-      setSyncStatus("동기화됨");
-      setTimeout(async()=>{isSaving.current=false;await loadData();},3000);
+      isSaving.current=false;
+      await loadData();
     }});
   }
   async function updateTaskStatus(id,status){
@@ -232,8 +254,7 @@ function App(){
     isSaving.current=true;
     setSyncStatus("저장중");
     await apiUpsert("tasks",row);
-    setSyncStatus("동기화됨");
-    setTimeout(async()=>{isSaving.current=false;await loadData();},3000);
+    loadAfterSave("tasks", row.id);
   }
 
   const [loginError,setLoginError]=useState("");
@@ -245,13 +266,27 @@ function App(){
     setLoginLoading(true);
     setLoginError("");
     try{
-      const members=await apiGet("members");
+      // members 시트 직접 fetch (오류 응답도 확인)
+      const res=await fetch(`${API_URL}?sheet=members`);
+      const json=await res.json();
+
+      // API 자체 오류
+      if(!json.ok){
+        setLoginError(`⚠️ 서버 오류: ${json.error||"알 수 없는 오류"}. Apps Script를 재배포하거나 관리자에게 문의하세요.`);
+        setLoginLoading(false);
+        return;
+      }
+
+      const members=json.data||[];
+
+      // members 시트 비어있음
       if(members.length===0){
         setLoginError("⚠️ 허용 목록이 비어있습니다. Sheets members 시트에 이름을 추가하세요.");
         setLoginLoading(false);
         return;
       }
-      const allowed=members.map(m=>String(m.name||"").trim());
+
+      const allowed=members.map(m=>String(m.name||"").trim()).filter(Boolean);
       if(!allowed.includes(n)){
         setLoginError("❌ 등록되지 않은 이름입니다. 관리자에게 문의하세요.");
         setLoginLoading(false);
@@ -260,7 +295,12 @@ function App(){
       try{sessionStorage.setItem("ts-name",n);}catch{}
       setMyName(n);
     }catch(e){
-      setLoginError("⚠️ 서버 연결 오류. 잠시 후 다시 시도하세요.");
+      // API_URL 미설정 또는 네트워크 오류
+      if(API_URL==="YOUR_APPS_SCRIPT_URL_HERE"){
+        setLoginError("⚠️ API URL이 설정되지 않았습니다. index.html의 API_URL을 확인하세요.");
+      } else {
+        setLoginError(`⚠️ 서버 연결 오류: ${e.message}. API URL과 배포 설정을 확인하세요.`);
+      }
     }
     setLoginLoading(false);
   }

@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TeamSync - 팀 협업 일정관리</title>
+
+<!-- ================================================
+  ✅ 설정: 아래 URL을 Apps Script 배포 URL로 교체하세요
+  예) https://script.google.com/macros/s/AKfycb.../exec
+================================================= -->
+<script>
+  const API_URL = "https://script.google.com/macros/s/AKfycbxWMY7SEv3WTjG1vMeE5r-N7yeXj4APwj_5C3cE3zyiUpuPKAbLfxV7zvMPiRJD-jxYRA/exec";
+</script>
+
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0F0F1A; color: #E8E8F0; font-family: 'Noto Sans KR', sans-serif; overflow: hidden; }
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: #1E1E3A; }
+  ::-webkit-scrollbar-thumb { background: #3A3A5A; border-radius: 2px; }
+  input, select, textarea { font-family: inherit; }
+  input[type=date]::-webkit-calendar-picker-indicator { filter: invert(0.7); }
+  .add-btn { opacity: 0; transition: opacity 0.15s; }
+  .cal-day:hover .add-btn { opacity: 1 !important; }
+  .cal-day:hover { background: rgba(108,99,255,0.06) !important; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useCallback, useRef } = React;
+
+// ── 상수 ────────────────────────────────────────────
+const AVATAR_COLORS = ["#6C63FF","#FF6B9D","#2EC4B6","#FB923C","#4ADE80","#F9A8D4","#60A5FA","#FBBF24"];
+function getAvatarColor(name) {
+  let h = 0; for (let c of (name||"?")) h = (h*31+c.charCodeAt(0))%AVATAR_COLORS.length;
+  return AVATAR_COLORS[h];
+}
+const PRIORITY_COLORS = {
+  high:   { bg: "#FF4D6D", text: "#fff" },
+  medium: { bg: "#FF9F1C", text: "#fff" },
+  low:    { bg: "#2EC4B6", text: "#fff" },
+};
+const TASK_STATUSES = ["할 일","진행 중","검토","완료"];
+const STATUS_COLORS = {
+  "할 일":  { bg:"#EEF2FF", border:"#818CF8", text:"#4338CA" },
+  "진행 중":{ bg:"#FFF7ED", border:"#FB923C", text:"#C2410C" },
+  "검토":   { bg:"#FDF4FF", border:"#C084FC", text:"#7E22CE" },
+  "완료":   { bg:"#F0FDF4", border:"#4ADE80", text:"#15803D" },
+};
+const SCHEDULE_HEADERS = ["id","title","description","owner_name","start_date","end_date","priority","status"];
+const TASK_HEADERS     = ["id","title","owner_name","progress","status"];
+const ACTIVITY_HEADERS = ["id","name","action","target","time"];
+const PRESENCE_HEADERS = ["id","name","ts"];
+
+// ── API 헬퍼 ────────────────────────────────────────
+async function apiGet(sheet) {
+  const res = await fetch(`${API_URL}?sheet=${sheet}`);
+  const json = await res.json();
+  return json.data || [];
+}
+async function apiUpsert(sheet, row) {
+  await fetch(API_URL, { method:"POST", body: JSON.stringify({ sheet, action:"upsert", row }) });
+}
+async function apiDelete(sheet, id) {
+  await fetch(API_URL, { method:"POST", body: JSON.stringify({ sheet, action:"delete", id }) });
+}
+async function apiInit(sheet, headers) {
+  await fetch(API_URL, { method:"POST", body: JSON.stringify({ sheet, action:"init", headers }) });
+}
+
+// ── 버튼 스타일 ─────────────────────────────────────
+function btn(bg, color="#fff") {
+  return { background:bg, color, border:"none", borderRadius:8, padding:"8px 16px",
+    fontSize:13, fontWeight:600, cursor:"pointer", whiteSpace:"nowrap" };
+}
+const inp = {
+  width:"100%", background:"#1E1E3A", border:"1px solid #2A2A4A", borderRadius:8,
+  padding:"9px 12px", fontSize:13, color:"#E8E8F0", outline:"none",
+};
+
+// ── 메인 앱 ─────────────────────────────────────────
+function App() {
+  const [myName, setMyName]     = useState(() => sessionStorage.getItem("ts-name")||"");
+  const [nameInput, setNameInput] = useState("");
+  const [activeMenu, setActiveMenu] = useState("대시보드");
+  const [schedules, setSchedules] = useState([]);
+  const [tasks, setTasks]         = useState([]);
+  const [onlineUsers, setOnlineUsers] = useState([]);
+  const [activityFeed, setActivityFeed] = useState([]);
+  const [showFeed, setShowFeed]   = useState(false);
+  const [syncStatus, setSyncStatus] = useState("동기화됨");
+  const [lastSync, setLastSync]   = useState(new Date());
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [showSchedModal, setShowSchedModal] = useState(false);
+  const [showTaskModal, setShowTaskModal]   = useState(false);
+  const [editingSched, setEditingSched]     = useState(null);
+  const [editingTask, setEditingTask]       = useState(null);
+  const [confirmDlg, setConfirmDlg]         = useState(null);
+  const [currentMonth, setCurrentMonth]     = useState(new Date());
+  const [selectedSched, setSelectedSched]   = useState(null);
+  const myId = useRef(`u-${Math.random().toString(36).slice(2,8)}`);
+  const timer = useRef(null);
+  const initialized = useRef(false);
+
+  const todayStr = new Date().toISOString().slice(0,10);
+  const weekEndDate = new Date(); weekEndDate.setDate(weekEndDate.getDate()+6);
+  const weekEndStr = weekEndDate.toISOString().slice(0,10);
+
+  // ── 초기화 ─────────────────────────────────────────
+  async function initialize() {
+    await Promise.all([
+      apiInit("schedules", SCHEDULE_HEADERS),
+      apiInit("tasks",     TASK_HEADERS),
+      apiInit("activity",  ACTIVITY_HEADERS),
+      apiInit("presence",  PRESENCE_HEADERS),
+    ]);
+    initialized.current = true;
+  }
+
+  // ── 데이터 로드 ────────────────────────────────────
+  const loadAll = useCallback(async (name) => {
+    try {
+      const [s, t, a, p] = await Promise.all([
+        apiGet("schedules"), apiGet("tasks"),
+        apiGet("activity"),  apiGet("presence"),
+      ]);
+      setSchedules(s);
+      setTasks(t);
+      setActivityFeed(a.sort((x,y)=>Number(y.time)-Number(x.time)).slice(0,30));
+      const now = Date.now();
+      const alive = p.filter(u => now - Number(u.ts) < 12000);
+      setOnlineUsers(alive);
+      setLastSync(new Date());
+      setSyncStatus("동기화됨");
+      // 내 presence 갱신
+      if (name) {
+        await apiUpsert("presence", { id: myId.current, name, ts: now });
+      }
+    } catch(e) { setSyncStatus("오류"); }
+  }, []);
+
+  useEffect(() => {
+    if (!myName) return;
+    (async () => {
+      if (!initialized.current) await initialize();
+      await loadAll(myName);
+      timer.current = setInterval(() => loadAll(myName), 3000);
+    })();
+    return () => clearInterval(timer.current);
+  }, [myName]);
+
+  // ── 활동 로그 ──────────────────────────────────────
+  async function logActivity(action, target) {
+    if (!myName) return;
+    await apiUpsert("activity", {
+      id: `a-${Date.now()}`, name: myName, action, target, time: Date.now()
+    });
+  }
+
+  // ── 일정 CRUD ──────────────────────────────────────
+  async function saveSched(data) {
+    setSyncStatus("저장중");
+    const row = { ...data, id: editingSched?.id || `s${Date.now()}` };
+    setSchedules(prev => editingSched
+      ? prev.map(s => s.id===row.id ? row : s)
+      : [...prev, row]);
+    await apiUpsert("schedules", row);
+    await logActivity(editingSched?"일정 수정":"일정 추가", data.title);
+    setSyncStatus("동기화됨");
+    setShowSchedModal(false); setEditingSched(null);
+  }
+  async function deleteSched(id) {
+    const t = schedules.find(s=>s.id===id);
+    setConfirmDlg({ message:`"${t?.title}" 일정을 삭제하시겠습니까?`, onConfirm: async () => {
+      setSchedules(prev => prev.filter(s=>s.id!==id));
+      await apiDelete("schedules", id);
+      await logActivity("일정 삭제", t?.title);
+    }});
+  }
+
+  // ── 업무 CRUD ──────────────────────────────────────
+  async function saveTask(data) {
+    setSyncStatus("저장중");
+    const row = { ...data, id: editingTask?.id || `t${Date.now()}` };
+    setTasks(prev => editingTask
+      ? prev.map(t => t.id===row.id ? row : t)
+      : [...prev, row]);
+    await apiUpsert("tasks", row);
+    await logActivity(editingTask?"업무 수정":"업무 추가", data.title);
+    setSyncStatus("동기화됨");
+    setShowTaskModal(false); setEditingTask(null);
+  }
+  async function deleteTask(id) {
+    const t = tasks.find(t=>t.id===id);
+    setConfirmDlg({ message:`"${t?.title}" 업무를 삭제하시겠습니까?`, onConfirm: async () => {
+      setTasks(prev => prev.filter(t=>t.id!==id));
+      await apiDelete("tasks", id);
+      await logActivity("업무 삭제", t?.title);
+    }});
+  }
+  async function updateTaskStatus(id, status) {
+    const t = tasks.find(t=>t.id===id);
+    const row = {...t, status};
+    setTasks(prev => prev.map(x => x.id===id ? row : x));
+    await apiUpsert("tasks", row);
+    await logActivity(`상태 → ${status}`, t?.title);
+  }
+
+  const todaySchedules   = schedules.filter(s=>s.start_date<=todayStr&&s.end_date>=todayStr);
+  const weekSchedules    = schedules.filter(s=>s.start_date<=weekEndStr&&s.end_date>=todayStr);
+  const urgentSchedules  = schedules.filter(s=>s.end_date>=todayStr&&s.end_date<=weekEndStr);
+  const inProgressTasks  = tasks.filter(t=>t.status==="진행 중");
+  const completedTasks   = tasks.filter(t=>t.status==="완료");
+
+  const menus = ["대시보드","캘린더","일정 관리","업무 관리","리포트"];
+  const icons = {"대시보드":"▦","캘린더":"🗓","일정 관리":"📅","업무 관리":"✓","리포트":"📊"};
+
+  const newSchedDef = { title:"", description:"", owner_name:myName||"", start_date:todayStr, end_date:todayStr, priority:"medium", status:"upcoming" };
+  const newTaskDef  = { title:"", owner_name:myName||"", progress:0, status:"할 일" };
+
+  // ── 입장 화면 ─────────────────────────────────────
+  if (!myName) return (
+    <div style={{height:"100vh",background:"#0F0F1A",display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{background:"#161628",border:"1px solid #2A2A4A",borderRadius:20,padding:"44px 48px",width:360,textAlign:"center"}}>
+        <div style={{width:64,height:64,borderRadius:18,background:"linear-gradient(135deg,#6C63FF,#FF6B9D)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,margin:"0 auto 20px"}}>⚡</div>
+        <h1 style={{margin:"0 0 6px",fontSize:24,fontWeight:800,color:"#A78BFA"}}>TeamSync</h1>
+        <p style={{color:"#6B7280",fontSize:13,margin:"0 0 28px"}}>팀 협업 일정관리 시스템</p>
+        <p style={{color:"#8B8BAD",fontSize:13,margin:"0 0 10px",textAlign:"left"}}>이름을 입력하고 시작하세요</p>
+        <input value={nameInput} onChange={e=>setNameInput(e.target.value)}
+          onKeyDown={e=>{if(e.key==="Enter"&&nameInput.trim()){const n=nameInput.trim();sessionStorage.setItem("ts-name",n);setMyName(n);}}}
+          placeholder="홍길동" autoFocus
+          style={{...inp,border:"1px solid #6C63FF66",borderRadius:10,padding:"11px 14px",fontSize:15,marginBottom:12}}/>
+        <button onClick={()=>{if(nameInput.trim()){const n=nameInput.trim();sessionStorage.setItem("ts-name",n);setMyName(n);}}}
+          style={{width:"100%",background:"linear-gradient(90deg,#6C63FF,#9C5CF7)",border:"none",borderRadius:10,padding:12,fontSize:14,fontWeight:700,color:"#fff",cursor:"pointer"}}>
+          입장하기 →
+        </button>
+      </div>
+    </div>
+  );
+
+  // ── 메인 레이아웃 ─────────────────────────────────
+  return (
+    <div style={{display:"flex",height:"100vh",background:"#0F0F1A",color:"#E8E8F0",overflow:"hidden"}}>
+      {/* 사이드바 */}
+      <div style={{width:sidebarOpen?224:64,transition:"width 0.3s",background:"linear-gradient(180deg,#161628,#1A1A35)",borderRight:"1px solid #2A2A4A",display:"flex",flexDirection:"column",padding:"0 0 16px",flexShrink:0}}>
+        <div style={{padding:"20px 16px 24px",borderBottom:"1px solid #2A2A4A",display:"flex",alignItems:"center",gap:10}}>
+          <div style={{width:36,height:36,borderRadius:10,background:"linear-gradient(135deg,#6C63FF,#FF6B9D)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>⚡</div>
+          {sidebarOpen&&<span style={{fontWeight:800,fontSize:15,color:"#A78BFA"}}>TeamSync</span>}
+          <div style={{marginLeft:"auto",cursor:"pointer",color:"#6B7280",fontSize:18}} onClick={()=>setSidebarOpen(v=>!v)}>{sidebarOpen?"◀":"▶"}</div>
+        </div>
+        <nav style={{padding:"16px 8px",flex:1}}>
+          {menus.map(m=>(
+            <div key={m} onClick={()=>setActiveMenu(m)} style={{
+              display:"flex",alignItems:"center",gap:12,padding:"10px 12px",borderRadius:10,marginBottom:4,cursor:"pointer",
+              background:activeMenu===m?"linear-gradient(90deg,rgba(108,99,255,0.2),rgba(255,107,157,0.1))":"transparent",
+              borderLeft:activeMenu===m?"3px solid #6C63FF":"3px solid transparent",
+              color:activeMenu===m?"#A78BFA":"#8B8BAD",
+            }}>
+              <span style={{fontSize:16,flexShrink:0}}>{icons[m]}</span>
+              {sidebarOpen&&<span style={{fontSize:13,fontWeight:activeMenu===m?700:400,whiteSpace:"nowrap"}}>{m}</span>}
+            </div>
+          ))}
+        </nav>
+        <div style={{padding:"0 12px",display:"flex",flexDirection:"column",gap:8}}>
+          {/* 접속자 */}
+          {sidebarOpen&&(
+            <div style={{background:"#1E1E3A",borderRadius:10,padding:"10px 12px"}}>
+              <p style={{margin:"0 0 8px",fontSize:11,color:"#6B7280",fontWeight:600}}>접속 중 ({onlineUsers.length}명)</p>
+              {onlineUsers.map(u=>(
+                <div key={u.id} style={{display:"flex",alignItems:"center",gap:7,marginBottom:5}}>
+                  <div style={{width:22,height:22,borderRadius:"50%",background:getAvatarColor(u.name),display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:"#fff",flexShrink:0}}>{(u.name||"?")[0]}</div>
+                  <span style={{fontSize:12,color:u.id===myId.current?"#A78BFA":"#E8E8F0"}}>{u.name}{u.id===myId.current?" (나)":""}</span>
+                  <div style={{width:6,height:6,borderRadius:"50%",background:"#4ADE80",marginLeft:"auto",boxShadow:"0 0 5px #4ADE80"}}/>
+                </div>
+              ))}
+            </div>
+          )}
+          {!sidebarOpen&&onlineUsers.slice(0,3).map(u=>(
+            <div key={u.id} title={u.name} style={{width:28,height:28,borderRadius:"50%",background:getAvatarColor(u.name),display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:"#fff",margin:"0 auto",border:u.id===myId.current?"2px solid #A78BFA":"none"}}>{(u.name||"?")[0]}</div>
+          ))}
+          {/* 동기화 상태 & 활동 피드 */}
+          <div onClick={()=>sidebarOpen&&setShowFeed(v=>!v)} style={{background:"#1E1E3A",borderRadius:10,padding:"8px 12px",display:"flex",alignItems:"center",gap:8,cursor:"pointer"}}>
+            <div style={{width:8,height:8,borderRadius:"50%",background:syncStatus==="동기화됨"?"#4ADE80":syncStatus==="저장중"?"#FB923C":"#F87171",flexShrink:0,boxShadow:syncStatus==="동기화됨"?"0 0 6px #4ADE80":"none"}}/>
+            {sidebarOpen&&<span style={{fontSize:11,color:"#6B7280",flex:1}}>{syncStatus==="동기화됨"?"실시간 동기화":syncStatus==="저장중"?"저장 중...":"오류"}</span>}
+            {sidebarOpen&&<span style={{fontSize:10,color:"#4B4B6B"}}>활동 {showFeed?"▲":"▼"}</span>}
+          </div>
+          {sidebarOpen&&showFeed&&(
+            <div style={{background:"#1E1E3A",borderRadius:10,padding:"10px 12px",maxHeight:200,overflow:"auto"}}>
+              <p style={{margin:"0 0 8px",fontSize:11,color:"#6B7280",fontWeight:600}}>최근 활동</p>
+              {activityFeed.length===0&&<p style={{fontSize:11,color:"#4B4B6B"}}>활동 없음</p>}
+              {activityFeed.map(a=>(
+                <div key={a.id} style={{marginBottom:7,paddingBottom:7,borderBottom:"1px solid #2A2A4A"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:2}}>
+                    <div style={{width:16,height:16,borderRadius:"50%",background:getAvatarColor(a.name),display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:"#fff",flexShrink:0}}>{(a.name||"?")[0]}</div>
+                    <span style={{fontSize:11,color:"#A78BFA",fontWeight:600}}>{a.name}</span>
+                  </div>
+                  <p style={{margin:0,fontSize:10,color:"#8B8BAD"}}>{a.action}: <span style={{color:"#E8E8F0"}}>{a.target}</span></p>
+                  <p style={{margin:0,fontSize:9,color:"#4B4B6B"}}>{new Date(Number(a.time)).toLocaleString("ko-KR")}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 메인 */}
+      <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column"}}>
+        {/* 헤더 */}
+        <div style={{padding:"16px 28px",borderBottom:"1px solid #2A2A4A",background:"#0F0F1A",display:"flex",alignItems:"center",gap:16,flexShrink:0}}>
+          <div>
+            <h1 style={{margin:0,fontSize:20,fontWeight:800}}>{activeMenu}</h1>
+            <p style={{margin:0,fontSize:12,color:"#6B7280"}}>마지막 동기화: {lastSync.toLocaleTimeString("ko-KR")}</p>
+          </div>
+          <div style={{marginLeft:"auto",display:"flex",gap:10,alignItems:"center"}}>
+            {activeMenu==="일정 관리"&&<button onClick={()=>{setEditingSched(null);setShowSchedModal(true);}} style={btn("#6C63FF")}>+ 일정 추가</button>}
+            {activeMenu==="업무 관리"&&<button onClick={()=>{setEditingTask(null);setShowTaskModal(true);}} style={btn("#2EC4B6")}>+ 업무 추가</button>}
+            <button onClick={()=>loadAll(myName)} style={btn("#2A2A4A","#A78BFA")}>↻</button>
+            <div style={{display:"flex",alignItems:"center",gap:8,background:"#1E1E3A",borderRadius:10,padding:"6px 12px"}}>
+              <div style={{width:26,height:26,borderRadius:"50%",background:getAvatarColor(myName),display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:"#fff"}}>{myName[0]}</div>
+              <span style={{fontSize:13,fontWeight:600}}>{myName}</span>
+              <span title="이름 변경" onClick={()=>{sessionStorage.removeItem("ts-name");setMyName("");setNameInput("");}} style={{fontSize:14,color:"#6B7280",cursor:"pointer",marginLeft:4}}>⏏</span>
+            </div>
+          </div>
+        </div>
+
+        {/* 컨텐츠 */}
+        <div style={{flex:1,overflow:"auto",padding:"24px 28px"}}>
+          {activeMenu==="대시보드"&&<Dashboard schedules={schedules} tasks={tasks} todaySchedules={todaySchedules} weekSchedules={weekSchedules} urgentSchedules={urgentSchedules} inProgressTasks={inProgressTasks} completedTasks={completedTasks} setActiveMenu={setActiveMenu}/>}
+          {activeMenu==="일정 관리"&&<ScheduleBoard schedules={schedules} onEdit={s=>{setEditingSched(s);setShowSchedModal(true);}} onDelete={deleteSched}/>}
+          {activeMenu==="업무 관리"&&<TaskBoard tasks={tasks} onEdit={t=>{setEditingTask(t);setShowTaskModal(true);}} onDelete={deleteTask} onStatusChange={updateTaskStatus}/>}
+          {activeMenu==="캘린더"&&<CalendarView schedules={schedules} currentMonth={currentMonth} setCurrentMonth={setCurrentMonth} todayStr={todayStr} selectedSched={selectedSched} setSelectedSched={setSelectedSched} onDateClick={d=>{setEditingSched(null);setShowSchedModal({prefill:d});}}/>}
+          {activeMenu==="리포트"&&<Reports schedules={schedules} tasks={tasks}/>}
+        </div>
+      </div>
+
+      {/* 모달들 */}
+      {showSchedModal&&<SchedModal initial={editingSched||(showSchedModal.prefill?{...newSchedDef,start_date:showSchedModal.prefill,end_date:showSchedModal.prefill}:newSchedDef)} onSave={saveSched} onClose={()=>{setShowSchedModal(false);setEditingSched(null);}} isEdit={!!editingSched}/>}
+      {showTaskModal&&<TaskModal_ initial={editingTask||newTaskDef} onSave={saveTask} onClose={()=>{setShowTaskModal(false);setEditingTask(null);}} isEdit={!!editingTask}/>}
+      {confirmDlg&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200}}>
+          <div style={{background:"#161628",border:"1px solid #F8717144",borderRadius:16,padding:"28px 32px",maxWidth:380,width:"90%",textAlign:"center"}}>
+            <div style={{fontSize:36,marginBottom:12}}>🗑️</div>
+            <p style={{color:"#E8E8F0",fontSize:15,fontWeight:600,marginBottom:20}}>{confirmDlg.message}</p>
+            <div style={{display:"flex",gap:10,justifyContent:"center"}}>
+              <button onClick={()=>setConfirmDlg(null)} style={{...btn("#2A2A4A","#8B8BAD"),padding:"10px 24px"}}>취소</button>
+              <button onClick={()=>{confirmDlg.onConfirm();setConfirmDlg(null);}} style={{...btn("#F87171"),padding:"10px 24px"}}>삭제</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── 대시보드 ──────────────────────────────────────────
+function Dashboard({schedules,tasks,todaySchedules,weekSchedules,urgentSchedules,inProgressTasks,completedTasks,setActiveMenu}) {
+  return (
+    <div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(180px,1fr))",gap:16,marginBottom:28}}>
+        {[
+          {label:"오늘 일정",value:todaySchedules.length,icon:"📅",color:"#6C63FF",onClick:()=>setActiveMenu("캘린더")},
+          {label:"이번주 일정",value:weekSchedules.length,icon:"🗓",color:"#F9A8D4"},
+          {label:"마감 임박",value:urgentSchedules.length,icon:"⚠️",color:"#FB923C"},
+          {label:"진행 중 업무",value:inProgressTasks.length,icon:"⚡",color:"#2EC4B6",onClick:()=>setActiveMenu("업무 관리")},
+          {label:"완료 업무",value:completedTasks.length,icon:"✅",color:"#4ADE80"},
+        ].map(s=>(
+          <div key={s.label} onClick={s.onClick} style={{background:"linear-gradient(135deg,#161628,#1E1E3A)",border:`1px solid ${s.color}33`,borderRadius:14,padding:"20px 22px",cursor:s.onClick?"pointer":"default"}}
+            onMouseEnter={e=>s.onClick&&(e.currentTarget.style.transform="translateY(-2px)")} onMouseLeave={e=>(e.currentTarget.style.transform="none")}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+              <div><p style={{margin:"0 0 8px",fontSize:12,color:"#6B7280"}}>{s.label}</p><p style={{margin:0,fontSize:28,fontWeight:800,color:s.color}}>{s.value}</p></div>
+              <div style={{width:42,height:42,borderRadius:12,background:`${s.color}22`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20}}>{s.icon}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20}}>
+        <SecCard title="오늘 일정" accent="#6C63FF">{todaySchedules.length===0?<Empty text="오늘 일정 없음"/>:todaySchedules.map(s=><SchedRow key={s.id} s={s}/>)}</SecCard>
+        <SecCard title="진행 중 업무" accent="#2EC4B6">{inProgressTasks.length===0?<Empty text="진행 중인 업무 없음"/>:inProgressTasks.map(t=><TaskRow key={t.id} t={t}/>)}</SecCard>
+        <SecCard title="마감 임박 일정" accent="#FB923C">{urgentSchedules.length===0?<Empty text="임박한 일정 없음"/>:urgentSchedules.map(s=><SchedRow key={s.id} s={s}/>)}</SecCard>
+        <SecCard title="업무 현황" accent="#F9A8D4">
+          {TASK_STATUSES.map(st=>{
+            const count=tasks.filter(t=>t.status===st).length;
+            const pct=tasks.length?Math.round(count/tasks.length*100):0;
+            const c=STATUS_COLORS[st];
+            return <div key={st} style={{marginBottom:10}}>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:12,color:c.text}}>{st}</span><span style={{fontSize:12,color:"#6B7280"}}>{count}개 ({pct}%)</span></div>
+              <div style={{height:6,background:"#2A2A4A",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${pct}%`,background:c.border,borderRadius:3,transition:"width 0.5s"}}/></div>
+            </div>;
+          })}
+        </SecCard>
+      </div>
+    </div>
+  );
+}
+function SecCard({title,accent,children}){return <div style={{background:"#161628",border:`1px solid ${accent}33`,borderRadius:14,padding:"18px 20px"}}><h3 style={{margin:"0 0 14px",fontSize:14,fontWeight:700,color:accent}}>{title}</h3>{children}</div>;}
+function Empty({text}){return <p style={{color:"#4B4B6B",fontSize:13,textAlign:"center",padding:"12px 0"}}>{text}</p>;}
+function SchedRow({s}){const pc=PRIORITY_COLORS[s.priority]||PRIORITY_COLORS.medium;return <div style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:"1px solid #2A2A4A"}}><div style={{width:8,height:8,borderRadius:"50%",background:pc.bg,flexShrink:0}}/><div style={{flex:1,minWidth:0}}><p style={{margin:0,fontSize:13,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.title}</p><p style={{margin:0,fontSize:11,color:"#6B7280"}}>{s.owner_name} · {s.end_date}</p></div><span style={{fontSize:10,padding:"2px 7px",borderRadius:5,background:pc.bg,color:pc.text,flexShrink:0}}>{s.priority}</span></div>;}
+function TaskRow({t}){const c=STATUS_COLORS[t.status]||STATUS_COLORS["할 일"];return <div style={{padding:"8px 0",borderBottom:"1px solid #2A2A4A"}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}><span style={{fontSize:13,fontWeight:600}}>{t.title}</span><span style={{fontSize:11,color:c.text,padding:"2px 7px",borderRadius:5,background:c.bg}}>{t.status}</span></div><div style={{display:"flex",alignItems:"center",gap:8}}><div style={{flex:1,height:5,background:"#2A2A4A",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${t.progress}%`,background:c.border,borderRadius:3}}/></div><span style={{fontSize:11,color:"#6B7280",flexShrink:0}}>{t.progress}%</span></div></div>;}
+
+// ── 일정 보드 ─────────────────────────────────────────
+function ScheduleBoard({schedules,onEdit,onDelete}){
+  const [filter,setFilter]=useState("all");
+  const filtered=filter==="all"?schedules:schedules.filter(s=>s.priority===filter);
+  return <div>
+    <div style={{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap"}}>
+      {["all","high","medium","low"].map(f=>(
+        <button key={f} onClick={()=>setFilter(f)} style={{padding:"6px 14px",borderRadius:20,border:"none",cursor:"pointer",fontSize:12,fontWeight:600,background:filter===f?"#6C63FF":"#1E1E3A",color:filter===f?"#fff":"#8B8BAD"}}>
+          {f==="all"?"전체":f==="high"?"높음":f==="medium"?"중간":"낮음"}
+        </button>
+      ))}
+      <span style={{marginLeft:"auto",fontSize:12,color:"#6B7280",alignSelf:"center"}}>총 {filtered.length}개</span>
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:16}}>
+      {filtered.map(s=>{
+        const pc=PRIORITY_COLORS[s.priority]||PRIORITY_COLORS.medium;
+        return <div key={s.id} style={{background:"#161628",border:"1px solid #2A2A4A",borderRadius:14,padding:"18px 20px",position:"relative",overflow:"hidden"}}
+          onMouseEnter={e=>e.currentTarget.style.borderColor="#6C63FF55"} onMouseLeave={e=>e.currentTarget.style.borderColor="#2A2A4A"}>
+          <div style={{position:"absolute",top:0,left:0,width:4,height:"100%",background:pc.bg}}/>
+          <div style={{paddingLeft:8}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+              <h3 style={{margin:0,fontSize:15,fontWeight:700,flex:1,marginRight:8}}>{s.title}</h3>
+              <span style={{fontSize:10,padding:"3px 8px",borderRadius:6,background:pc.bg,color:pc.text,flexShrink:0}}>{s.priority}</span>
+            </div>
+            {s.description&&<p style={{margin:"0 0 12px",fontSize:12,color:"#8B8BAD",lineHeight:1.5}}>{s.description}</p>}
+            <div style={{display:"flex",gap:16,marginBottom:14}}>
+              <div><p style={{margin:0,fontSize:10,color:"#6B7280"}}>담당자</p><p style={{margin:0,fontSize:12,color:"#A78BFA",fontWeight:600}}>{s.owner_name}</p></div>
+              <div><p style={{margin:0,fontSize:10,color:"#6B7280"}}>시작</p><p style={{margin:0,fontSize:12}}>{s.start_date}</p></div>
+              <div><p style={{margin:0,fontSize:10,color:"#6B7280"}}>종료</p><p style={{margin:0,fontSize:12}}>{s.end_date}</p></div>
+            </div>
+            <div style={{display:"flex",gap:8}}>
+              <button onClick={()=>onEdit(s)} style={{...btn("#2A2A4A","#A78BFA"),fontSize:12,padding:"5px 12px"}}>수정</button>
+              <button onClick={()=>onDelete(s.id)} style={{...btn("#2A2A4A","#F87171"),fontSize:12,padding:"5px 12px"}}>삭제</button>
+            </div>
+          </div>
+        </div>;
+      })}
+    </div>
+    {filtered.length===0&&<Empty text="일정 없음. '+ 일정 추가'를 눌러 시작하세요."/>}
+  </div>;
+}
+
+// ── 업무 보드 ─────────────────────────────────────────
+function TaskBoard({tasks,onEdit,onDelete,onStatusChange}){
+  const [dragging,setDragging]=useState(null);
+  return <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:16,minHeight:400}}>
+    {TASK_STATUSES.map(status=>{
+      const col=STATUS_COLORS[status];
+      const colTasks=tasks.filter(t=>t.status===status);
+      return <div key={status} onDragOver={e=>e.preventDefault()} onDrop={()=>{if(dragging){onStatusChange(dragging,status);setDragging(null);}}}
+        style={{background:"#161628",border:`1px solid ${col.border}44`,borderRadius:14,padding:"16px 14px",minHeight:200}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+          <span style={{fontSize:13,fontWeight:700,color:col.text}}>{status}</span>
+          <span style={{fontSize:11,background:col.bg,color:col.text,padding:"2px 8px",borderRadius:10}}>{colTasks.length}</span>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {colTasks.map(task=>(
+            <div key={task.id} draggable onDragStart={()=>setDragging(task.id)} onDragEnd={()=>setDragging(null)}
+              style={{background:"#1E1E3A",borderRadius:10,padding:"12px 14px",cursor:"grab",border:"1px solid #2A2A4A",opacity:dragging===task.id?0.5:1}}>
+              <p style={{margin:"0 0 6px",fontSize:13,fontWeight:600}}>{task.title}</p>
+              <p style={{margin:"0 0 10px",fontSize:11,color:"#A78BFA"}}>👤 {task.owner_name}</p>
+              <div style={{marginBottom:10}}>
+                <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:10,color:"#6B7280"}}>진행률</span><span style={{fontSize:10,color:col.text,fontWeight:700}}>{task.progress}%</span></div>
+                <div style={{height:4,background:"#2A2A4A",borderRadius:2,overflow:"hidden"}}><div style={{height:"100%",width:`${task.progress}%`,background:col.border,borderRadius:2}}/></div>
+              </div>
+              <div style={{display:"flex",gap:6}}>
+                <button onClick={()=>onEdit(task)} style={{...btn("#2A2A4A","#A78BFA"),fontSize:11,padding:"4px 10px"}}>수정</button>
+                <button onClick={()=>onDelete(task.id)} style={{...btn("#2A2A4A","#F87171"),fontSize:11,padding:"4px 10px"}}>삭제</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>;
+    })}
+  </div>;
+}
+
+// ── 캘린더 ────────────────────────────────────────────
+function CalendarView({schedules,currentMonth,setCurrentMonth,todayStr,selectedSched,setSelectedSched,onDateClick}){
+  const year=currentMonth.getFullYear(), month=currentMonth.getMonth();
+  const days=new Date(year,month+1,0).getDate();
+  const firstDay=new Date(year,month,1).getDay();
+  const pad=n=>String(n).padStart(2,"0");
+  const cells=[];
+  for(let i=0;i<firstDay;i++) cells.push(null);
+  for(let d=1;d<=days;d++) cells.push(d);
+  const getDay=ds=>schedules.filter(s=>s.start_date<=ds&&s.end_date>=ds);
+  const todayFull=new Date().toISOString().slice(0,10);
+
+  return <div>
+    <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:20}}>
+      <button onClick={()=>setCurrentMonth(new Date(year,month-1,1))} style={btn("#1E1E3A","#A78BFA")}>◀</button>
+      <h2 style={{margin:0,fontSize:18,fontWeight:800}}>{year}년 {month+1}월</h2>
+      <button onClick={()=>setCurrentMonth(new Date(year,month+1,1))} style={btn("#1E1E3A","#A78BFA")}>▶</button>
+      <button onClick={()=>setCurrentMonth(new Date())} style={{...btn("#6C63FF"),marginLeft:8}}>오늘</button>
+    </div>
+    <div style={{background:"#161628",borderRadius:14,overflow:"hidden",border:"1px solid #2A2A4A"}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",borderBottom:"1px solid #2A2A4A"}}>
+        {["일","월","화","수","목","금","토"].map((d,i)=><div key={d} style={{padding:"12px 0",textAlign:"center",fontSize:12,fontWeight:700,color:i===0?"#F87171":i===6?"#60A5FA":"#8B8BAD"}}>{d}</div>)}
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)"}}>
+        {cells.map((day,idx)=>{
+          if(!day) return <div key={`e${idx}`} style={{minHeight:90,borderRight:"1px solid #2A2A4A",borderBottom:"1px solid #2A2A4A"}}/>;
+          const ds=`${year}-${pad(month+1)}-${pad(day)}`;
+          const daySch=getDay(ds);
+          const isToday=ds===todayFull;
+          const col=idx%7===0?"#F87171":idx%7===6?"#60A5FA":"#E8E8F0";
+          return <div key={day} className="cal-day" onClick={()=>onDateClick(ds)}
+            style={{minHeight:90,padding:"8px 6px",borderRight:"1px solid #2A2A4A",borderBottom:"1px solid #2A2A4A",background:isToday?"rgba(108,99,255,0.08)":"transparent",cursor:"pointer",transition:"background 0.15s",position:"relative"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+              <span style={{width:26,height:26,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:"50%",background:isToday?"#6C63FF":"transparent",fontSize:13,fontWeight:isToday?800:400,color:isToday?"#fff":col}}>{day}</span>
+              <span className="add-btn" style={{fontSize:16,color:"#6C63FF",fontWeight:700,lineHeight:1,paddingRight:2}}>+</span>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:2}}>
+              {daySch.slice(0,2).map(s=>{const pc=PRIORITY_COLORS[s.priority]||PRIORITY_COLORS.medium;return <div key={s.id} onClick={e=>{e.stopPropagation();setSelectedSched(selectedSched?.id===s.id?null:s);}} style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:pc.bg,color:pc.text,cursor:"pointer",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.title}</div>;})}
+              {daySch.length>2&&<div style={{fontSize:10,color:"#6B7280"}}>+{daySch.length-2}개</div>}
+            </div>
+          </div>;
+        })}
+      </div>
+    </div>
+    {selectedSched&&(
+      <div style={{marginTop:16,background:"#161628",border:"1px solid #6C63FF44",borderRadius:14,padding:"18px 20px"}}>
+        <div style={{display:"flex",justifyContent:"space-between"}}>
+          <h3 style={{margin:0,fontSize:16,fontWeight:700,color:"#A78BFA"}}>{selectedSched.title}</h3>
+          <button onClick={()=>setSelectedSched(null)} style={{background:"none",border:"none",color:"#6B7280",cursor:"pointer",fontSize:18}}>×</button>
+        </div>
+        <p style={{color:"#8B8BAD",margin:"8px 0"}}>{selectedSched.description}</p>
+        <p style={{fontSize:13,margin:"4px 0"}}>담당자: <strong style={{color:"#A78BFA"}}>{selectedSched.owner_name}</strong></p>
+        <p style={{fontSize:13,margin:"4px 0"}}>{selectedSched.start_date} → {selectedSched.end_date}</p>
+      </div>
+    )}
+  </div>;
+}
+
+// ── 리포트 ────────────────────────────────────────────
+function Reports({schedules,tasks}){
+  const total=tasks.length;
+  const donePct=total?Math.round(tasks.filter(t=>t.status==="완료").length/total*100):0;
+  const avgProg=total?Math.round(tasks.reduce((a,t)=>a+Number(t.progress),0)/total):0;
+  const pc={high:0,medium:0,low:0};
+  schedules.forEach(s=>{if(pc[s.priority]!==undefined)pc[s.priority]++;});
+  return <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20}}>
+    <SecCard title="일정 우선순위 분포" accent="#6C63FF">
+      {Object.entries(pc).map(([p,c])=>{const col=PRIORITY_COLORS[p];const pct=schedules.length?Math.round(c/schedules.length*100):0;return <div key={p} style={{marginBottom:14}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}><span style={{fontSize:13,color:col.bg,fontWeight:600}}>{p==="high"?"높음":p==="medium"?"중간":"낮음"}</span><span style={{fontSize:12,color:"#6B7280"}}>{c}개 ({pct}%)</span></div><div style={{height:8,background:"#2A2A4A",borderRadius:4,overflow:"hidden"}}><div style={{height:"100%",width:`${pct}%`,background:col.bg,borderRadius:4}}/></div></div>;})}
+    </SecCard>
+    <SecCard title="업무 완료율" accent="#4ADE80">
+      <div style={{display:"flex",justifyContent:"center",alignItems:"center",height:140}}>
+        <div style={{position:"relative",width:130,height:130}}>
+          <svg width="130" height="130" viewBox="0 0 130 130">
+            <circle cx="65" cy="65" r="55" fill="none" stroke="#2A2A4A" strokeWidth="12"/>
+            <circle cx="65" cy="65" r="55" fill="none" stroke="#4ADE80" strokeWidth="12" strokeDasharray={`${2*Math.PI*55*donePct/100} ${2*Math.PI*55}`} strokeLinecap="round" transform="rotate(-90 65 65)"/>
+          </svg>
+          <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
+            <span style={{fontSize:26,fontWeight:800,color:"#4ADE80"}}>{donePct}%</span>
+            <span style={{fontSize:11,color:"#6B7280"}}>완료</span>
+          </div>
+        </div>
+      </div>
+      <p style={{textAlign:"center",color:"#8B8BAD",fontSize:13,margin:0}}>평균 진행률: <strong style={{color:"#E8E8F0"}}>{avgProg}%</strong></p>
+    </SecCard>
+    <SecCard title="업무 현황 요약" accent="#F9A8D4">
+      {TASK_STATUSES.map(st=>{const count=tasks.filter(t=>t.status===st).length;const c=STATUS_COLORS[st];return <div key={st} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #2A2A4A"}}><span style={{fontSize:13,color:c.text}}>{st}</span><span style={{fontSize:13,fontWeight:700}}>{count}개</span></div>;})}
+    </SecCard>
+    <SecCard title="전체 통계" accent="#FB923C">
+      {[["총 일정",schedules.length,"#6C63FF"],["총 업무",tasks.length,"#2EC4B6"],["완료된 업무",tasks.filter(t=>t.status==="완료").length,"#4ADE80"],["고우선 일정",pc.high,"#FF4D6D"]].map(([l,v,c])=>(
+        <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #2A2A4A"}}><span style={{fontSize:13,color:"#8B8BAD"}}>{l}</span><span style={{fontSize:16,fontWeight:800,color:c}}>{v}</span></div>
+      ))}
+    </SecCard>
+  </div>;
+}
+
+// ── 모달 공통 ─────────────────────────────────────────
+function ModalWrap({title,children,onClose,onSave}){
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100,padding:20}} onClick={e=>e.target===e.currentTarget&&onClose()}>
+    <div style={{background:"#161628",border:"1px solid #2A2A4A",borderRadius:16,width:"100%",maxWidth:480,padding:"24px 28px",maxHeight:"90vh",overflow:"auto"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+        <h2 style={{margin:0,fontSize:18,fontWeight:800,color:"#A78BFA"}}>{title}</h2>
+        <button onClick={onClose} style={{background:"none",border:"none",color:"#6B7280",cursor:"pointer",fontSize:22}}>×</button>
+      </div>
+      <div style={{display:"flex",flexDirection:"column",gap:14}}>{children}</div>
+      <div style={{display:"flex",gap:10,marginTop:20,justifyContent:"flex-end"}}>
+        <button onClick={onClose} style={{...btn("#2A2A4A","#8B8BAD")}}>취소</button>
+        <button onClick={onSave} style={btn("#6C63FF")}>저장</button>
+      </div>
+    </div>
+  </div>;
+}
+function Fld({label,children}){return <div><label style={{display:"block",fontSize:12,fontWeight:600,color:"#8B8BAD",marginBottom:6}}>{label}</label>{children}</div>;}
+
+function SchedModal({initial,onSave,onClose,isEdit}){
+  const [f,setF]=useState({...initial});
+  const s=(k,v)=>setF(p=>({...p,[k]:v}));
+  return <ModalWrap title={isEdit?"일정 수정":"새 일정 추가"} onClose={onClose} onSave={()=>{if(!f.title.trim()||!f.owner_name.trim()){alert("제목과 담당자를 입력하세요.");return;}onSave(f);}}>
+    <Fld label="일정 제목 *"><input value={f.title} onChange={e=>s("title",e.target.value)} placeholder="일정 제목" style={inp}/></Fld>
+    <Fld label="설명"><textarea value={f.description} onChange={e=>s("description",e.target.value)} rows={3} placeholder="일정 설명 (선택)" style={{...inp,resize:"vertical"}}/></Fld>
+    <Fld label="담당자 이름 *"><input value={f.owner_name} onChange={e=>s("owner_name",e.target.value)} placeholder="담당자 이름" style={inp}/></Fld>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+      <Fld label="시작일"><input type="date" value={f.start_date} onChange={e=>s("start_date",e.target.value)} style={inp}/></Fld>
+      <Fld label="종료일"><input type="date" value={f.end_date} onChange={e=>s("end_date",e.target.value)} style={inp}/></Fld>
+    </div>
+    <Fld label="중요도"><select value={f.priority} onChange={e=>s("priority",e.target.value)} style={inp}><option value="high">높음</option><option value="medium">중간</option><option value="low">낮음</option></select></Fld>
+  </ModalWrap>;
+}
+
+function TaskModal_({initial,onSave,onClose,isEdit}){
+  const [f,setF]=useState({...initial});
+  const s=(k,v)=>setF(p=>({...p,[k]:v}));
+  return <ModalWrap title={isEdit?"업무 수정":"새 업무 추가"} onClose={onClose} onSave={()=>{if(!f.title.trim()||!f.owner_name.trim()){alert("제목과 담당자를 입력하세요.");return;}onSave(f);}}>
+    <Fld label="업무 제목 *"><input value={f.title} onChange={e=>s("title",e.target.value)} placeholder="업무 제목" style={inp}/></Fld>
+    <Fld label="담당자 이름 *"><input value={f.owner_name} onChange={e=>s("owner_name",e.target.value)} placeholder="담당자 이름" style={inp}/></Fld>
+    <Fld label={`진행률: ${f.progress}%`}><input type="range" min={0} max={100} value={f.progress} onChange={e=>s("progress",Number(e.target.value))} style={{width:"100%",accentColor:"#6C63FF"}}/></Fld>
+    <Fld label="상태"><select value={f.status} onChange={e=>s("status",e.target.value)} style={inp}>{TASK_STATUSES.map(x=><option key={x} value={x}>{x}</option>)}</select></Fld>
+  </ModalWrap>;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>

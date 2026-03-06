@@ -41,7 +41,7 @@
 const {useState,useEffect,useRef,useCallback}=React;
 
 // ── API 설정 ───────────────────────────────────────────
-const API_URL = "https://script.google.com/macros/s/AKfycbz15mqA1Q5uyuCVXaCKfcp_icyzTv6xB0WIVv4HQDEtr6pnAKUTDO-dblfjRU0fMjiIQA/exec";
+const API_URL = "https://script.google.com/macros/library/d/1koIDSx33PsHea4UAMKMvNrf9X-sIYMy0wDSnRttUFItcWZrf6-66eQMV/12";
 const SCHED_HEADERS = ["id","title","description","owner_name","owner_email","start_date","start_time","end_date","end_time","priority"];
 const TASK_HEADERS  = ["id","title","owner_name","part","start_date","due_date","progress","status"];
 
@@ -155,33 +155,8 @@ function App(){
     }catch(e){setSyncStatus("오류");}
   }
 
-  // 저장 직후 호출 - Sheets 반영될 때까지 최대 3회 재시도
-  async function loadAfterSave(type, savedId){
-    const maxTry=3;
-    for(let i=0;i<maxTry;i++){
-      await new Promise(r=>setTimeout(r,1500));
-      try{
-        if(type==="schedules"){
-          const s=await apiGet("schedules");
-          // 저장한 항목이 Sheets에 반영됐는지 확인
-          if(s.find(r=>r.id===savedId)){
-            setSchedules(s);
-            setLastSync(new Date()); setSyncStatus("동기화됨");
-            isSaving.current=false;
-            return;
-          }
-        } else {
-          const t=await apiGet("tasks");
-          if(t.find(r=>r.id===savedId)){
-            setTasks(t);
-            setLastSync(new Date()); setSyncStatus("동기화됨");
-            isSaving.current=false;
-            return;
-          }
-        }
-      }catch(e){}
-    }
-    // 3회 실패해도 로컬 상태 유지, 폴링에 위임
+  // 저장 완료 후 isSaving 해제 (폴링이 자동으로 Sheets와 동기화)
+  function afterSave(){
     isSaving.current=false;
     setSyncStatus("동기화됨");
   }
@@ -212,13 +187,8 @@ function App(){
     setShowSchedModal(false);    // 모달 즉시 닫기
     setEditingSched(null);
     setSyncStatus("저장중");
-    // 다음 틱에서 API 호출 (렌더링 완료 후 실행)
-    setTimeout(()=>{
-      isSaving.current=true;
-      apiUpsert("schedules",row)
-        .then(()=>loadAfterSave("schedules",row.id))
-        .catch(()=>{isSaving.current=false;setSyncStatus("오류");});
-    },0);
+    isSaving.current=true;
+    apiUpsert("schedules",row).then(()=>afterSave()).catch(()=>{isSaving.current=false;setSyncStatus("오류");});
   }
   async function deleteSched(id){
     const target=schedules.find(s=>s.id===id);
@@ -238,13 +208,8 @@ function App(){
     setShowTaskModal(false);
     setEditingTask(null);
     setSyncStatus("저장중");
-    // 렌더링 완료 후 다음 틱에서 API 호출 (버벅임 방지)
-    setTimeout(()=>{
-      isSaving.current=true;
-      apiUpsert("tasks",row)
-        .then(()=>loadAfterSave("tasks",row.id))
-        .catch(()=>{isSaving.current=false;setSyncStatus("오류");});
-    },0);
+    isSaving.current=true;
+    apiUpsert("tasks",row).then(()=>afterSave()).catch(()=>{isSaving.current=false;setSyncStatus("오류");});
   }
   async function deleteTask(id){
     const target=tasks.find(t=>t.id===id);
@@ -264,7 +229,7 @@ function App(){
     setTasks(updated);
     isSaving.current=true;
     setSyncStatus("저장중");
-    apiUpsert("tasks",row).then(()=>loadAfterSave("tasks",row.id)).catch(()=>{isSaving.current=false;setSyncStatus("오류");});
+    apiUpsert("tasks",row).then(()=>afterSave()).catch(()=>{isSaving.current=false;setSyncStatus("오류");});
   }
 
   const [loginError,setLoginError]=useState("");

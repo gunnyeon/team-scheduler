@@ -41,9 +41,10 @@
 const {useState,useEffect,useRef,useCallback}=React;
 
 // ── API 설정 ───────────────────────────────────────────
-const API_URL = "https://script.google.com/macros/s/AKfycbz15mqA1Q5uyuCVXaCKfcp_icyzTv6xB0WIVv4HQDEtr6pnAKUTDO-dblfjRU0fMjiIQA/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbx1NCMAD_PyppWDyVc_9TPCcfJ_0BV__7s8ie3AuXWUAtLDiT88CH9DNie59xM3XkEUBA/exec";
 const SCHED_HEADERS = ["id","title","description","owner_name","owner_email","start_date","start_time","end_date","end_time","priority"];
 const TASK_HEADERS  = ["id","title","owner_name","part","start_date","due_date","progress","status"];
+const TRIP_HEADERS  = ["id","title","description","owner_name","owner_email","start_date","start_time","end_date","end_time","priority"];
 
 async function apiGet(sheet){
   const r=await fetch(`${API_URL}?sheet=${sheet}`);
@@ -128,14 +129,17 @@ function App(){
   const [nameInput,setNameInput]=useState("");
   const [activeMenu,setActiveMenu]=useState("대시보드");
   const [schedules,setSchedules]=useState([]);
+  const [trips,setTrips]=useState([]);
   const [tasks,setTasks]=useState([]);
   const [syncStatus,setSyncStatus]=useState("동기화됨");
   const [lastSync,setLastSync]=useState(new Date());
   const [sidebarOpen,setSidebarOpen]=useState(true);
   const [showSchedModal,setShowSchedModal]=useState(false);
   const [showTaskModal,setShowTaskModal]=useState(false);
+  const [showTripModal,setShowTripModal]=useState(false);
   const [editingSched,setEditingSched]=useState(null);
   const [editingTask,setEditingTask]=useState(null);
+  const [editingTrip,setEditingTrip]=useState(null);
   const [confirmDlg,setConfirmDlg]=useState(null);
   const [currentMonth,setCurrentMonth]=useState(new Date());
   const [selectedSched,setSelectedSched]=useState(null);
@@ -155,7 +159,7 @@ function App(){
     setAppLoading(true);
     try{
       setSyncStatus("연결 중");
-      await Promise.all([apiInit("schedules",SCHED_HEADERS),apiInit("tasks",TASK_HEADERS)]);
+      await Promise.all([apiInit("schedules",SCHED_HEADERS),apiInit("trips",TRIP_HEADERS),apiInit("tasks",TASK_HEADERS)]);
       await loadData();
       initialized.current=true;
     }catch(e){
@@ -168,8 +172,8 @@ function App(){
   async function loadData(){
     if(isSaving.current)return;
     try{
-      const [s,t]=await Promise.all([apiGet("schedules"),apiGet("tasks")]);
-      setSchedules(s); setTasks(t);
+      const [s,tr,t]=await Promise.all([apiGet("schedules"),apiGet("trips"),apiGet("tasks")]);
+      setSchedules(s); setTrips(tr); setTasks(t);
       setLastSync(new Date()); setSyncStatus("동기화됨");
     }catch(e){setSyncStatus("오류");}
   }
@@ -195,12 +199,14 @@ function App(){
   const todaySchedules  =sortSched(schedules.filter(s=>s.start_date<=todayStr&&s.end_date>=todayStr));
   const weekSchedules   =sortSched(schedules.filter(s=>s.start_date<=weekEndStr&&s.end_date>=todayStr));
   const urgentSchedules =sortSched(schedules.filter(s=>s.end_date>=todayStr&&s.end_date<=weekEndStr));
+  const weekTrips       =sortSched((trips||[]).filter(s=>s.start_date<=weekEndStr&&s.end_date>=todayStr));
   const inProgressTasks =sortTasks(tasks.filter(t=>t.status==="진행 중"));
   const overdueTasks    =tasks.filter(t=>t.due_date&&t.due_date<todayStr&&t.status!=="완료").sort((a,b)=>a.due_date.localeCompare(b.due_date));
 
   const menus=["대시보드","캘린더(주요일정)","캘린더(출장일정)","일정 관리","업무 관리","리포트"];
   const menuIcons={"대시보드":"▦","캘린더(주요일정)":"🗓","캘린더(출장일정)":"✈️","일정 관리":"📅","업무 관리":"✓","리포트":"📊"};
   const newSchedDef={title:"",description:"",owner_name:myName||"",owner_email:"",start_date:todayStr,start_time:"09:00",end_date:todayStr,end_time:"18:00",priority:"medium"};
+  const newTripDef={title:"",description:"",owner_name:myName||"",owner_email:"",start_date:todayStr,start_time:"09:00",end_date:todayStr,end_time:"18:00",priority:"medium"};
   const newTaskDef={title:"",owner_name:myName||"",part:"",start_date:todayStr,due_date:"",progress:0,status:"할 일"};
 
   async function saveSched(data){
@@ -213,6 +219,27 @@ function App(){
     setSyncStatus("저장중");
     isSaving.current=true;
     apiUpsert("schedules",row).then(()=>afterSave()).catch(()=>{isSaving.current=false;setSyncStatus("오류");});
+  }
+  function saveTrip(data){
+    const isEdit=!!data.id;
+    const row={...data,id:data.id||`tr${Date.now()}`};
+    const updated=isEdit?trips.map(s=>s.id===row.id?row:s):[...trips,row];
+    setTrips(updated);
+    setShowTripModal(false);
+    setEditingTrip(null);
+    setSyncStatus("저장중");
+    isSaving.current=true;
+    apiUpsert("trips",row).then(()=>afterSave()).catch(()=>{isSaving.current=false;setSyncStatus("오류");});
+  }
+  async function deleteTrip(id){
+    const target=trips.find(s=>s.id===id);
+    setConfirmDlg({message:`"${target?.title}" 출장일정을 삭제하시겠습니까?`,onConfirm:()=>{
+      setTrips(trips.filter(s=>s.id!==id));
+      setConfirmDlg(null);
+      setSyncStatus("저장중");
+      isSaving.current=true;
+      apiDelete("trips",id).then(()=>{isSaving.current=false;loadData();}).catch(()=>{isSaving.current=false;setSyncStatus("오류");});
+    }});
   }
   async function deleteSched(id){
     const target=schedules.find(s=>s.id===id);
@@ -371,6 +398,7 @@ function App(){
           </div>
           <div style={{marginLeft:"auto",display:"flex",gap:10,alignItems:"center"}}>
             {activeMenu==="일정 관리"&&<button onClick={()=>{setEditingSched(null);setShowSchedModal(true);}} style={btn("#6C63FF")}>+ 일정 추가</button>}
+            {activeMenu==="캘린더(출장일정)"&&<button onClick={()=>{setEditingTrip(null);setShowTripModal(true);}} style={btn("#FB923C")}>+ 출장일정 추가</button>}
             {activeMenu==="업무 관리"&&<button onClick={()=>{setEditingTask(null);setShowTaskModal(true);}} style={btn("#2EC4B6")}>+ 업무 추가</button>}
             <button onClick={loadData} style={btn("#2A2A4A","#A78BFA")}>↻</button>
             <div style={{display:"flex",alignItems:"center",gap:8,background:"#1E1E3A",borderRadius:10,padding:"6px 12px"}}>
@@ -381,17 +409,18 @@ function App(){
           </div>
         </div>
         <div style={{flex:1,overflow:"auto",padding:"24px 28px"}}>
-          {activeMenu==="대시보드"&&<Dashboard schedules={schedules} tasks={tasks} todaySchedules={todaySchedules} weekSchedules={weekSchedules} urgentSchedules={urgentSchedules} inProgressTasks={inProgressTasks} overdueTasks={overdueTasks} setActiveMenu={setActiveMenu} todayStr={todayStr} weekEndStr={weekEndStr} onSchedClick={s=>{setCurrentMonth(new Date(s.start_date+"T00:00:00"));setSelectedSched(s);setActiveMenu("캘린더(주요일정)");}}/>}
+          {activeMenu==="대시보드"&&<Dashboard schedules={schedules} trips={trips} tasks={tasks} todaySchedules={todaySchedules} weekSchedules={weekSchedules} weekTrips={weekTrips} urgentSchedules={urgentSchedules} inProgressTasks={inProgressTasks} overdueTasks={overdueTasks} setActiveMenu={setActiveMenu} todayStr={todayStr} weekEndStr={weekEndStr} onSchedClick={s=>{setCurrentMonth(new Date(s.start_date+"T00:00:00"));setSelectedSched(s);setActiveMenu("캘린더(주요일정)");}} onTripClick={s=>{setCurrentMonth2(new Date(s.start_date+"T00:00:00"));setSelectedSched2(s);setActiveMenu("캘린더(출장일정)");}}/>}
           {activeMenu==="일정 관리"&&<ScheduleBoard schedules={schedules} onEdit={s=>{setEditingSched(s);setShowSchedModal(true);}} onDelete={deleteSched}/>}
           {activeMenu==="업무 관리"&&<TaskBoard tasks={tasks} onEdit={t=>{setEditingTask(t);setShowTaskModal(true);}} onDelete={deleteTask} onStatusChange={updateTaskStatus}/>}
           {activeMenu==="캘린더(주요일정)"&&<CalendarView schedules={schedules} currentMonth={currentMonth} setCurrentMonth={setCurrentMonth} todayStr={todayStr} selectedSched={selectedSched} setSelectedSched={setSelectedSched} onDateClick={d=>{setEditingSched(null);setShowSchedModal({prefillDate:d});}} onEditSched={s=>{setEditingSched(s);setShowSchedModal(true);}} onDeleteSched={deleteSched}/>}
-          {activeMenu==="캘린더(출장일정)"&&<CalendarView schedules={schedules} currentMonth={currentMonth2} setCurrentMonth={setCurrentMonth2} todayStr={todayStr} selectedSched={selectedSched2} setSelectedSched={setSelectedSched2} onDateClick={d=>{setEditingSched(null);setShowSchedModal({prefillDate:d});}} onEditSched={s=>{setEditingSched(s);setShowSchedModal(true);}} onDeleteSched={deleteSched}/>}
+          {activeMenu==="캘린더(출장일정)"&&<CalendarView schedules={trips} currentMonth={currentMonth2} setCurrentMonth={setCurrentMonth2} todayStr={todayStr} selectedSched={selectedSched2} setSelectedSched={setSelectedSched2} onDateClick={d=>{setEditingTrip(null);setShowTripModal({prefillDate:d});}} onEditSched={s=>{setEditingTrip(s);setShowTripModal(true);}} onDeleteSched={deleteTrip}/>}
           {activeMenu==="리포트"&&<Reports schedules={schedules} tasks={tasks}/>}
         </div>
       </div>
 
       {/* 모달들 */}
       {showSchedModal&&<SchedModal initial={editingSched||(showSchedModal?.prefillDate?{...newSchedDef,start_date:showSchedModal.prefillDate,end_date:showSchedModal.prefillDate}:newSchedDef)} onSave={saveSched} onClose={()=>{setShowSchedModal(false);setEditingSched(null);}} isEdit={!!editingSched}/>}
+      {showTripModal&&<SchedModal initial={editingTrip||(showTripModal?.prefillDate?{...newTripDef,start_date:showTripModal.prefillDate,end_date:showTripModal.prefillDate}:newTripDef)} onSave={saveTrip} onClose={()=>{setShowTripModal(false);setEditingTrip(null);}} isEdit={!!editingTrip} modalTitle="출장일정"/>}
       {showTaskModal&&<TaskModal_ initial={editingTask||newTaskDef} onSave={saveTask} onClose={()=>{setShowTaskModal(false);setEditingTask(null);}} isEdit={!!editingTask}/>}
       {confirmDlg&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200}}>
@@ -410,7 +439,7 @@ function App(){
 }
 
 // ── 대시보드 ──────────────────────────────────────────
-function Dashboard({schedules,tasks,todaySchedules,weekSchedules,urgentSchedules,inProgressTasks,overdueTasks,setActiveMenu,todayStr,weekEndStr,onSchedClick}){
+function Dashboard({schedules,trips,tasks,todaySchedules,weekSchedules,weekTrips,urgentSchedules,inProgressTasks,overdueTasks,setActiveMenu,todayStr,weekEndStr,onSchedClick,onTripClick}){
   return (
     <div>
       {/* 통계 카드 */}
@@ -418,6 +447,7 @@ function Dashboard({schedules,tasks,todaySchedules,weekSchedules,urgentSchedules
         {[
           {label:"오늘 일정",value:todaySchedules.length,icon:"📅",color:"#6C63FF",onClick:()=>setActiveMenu("캘린더")},
           {label:"이번주 일정",value:weekSchedules.length,icon:"🗓",color:"#F9A8D4"},
+          {label:"이번주 출장일정",value:(weekTrips||[]).length,icon:"✈️",color:"#FB923C",onClick:()=>setActiveMenu("캘린더(출장일정)")},
           {label:"할 일",value:tasks.filter(t=>t.status==="할 일").length,icon:"📋",color:"#818CF8",onClick:()=>setActiveMenu("업무 관리")},
           {label:"진행 중 업무",value:inProgressTasks.length,icon:"⚡",color:"#2EC4B6",onClick:()=>setActiveMenu("업무 관리")},
           {label:"기한 초과 업무",value:overdueTasks.length,icon:"🚨",color:"#F87171",onClick:()=>setActiveMenu("업무 관리"),alert:overdueTasks.length>0},
@@ -464,9 +494,10 @@ function Dashboard({schedules,tasks,todaySchedules,weekSchedules,urgentSchedules
       )}
 
       {/* 하단 섹션 */}
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,marginBottom:20}}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:20,marginBottom:20}}>
         <SecCard title="오늘 일정" accent="#6C63FF">{todaySchedules.length===0?<Empty text="오늘 일정 없음"/>:todaySchedules.map(s=><SchedRow key={s.id} s={s} onClick={onSchedClick}/>)}</SecCard>
-        <SecCard title="이번주 일정" accent="#F9A8D4">{weekSchedules.length===0?<Empty text="이번주 일정 없음"/>:weekSchedules.map(s=><SchedRow key={s.id} s={s} onClick={onSchedClick}/>)}</SecCard>
+        <SecCard title="이번주 일정 (주요)" accent="#F9A8D4">{weekSchedules.length===0?<Empty text="이번주 일정 없음"/>:weekSchedules.map(s=><SchedRow key={s.id} s={s} onClick={onSchedClick}/>)}</SecCard>
+        <SecCard title="이번주 출장일정 ✈️" accent="#FB923C">{(weekTrips||[]).length===0?<Empty text="이번주 출장일정 없음"/>:(weekTrips||[]).map(s=><SchedRow key={s.id} s={s} onClick={onTripClick}/>)}</SecCard>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:20}}>
         <SecCard title="할 일 (1주일 이내)" accent="#818CF8">{sortTasks(tasks.filter(t=>t.status==="할 일"&&(!t.due_date||(t.due_date>=todayStr&&t.due_date<=weekEndStr)))).length===0?<Empty text="1주일 이내 할 일 없음"/>:sortTasks(tasks.filter(t=>t.status==="할 일"&&(!t.due_date||(t.due_date>=todayStr&&t.due_date<=weekEndStr)))).map(t=><TaskRow key={t.id} t={t}/>)}</SecCard>
@@ -765,10 +796,11 @@ function ModalWrap({title,children,onClose,onSave}){
 }
 function Fld({label,children}){return <div><label style={{display:"block",fontSize:12,fontWeight:600,color:"#8B8BAD",marginBottom:6}}>{label}</label>{children}</div>;}
 
-function SchedModal({initial,onSave,onClose,isEdit}){
+function SchedModal({initial,onSave,onClose,isEdit,modalTitle}){
   const [f,setF]=useState({...initial});
   const s=(k,v)=>setF(p=>({...p,[k]:v}));
-  return <ModalWrap title={isEdit?"일정 수정":"새 일정 추가"} onClose={onClose} onSave={()=>{if(!f.title?.trim()||!f.owner_name?.trim()){alert("제목과 담당자를 입력하세요.");return;}onSave(f);}}>
+  const typeLabel=modalTitle||"일정";
+  return <ModalWrap title={isEdit?`${typeLabel} 수정`:`새 ${typeLabel} 추가`} onClose={onClose} onSave={()=>{if(!f.title?.trim()||!f.owner_name?.trim()){alert("제목과 담당자를 입력하세요.");return;}onSave(f);}}>
     <Fld label="일정 제목 *"><input value={f.title||""} onChange={e=>s("title",e.target.value)} placeholder="일정 제목을 입력하세요" style={inp}/></Fld>
     <Fld label="설명"><textarea value={f.description||""} onChange={e=>s("description",e.target.value)} rows={3} placeholder="일정 설명 (선택)" style={{...inp,resize:"vertical"}}/></Fld>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>

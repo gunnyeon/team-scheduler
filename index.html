@@ -155,6 +155,7 @@ function App(){
 
   const isSaving=useRef(false);
   const pendingOps=useRef(0); // 진행 중인 API 요청 수
+  const saveCooldown=useRef(0); // 저장 직후 폴링 스킵용 타임스탬프
 
   async function initialize(){
     setAppLoading(true);
@@ -172,6 +173,7 @@ function App(){
 
   async function loadData(){
     if(pendingOps.current>0)return; // 저장/삭제 진행 중엔 폴링 스킵
+    if(Date.now()<saveCooldown.current)return; // 저장 직후 2초간 폴링 스킵
     try{
       const [s,tr,t]=await Promise.all([apiGet("schedules"),apiGet("trips"),apiGet("tasks")]);
       setSchedules(s); setTrips(tr); setTasks(t);
@@ -183,11 +185,13 @@ function App(){
   function afterSave(){
     pendingOps.current=Math.max(0,pendingOps.current-1);
     isSaving.current=false;
+    saveCooldown.current=Date.now()+2000; // 저장 완료 후 2초간 폴링 스킵
     setSyncStatus("동기화됨");
   }
   function beforeSave(){
     pendingOps.current++;
     isSaving.current=true;
+    saveCooldown.current=Date.now()+5000; // 저장 시작 시 5초 쿨다운 (완료 후 2초로 단축)
     setSyncStatus("저장중");
   }
 

@@ -138,6 +138,7 @@ function App(){
   const [selectedSched,setSelectedSched]=useState(null);
   const initialized=useRef(false);
   const polling=useRef(null);
+  const [appLoading,setAppLoading]=useState(false);
 
   const todayStr=getLocalDateStr(new Date());
   const weekEndDate=new Date(); weekEndDate.setDate(weekEndDate.getDate()+6);
@@ -146,12 +147,17 @@ function App(){
   const isSaving=useRef(false);
 
   async function initialize(){
+    setAppLoading(true);
     try{
       setSyncStatus("연결 중");
       await Promise.all([apiInit("schedules",SCHED_HEADERS),apiInit("tasks",TASK_HEADERS)]);
       await loadData();
       initialized.current=true;
-    }catch(e){setSyncStatus("오류");}
+    }catch(e){
+      setSyncStatus("오류");
+      initialized.current=true; // 오류여도 화면은 표시
+    }
+    setAppLoading(false);
   }
 
   async function loadData(){
@@ -171,8 +177,13 @@ function App(){
 
   useEffect(()=>{
     if(!myName)return;
-    if(!initialized.current)initialize();
-    polling.current=setInterval(loadData,10000);
+    if(!initialized.current){
+      initialize().then(()=>{
+        polling.current=setInterval(loadData,10000);
+      });
+    } else {
+      polling.current=setInterval(loadData,10000);
+    }
     return()=>clearInterval(polling.current);
   },[myName]);
 
@@ -308,6 +319,18 @@ function App(){
         </button>
         <p style={{color:"#4B4B6B",fontSize:11,marginTop:16}}>※ 건축공사팀 등록 인원만 입장 가능합니다</p>
       </div>
+    </div>
+  );
+
+  if(appLoading) return (
+    <div style={{height:"100vh",background:"#0F0F1A",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16}}>
+      <div style={{width:48,height:48,borderRadius:14,background:"linear-gradient(135deg,#6C63FF,#FF6B9D)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24}}>🏢</div>
+      <p style={{color:"#A78BFA",fontSize:15,fontWeight:700,margin:0}}>TeamSync</p>
+      <p style={{color:"#6B7280",fontSize:13,margin:0}}>데이터를 불러오는 중...</p>
+      <div style={{width:200,height:3,background:"#1E1E3A",borderRadius:3,overflow:"hidden",marginTop:8}}>
+        <div style={{height:"100%",background:"linear-gradient(90deg,#6C63FF,#FF6B9D)",borderRadius:3,animation:"loading 1.5s ease-in-out infinite"}}/>
+      </div>
+      <style>{`@keyframes loading{0%{width:0%}50%{width:80%}100%{width:100%}}`}</style>
     </div>
   );
 

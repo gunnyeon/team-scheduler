@@ -191,8 +191,8 @@ function App(){
   function beforeSave(){
     pendingOps.current++;
     isSaving.current=true;
-    saveCooldown.current=Date.now()+5000; // 저장 시작 시 5초 쿨다운 (완료 후 2초로 단축)
     setSyncStatus("저장중");
+    // 쿨다운은 afterSave에서만 설정 - 로컬 즉시반영 방해 안함
   }
 
   useEffect(()=>{

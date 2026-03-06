@@ -93,6 +93,14 @@ async function apiDelete(sheet,id){await apiPost({sheet,action:"delete",id});}
 // ── 상수 ──────────────────────────────────────────────
 const AVATAR_COLORS=["#6C63FF","#FF6B9D","#2EC4B6","#FB923C","#4ADE80","#F9A8D4","#60A5FA","#FBBF24"];
 function getAvatarColor(name){let h=0;for(let c of(name||"?"))h=(h*31+c.charCodeAt(0))%AVATAR_COLORS.length;return AVATAR_COLORS[h];}
+function getLocalDateStr(date){
+  // toISOString()은 UTC 기준이라 한국(UTC+9) 자정 이후 날짜가 달라짐
+  // 로컬 시간 기준으로 yyyy-MM-dd 반환
+  const y=date.getFullYear();
+  const m=String(date.getMonth()+1).padStart(2,"0");
+  const d=String(date.getDate()).padStart(2,"0");
+  return `${y}-${m}-${d}`;
+}
 function getDayOfWeek(dateStr){
   if(!dateStr)return"";
   const days=["일","월","화","수","목","금","토"];
@@ -131,9 +139,9 @@ function App(){
   const initialized=useRef(false);
   const polling=useRef(null);
 
-  const todayStr=new Date().toISOString().slice(0,10);
+  const todayStr=getLocalDateStr(new Date());
   const weekEndDate=new Date(); weekEndDate.setDate(weekEndDate.getDate()+6);
-  const weekEndStr=weekEndDate.toISOString().slice(0,10);
+  const weekEndStr=getLocalDateStr(weekEndDate);
 
   const isSaving=useRef(false);
 
@@ -551,7 +559,7 @@ function TaskBoard({tasks,onEdit,onDelete,onStatusChange}){
     .sort((a,b)=>(a.due_date||"9999").localeCompare(b.due_date||"9999"));
   const grouped=visibleTasks.reduce((acc,t)=>{const k=t.part||"미분류";if(!acc[k])acc[k]=[];acc[k].push(t);return acc;},{});
   const groupOrder=activePart==="전체"?[...PARTS,"미분류"].filter(p=>grouped[p]):[activePart];
-  const today=new Date().toISOString().slice(0,10);
+  const today=getLocalDateStr(new Date());
   return <div>
     <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
       {["전체",...PARTS].map(p=>{
@@ -631,7 +639,7 @@ function CalendarView({schedules,currentMonth,setCurrentMonth,todayStr,selectedS
   for(let i=0;i<firstDay;i++)cells.push(null);
   for(let d=1;d<=days;d++)cells.push(d);
   const getDay=ds=>schedules.filter(s=>s.start_date<=ds&&s.end_date>=ds);
-  const todayFull=new Date().toISOString().slice(0,10);
+  const todayFull=getLocalDateStr(new Date());
   return <div>
     <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:20}}>
       <button onClick={()=>setCurrentMonth(new Date(year,month-1,1))} style={btn("#1E1E3A","#A78BFA")}>◀</button>

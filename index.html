@@ -10,7 +10,7 @@
   예) https://script.google.com/macros/s/AKfycb.../exec
 ================================================= -->
 <script>
-  const API_URL = "https://script.google.com/macros/s/AKfycbxWMY7SEv3WTjG1vMeE5r-N7yeXj4APwj_5C3cE3zyiUpuPKAbLfxV7zvMPiRJD-jxYRA/exec";
+  const API_URL = "여기에_Apps_Script_배포_URL_붙여넣기";
 </script>
 
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -53,8 +53,8 @@ const STATUS_COLORS = {
   "검토":   { bg:"#FDF4FF", border:"#C084FC", text:"#7E22CE" },
   "완료":   { bg:"#F0FDF4", border:"#4ADE80", text:"#15803D" },
 };
-const SCHEDULE_HEADERS = ["id","title","description","owner_name","start_date","end_date","priority","status"];
-const TASK_HEADERS     = ["id","title","owner_name","progress","status"];
+const SCHEDULE_HEADERS = ["id","title","description","owner_name","start_date","start_time","end_date","end_time","priority","status"];
+const TASK_HEADERS     = ["id","title","owner_name","start_date","due_date","progress","status"];
 const ACTIVITY_HEADERS = ["id","name","action","target","time"];
 const PRESENCE_HEADERS = ["id","name","ts"];
 
@@ -221,8 +221,8 @@ function App() {
   const menus = ["대시보드","캘린더","일정 관리","업무 관리","리포트"];
   const icons = {"대시보드":"▦","캘린더":"🗓","일정 관리":"📅","업무 관리":"✓","리포트":"📊"};
 
-  const newSchedDef = { title:"", description:"", owner_name:myName||"", start_date:todayStr, end_date:todayStr, priority:"medium", status:"upcoming" };
-  const newTaskDef  = { title:"", owner_name:myName||"", progress:0, status:"할 일" };
+  const newSchedDef = { title:"", description:"", owner_name:myName||"", start_date:todayStr, start_time:"09:00", end_date:todayStr, end_time:"18:00", priority:"medium", status:"upcoming" };
+  const newTaskDef  = { title:"", owner_name:myName||"", start_date:todayStr, due_date:"", progress:0, status:"할 일" };
 
   // ── 입장 화면 ─────────────────────────────────────
   if (!myName) return (
@@ -334,7 +334,7 @@ function App() {
           {activeMenu==="대시보드"&&<Dashboard schedules={schedules} tasks={tasks} todaySchedules={todaySchedules} weekSchedules={weekSchedules} urgentSchedules={urgentSchedules} inProgressTasks={inProgressTasks} completedTasks={completedTasks} setActiveMenu={setActiveMenu}/>}
           {activeMenu==="일정 관리"&&<ScheduleBoard schedules={schedules} onEdit={s=>{setEditingSched(s);setShowSchedModal(true);}} onDelete={deleteSched}/>}
           {activeMenu==="업무 관리"&&<TaskBoard tasks={tasks} onEdit={t=>{setEditingTask(t);setShowTaskModal(true);}} onDelete={deleteTask} onStatusChange={updateTaskStatus}/>}
-          {activeMenu==="캘린더"&&<CalendarView schedules={schedules} currentMonth={currentMonth} setCurrentMonth={setCurrentMonth} todayStr={todayStr} selectedSched={selectedSched} setSelectedSched={setSelectedSched} onDateClick={d=>{setEditingSched(null);setShowSchedModal({prefill:d});}}/>}
+          {activeMenu==="캘린더"&&<CalendarView schedules={schedules} currentMonth={currentMonth} setCurrentMonth={setCurrentMonth} todayStr={todayStr} selectedSched={selectedSched} setSelectedSched={setSelectedSched} onDateClick={d=>{setEditingSched(null);setShowSchedModal({prefill:d});}} onEditSched={s=>{setEditingSched(s);setShowSchedModal(true);}} onDeleteSched={deleteSched}/>}
           {activeMenu==="리포트"&&<Reports schedules={schedules} tasks={tasks}/>}
         </div>
       </div>
@@ -400,8 +400,8 @@ function Dashboard({schedules,tasks,todaySchedules,weekSchedules,urgentSchedules
 }
 function SecCard({title,accent,children}){return <div style={{background:"#161628",border:`1px solid ${accent}33`,borderRadius:14,padding:"18px 20px"}}><h3 style={{margin:"0 0 14px",fontSize:14,fontWeight:700,color:accent}}>{title}</h3>{children}</div>;}
 function Empty({text}){return <p style={{color:"#4B4B6B",fontSize:13,textAlign:"center",padding:"12px 0"}}>{text}</p>;}
-function SchedRow({s}){const pc=PRIORITY_COLORS[s.priority]||PRIORITY_COLORS.medium;return <div style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:"1px solid #2A2A4A"}}><div style={{width:8,height:8,borderRadius:"50%",background:pc.bg,flexShrink:0}}/><div style={{flex:1,minWidth:0}}><p style={{margin:0,fontSize:13,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.title}</p><p style={{margin:0,fontSize:11,color:"#6B7280"}}>{s.owner_name} · {s.end_date}</p></div><span style={{fontSize:10,padding:"2px 7px",borderRadius:5,background:pc.bg,color:pc.text,flexShrink:0}}>{s.priority}</span></div>;}
-function TaskRow({t}){const c=STATUS_COLORS[t.status]||STATUS_COLORS["할 일"];return <div style={{padding:"8px 0",borderBottom:"1px solid #2A2A4A"}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}><span style={{fontSize:13,fontWeight:600}}>{t.title}</span><span style={{fontSize:11,color:c.text,padding:"2px 7px",borderRadius:5,background:c.bg}}>{t.status}</span></div><div style={{display:"flex",alignItems:"center",gap:8}}><div style={{flex:1,height:5,background:"#2A2A4A",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${t.progress}%`,background:c.border,borderRadius:3}}/></div><span style={{fontSize:11,color:"#6B7280",flexShrink:0}}>{t.progress}%</span></div></div>;}
+function SchedRow({s}){const pc=PRIORITY_COLORS[s.priority]||PRIORITY_COLORS.medium;return <div style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:"1px solid #2A2A4A"}}><div style={{width:8,height:8,borderRadius:"50%",background:pc.bg,flexShrink:0}}/><div style={{flex:1,minWidth:0}}><p style={{margin:0,fontSize:13,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.title}</p><p style={{margin:0,fontSize:11,color:"#6B7280"}}>{s.owner_name} · {s.end_date}{s.end_time?" "+s.end_time:""}</p></div><span style={{fontSize:10,padding:"2px 7px",borderRadius:5,background:pc.bg,color:pc.text,flexShrink:0}}>{s.priority}</span></div>;}
+function TaskRow({t}){const c=STATUS_COLORS[t.status]||STATUS_COLORS["할 일"];return <div style={{padding:"8px 0",borderBottom:"1px solid #2A2A4A"}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:13,fontWeight:600}}>{t.title}</span><span style={{fontSize:11,color:c.text,padding:"2px 7px",borderRadius:5,background:c.bg}}>{t.status}</span></div>{t.due_date&&<p style={{margin:"2px 0 4px",fontSize:10,color:"#FB923C"}}>📅 완료예정: {t.due_date}</p>}<div style={{display:"flex",alignItems:"center",gap:8}}><div style={{flex:1,height:5,background:"#2A2A4A",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${t.progress}%`,background:c.border,borderRadius:3}}/></div><span style={{fontSize:11,color:"#6B7280",flexShrink:0}}>{t.progress}%</span></div></div>;}
 
 // ── 일정 보드 ─────────────────────────────────────────
 function ScheduleBoard({schedules,onEdit,onDelete}){
@@ -430,8 +430,8 @@ function ScheduleBoard({schedules,onEdit,onDelete}){
             {s.description&&<p style={{margin:"0 0 12px",fontSize:12,color:"#8B8BAD",lineHeight:1.5}}>{s.description}</p>}
             <div style={{display:"flex",gap:16,marginBottom:14}}>
               <div><p style={{margin:0,fontSize:10,color:"#6B7280"}}>담당자</p><p style={{margin:0,fontSize:12,color:"#A78BFA",fontWeight:600}}>{s.owner_name}</p></div>
-              <div><p style={{margin:0,fontSize:10,color:"#6B7280"}}>시작</p><p style={{margin:0,fontSize:12}}>{s.start_date}</p></div>
-              <div><p style={{margin:0,fontSize:10,color:"#6B7280"}}>종료</p><p style={{margin:0,fontSize:12}}>{s.end_date}</p></div>
+              <div><p style={{margin:0,fontSize:10,color:"#6B7280"}}>시작</p><p style={{margin:0,fontSize:12}}>{s.start_date}{s.start_time&&<span style={{color:"#A78BFA"}}> {s.start_time}</span>}</p></div>
+              <div><p style={{margin:0,fontSize:10,color:"#6B7280"}}>종료</p><p style={{margin:0,fontSize:12}}>{s.end_date}{s.end_time&&<span style={{color:"#A78BFA"}}> {s.end_time}</span>}</p></div>
             </div>
             <div style={{display:"flex",gap:8}}>
               <button onClick={()=>onEdit(s)} style={{...btn("#2A2A4A","#A78BFA"),fontSize:12,padding:"5px 12px"}}>수정</button>
@@ -463,7 +463,8 @@ function TaskBoard({tasks,onEdit,onDelete,onStatusChange}){
             <div key={task.id} draggable onDragStart={()=>setDragging(task.id)} onDragEnd={()=>setDragging(null)}
               style={{background:"#1E1E3A",borderRadius:10,padding:"12px 14px",cursor:"grab",border:"1px solid #2A2A4A",opacity:dragging===task.id?0.5:1}}>
               <p style={{margin:"0 0 6px",fontSize:13,fontWeight:600}}>{task.title}</p>
-              <p style={{margin:"0 0 10px",fontSize:11,color:"#A78BFA"}}>👤 {task.owner_name}</p>
+              <p style={{margin:"0 0 4px",fontSize:11,color:"#A78BFA"}}>👤 {task.owner_name}</p>
+              {task.due_date&&<p style={{margin:"0 0 8px",fontSize:10,color:"#FB923C"}}>📅 완료예정: {task.due_date}</p>}
               <div style={{marginBottom:10}}>
                 <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:10,color:"#6B7280"}}>진행률</span><span style={{fontSize:10,color:col.text,fontWeight:700}}>{task.progress}%</span></div>
                 <div style={{height:4,background:"#2A2A4A",borderRadius:2,overflow:"hidden"}}><div style={{height:"100%",width:`${task.progress}%`,background:col.border,borderRadius:2}}/></div>
@@ -481,7 +482,7 @@ function TaskBoard({tasks,onEdit,onDelete,onStatusChange}){
 }
 
 // ── 캘린더 ────────────────────────────────────────────
-function CalendarView({schedules,currentMonth,setCurrentMonth,todayStr,selectedSched,setSelectedSched,onDateClick}){
+function CalendarView({schedules,currentMonth,setCurrentMonth,todayStr,selectedSched,setSelectedSched,onDateClick,onEditSched,onDeleteSched}){
   const year=currentMonth.getFullYear(), month=currentMonth.getMonth();
   const days=new Date(year,month+1,0).getDate();
   const firstDay=new Date(year,month,1).getDay();
@@ -526,13 +527,21 @@ function CalendarView({schedules,currentMonth,setCurrentMonth,todayStr,selectedS
     </div>
     {selectedSched&&(
       <div style={{marginTop:16,background:"#161628",border:"1px solid #6C63FF44",borderRadius:14,padding:"18px 20px"}}>
-        <div style={{display:"flex",justifyContent:"space-between"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
           <h3 style={{margin:0,fontSize:16,fontWeight:700,color:"#A78BFA"}}>{selectedSched.title}</h3>
-          <button onClick={()=>setSelectedSched(null)} style={{background:"none",border:"none",color:"#6B7280",cursor:"pointer",fontSize:18}}>×</button>
+          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+            <button onClick={()=>{onEditSched(selectedSched);setSelectedSched(null);}} style={{...btn("#6C63FF"),fontSize:12,padding:"5px 12px"}}>✏️ 수정</button>
+            <button onClick={()=>{onDeleteSched(selectedSched.id);setSelectedSched(null);}} style={{...btn("#2A2A4A","#F87171"),fontSize:12,padding:"5px 12px"}}>삭제</button>
+            <button onClick={()=>setSelectedSched(null)} style={{background:"none",border:"none",color:"#6B7280",cursor:"pointer",fontSize:20,lineHeight:1}}>×</button>
+          </div>
         </div>
-        <p style={{color:"#8B8BAD",margin:"8px 0"}}>{selectedSched.description}</p>
-        <p style={{fontSize:13,margin:"4px 0"}}>담당자: <strong style={{color:"#A78BFA"}}>{selectedSched.owner_name}</strong></p>
-        <p style={{fontSize:13,margin:"4px 0"}}>{selectedSched.start_date} → {selectedSched.end_date}</p>
+        <p style={{color:"#8B8BAD",margin:"8px 0",fontSize:13}}>{selectedSched.description}</p>
+        <div style={{display:"flex",gap:20,flexWrap:"wrap",marginTop:8}}>
+          <div><p style={{margin:0,fontSize:10,color:"#6B7280"}}>담당자</p><p style={{margin:"2px 0 0",fontSize:13,color:"#A78BFA",fontWeight:600}}>{selectedSched.owner_name}</p></div>
+          <div><p style={{margin:0,fontSize:10,color:"#6B7280"}}>시작</p><p style={{margin:"2px 0 0",fontSize:13}}>{selectedSched.start_date}{selectedSched.start_time&&" "+selectedSched.start_time}</p></div>
+          <div><p style={{margin:0,fontSize:10,color:"#6B7280"}}>종료</p><p style={{margin:"2px 0 0",fontSize:13}}>{selectedSched.end_date}{selectedSched.end_time&&" "+selectedSched.end_time}</p></div>
+          <div><p style={{margin:0,fontSize:10,color:"#6B7280"}}>중요도</p><p style={{margin:"2px 0 0",fontSize:13}}>{selectedSched.priority==="high"?"높음":selectedSched.priority==="medium"?"중간":"낮음"}</p></div>
+        </div>
       </div>
     )}
   </div>;
@@ -602,7 +611,11 @@ function SchedModal({initial,onSave,onClose,isEdit}){
     <Fld label="담당자 이름 *"><input value={f.owner_name} onChange={e=>s("owner_name",e.target.value)} placeholder="담당자 이름" style={inp}/></Fld>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
       <Fld label="시작일"><input type="date" value={f.start_date} onChange={e=>s("start_date",e.target.value)} style={inp}/></Fld>
+      <Fld label="시작 시간"><input type="time" value={f.start_time||""} onChange={e=>s("start_time",e.target.value)} style={inp}/></Fld>
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
       <Fld label="종료일"><input type="date" value={f.end_date} onChange={e=>s("end_date",e.target.value)} style={inp}/></Fld>
+      <Fld label="종료 시간"><input type="time" value={f.end_time||""} onChange={e=>s("end_time",e.target.value)} style={inp}/></Fld>
     </div>
     <Fld label="중요도"><select value={f.priority} onChange={e=>s("priority",e.target.value)} style={inp}><option value="high">높음</option><option value="medium">중간</option><option value="low">낮음</option></select></Fld>
   </ModalWrap>;
@@ -614,6 +627,10 @@ function TaskModal_({initial,onSave,onClose,isEdit}){
   return <ModalWrap title={isEdit?"업무 수정":"새 업무 추가"} onClose={onClose} onSave={()=>{if(!f.title.trim()||!f.owner_name.trim()){alert("제목과 담당자를 입력하세요.");return;}onSave(f);}}>
     <Fld label="업무 제목 *"><input value={f.title} onChange={e=>s("title",e.target.value)} placeholder="업무 제목" style={inp}/></Fld>
     <Fld label="담당자 이름 *"><input value={f.owner_name} onChange={e=>s("owner_name",e.target.value)} placeholder="담당자 이름" style={inp}/></Fld>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+      <Fld label="시작일"><input type="date" value={f.start_date||""} onChange={e=>s("start_date",e.target.value)} style={inp}/></Fld>
+      <Fld label="완료 예정일"><input type="date" value={f.due_date||""} onChange={e=>s("due_date",e.target.value)} style={inp}/></Fld>
+    </div>
     <Fld label={`진행률: ${f.progress}%`}><input type="range" min={0} max={100} value={f.progress} onChange={e=>s("progress",Number(e.target.value))} style={{width:"100%",accentColor:"#6C63FF"}}/></Fld>
     <Fld label="상태"><select value={f.status} onChange={e=>s("status",e.target.value)} style={inp}>{TASK_STATUSES.map(x=><option key={x} value={x}>{x}</option>)}</select></Fld>
   </ModalWrap>;

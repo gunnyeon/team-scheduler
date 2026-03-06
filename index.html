@@ -176,9 +176,10 @@ function App(){
     return()=>clearInterval(polling.current);
   },[myName]);
 
-  const todaySchedules  =schedules.filter(s=>s.start_date<=todayStr&&s.end_date>=todayStr);
-  const weekSchedules   =schedules.filter(s=>s.start_date<=weekEndStr&&s.end_date>=todayStr);
-  const urgentSchedules =schedules.filter(s=>s.end_date>=todayStr&&s.end_date<=weekEndStr);
+  const sortSched=arr=>[...arr].sort((a,b)=>{const d=a.start_date.localeCompare(b.start_date);return d!==0?d:(a.start_time||"00:00").localeCompare(b.start_time||"00:00");});
+  const todaySchedules  =sortSched(schedules.filter(s=>s.start_date<=todayStr&&s.end_date>=todayStr));
+  const weekSchedules   =sortSched(schedules.filter(s=>s.start_date<=weekEndStr&&s.end_date>=todayStr));
+  const urgentSchedules =sortSched(schedules.filter(s=>s.end_date>=todayStr&&s.end_date<=weekEndStr));
   const inProgressTasks =tasks.filter(t=>t.status==="진행 중");
   const overdueTasks    =tasks.filter(t=>t.due_date&&t.due_date<todayStr&&t.status!=="완료").sort((a,b)=>a.due_date.localeCompare(b.due_date));
 

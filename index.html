@@ -41,7 +41,7 @@
 const {useState,useEffect,useRef,useCallback}=React;
 
 // ── API 설정 ───────────────────────────────────────────
-const API_URL = "https://script.google.com/macros/library/d/1koIDSx33PsHea4UAMKMvNrf9X-sIYMy0wDSnRttUFItcWZrf6-66eQMV/12";
+const API_URL = "https://script.google.com/macros/s/AKfycbz15mqA1Q5uyuCVXaCKfcp_icyzTv6xB0WIVv4HQDEtr6pnAKUTDO-dblfjRU0fMjiIQA/exec";
 const SCHED_HEADERS = ["id","title","description","owner_name","owner_email","start_date","start_time","end_date","end_time","priority"];
 const TASK_HEADERS  = ["id","title","owner_name","part","start_date","due_date","progress","status"];
 
@@ -345,7 +345,7 @@ function App(){
           </div>
         </div>
         <div style={{flex:1,overflow:"auto",padding:"24px 28px"}}>
-          {activeMenu==="대시보드"&&<Dashboard schedules={schedules} tasks={tasks} todaySchedules={todaySchedules} weekSchedules={weekSchedules} urgentSchedules={urgentSchedules} inProgressTasks={inProgressTasks} overdueTasks={overdueTasks} setActiveMenu={setActiveMenu} onSchedClick={s=>{setCurrentMonth(new Date(s.start_date+"T00:00:00"));setSelectedSched(s);setActiveMenu("캘린더");}}/>}
+          {activeMenu==="대시보드"&&<Dashboard schedules={schedules} tasks={tasks} todaySchedules={todaySchedules} weekSchedules={weekSchedules} urgentSchedules={urgentSchedules} inProgressTasks={inProgressTasks} overdueTasks={overdueTasks} setActiveMenu={setActiveMenu} todayStr={todayStr} weekEndStr={weekEndStr} onSchedClick={s=>{setCurrentMonth(new Date(s.start_date+"T00:00:00"));setSelectedSched(s);setActiveMenu("캘린더");}}/>}
           {activeMenu==="일정 관리"&&<ScheduleBoard schedules={schedules} onEdit={s=>{setEditingSched(s);setShowSchedModal(true);}} onDelete={deleteSched}/>}
           {activeMenu==="업무 관리"&&<TaskBoard tasks={tasks} onEdit={t=>{setEditingTask(t);setShowTaskModal(true);}} onDelete={deleteTask} onStatusChange={updateTaskStatus}/>}
           {activeMenu==="캘린더"&&<CalendarView schedules={schedules} currentMonth={currentMonth} setCurrentMonth={setCurrentMonth} todayStr={todayStr} selectedSched={selectedSched} setSelectedSched={setSelectedSched} onDateClick={d=>{setEditingSched(null);setShowSchedModal({prefillDate:d});}} onEditSched={s=>{setEditingSched(s);setShowSchedModal(true);}} onDeleteSched={deleteSched}/>}
@@ -373,7 +373,7 @@ function App(){
 }
 
 // ── 대시보드 ──────────────────────────────────────────
-function Dashboard({schedules,tasks,todaySchedules,weekSchedules,urgentSchedules,inProgressTasks,overdueTasks,setActiveMenu,onSchedClick}){
+function Dashboard({schedules,tasks,todaySchedules,weekSchedules,urgentSchedules,inProgressTasks,overdueTasks,setActiveMenu,todayStr,weekEndStr,onSchedClick}){
   return (
     <div>
       {/* 통계 카드 */}
@@ -434,8 +434,8 @@ function Dashboard({schedules,tasks,todaySchedules,weekSchedules,urgentSchedules
         <SecCard title="마감 임박 일정" accent="#FB923C">{urgentSchedules.length===0?<Empty text="임박한 일정 없음"/>:urgentSchedules.map(s=><SchedRow key={s.id} s={s} onClick={onSchedClick}/>)}</SecCard>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:20}}>
-        <SecCard title="할 일" accent="#818CF8">{tasks.filter(t=>t.status==="할 일").length===0?<Empty text="할 일 없음"/>:tasks.filter(t=>t.status==="할 일").map(t=><TaskRow key={t.id} t={t}/>)}</SecCard>
-        <SecCard title="진행 중 업무" accent="#2EC4B6">{inProgressTasks.length===0?<Empty text="진행 중인 업무 없음"/>:inProgressTasks.map(t=><TaskRow key={t.id} t={t}/>)}</SecCard>
+        <SecCard title="할 일 (1주일 이내)" accent="#818CF8">{tasks.filter(t=>t.status==="할 일"&&(!t.due_date||(t.due_date>=todayStr&&t.due_date<=weekEndStr))).length===0?<Empty text="1주일 이내 할 일 없음"/>:tasks.filter(t=>t.status==="할 일"&&(!t.due_date||(t.due_date>=todayStr&&t.due_date<=weekEndStr))).map(t=><TaskRow key={t.id} t={t}/>)}</SecCard>
+        <SecCard title="진행 중 업무 (1주일 이내)" accent="#2EC4B6">{inProgressTasks.filter(t=>!t.due_date||(t.due_date>=todayStr&&t.due_date<=weekEndStr)).length===0?<Empty text="1주일 이내 진행 중 업무 없음"/>:inProgressTasks.filter(t=>!t.due_date||(t.due_date>=todayStr&&t.due_date<=weekEndStr)).map(t=><TaskRow key={t.id} t={t}/>)}</SecCard>
         <SecCard title="업무 현황" accent="#F9A8D4">
           {TASK_STATUSES.map(st=>{const count=tasks.filter(t=>t.status===st).length;const pct=tasks.length?Math.round(count/tasks.length*100):0;const c=STATUS_COLORS[st];return <div key={st} style={{marginBottom:10}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:12,color:c.text}}>{st}</span><span style={{fontSize:12,color:"#6B7280"}}>{count}개 ({pct}%)</span></div><div style={{height:6,background:"#2A2A4A",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${pct}%`,background:c.border,borderRadius:3,transition:"width 0.5s"}}/></div></div>;})}
         </SecCard>

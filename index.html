@@ -153,8 +153,7 @@ function App(){
   const weekEndDate=new Date(); weekEndDate.setDate(weekEndDate.getDate()+6);
   const weekEndStr=getLocalDateStr(weekEndDate);
 
-  const localVersion=useRef(0); // 로컬 변경 버전 카운터
-  const serverVersion=useRef(0);  // 서버 응답 버전 카운터
+  const lastLocalChange=useRef(0); // 마지막 로컬 변경 시각 (ms)
 
   async function initialize(){
     setAppLoading(true);
@@ -171,19 +170,19 @@ function App(){
   }
 
   async function loadData(){
-    const reqVer=++serverVersion.current;
+    const reqAt=Date.now(); // 요청 시작 시각 기록
     try{
       const [s,tr,t]=await Promise.all([apiGet("schedules"),apiGet("trips"),apiGet("tasks")]);
-      // 요청 시작 후 로컬 변경이 있었으면 무시 (로컬이 항상 우선)
-      if(reqVer<localVersion.current)return;
+      // 요청이 시작된 후에 로컬 변경이 있었으면 → 서버 응답 무시
+      if(lastLocalChange.current>reqAt)return;
       setSchedules(s); setTrips(tr); setTasks(t);
       setLastSync(new Date()); setSyncStatus("동기화됨");
     }catch(e){setSyncStatus("오류");}
   }
 
   // 로컬 변경 시 버전 올림 → 진행 중인 폴링 응답을 무효화
-  function bumpLocal(){ localVersion.current++; setSyncStatus("저장중"); }
-  function afterSave(){ setSyncStatus("동기화됨"); }
+  function bumpLocal(){ lastLocalChange.current=Date.now(); setSyncStatus("저장중"); }
+  function afterSave(){ lastLocalChange.current=Date.now()+3000; setSyncStatus("동기화됨"); }
 
   useEffect(()=>{
     if(!myName)return;

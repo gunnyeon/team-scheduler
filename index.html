@@ -25,7 +25,7 @@
 const {useState,useEffect,useRef,useCallback}=React;
 
 // ── API 설정 ───────────────────────────────────────────
-const API_URL = "https://script.google.com/macros/s/AKfycbxopHuZrvl1782ABDo7Dz0w7ldTM1OLxTC7A_oogAJ6RJHD6Bfbv3weXsgLkUUUMgOK/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycby8GwkBlfKaCRMvvhC4lI3XmZokj4Upj9y5EGI8hMpEMKsoQKVHffkJozI8rEjP-Ylm/exec";
 const SCHED_HEADERS = ["id","title","description","owner_name","start_date","start_time","end_date","end_time","priority"];
 const TASK_HEADERS  = ["id","title","owner_name","part","start_date","due_date","progress","status"];
 
@@ -120,10 +120,11 @@ function App(){
     const row={...data,id:data.id||`s${Date.now()}`};
     const updated=isEdit?schedules.map(s=>s.id===row.id?row:s):[...schedules,row];
     setSchedules(updated);
+    setShowSchedModal(false);
+    setEditingSched(null);
     setSyncStatus("저장중");
     await apiUpsert("schedules",row);
     setSyncStatus("동기화됨");
-    setShowSchedModal(false); setEditingSched(null);
   }
   async function deleteSched(id){
     const target=schedules.find(s=>s.id===id);
@@ -224,13 +225,13 @@ function App(){
           {activeMenu==="대시보드"&&<Dashboard schedules={schedules} tasks={tasks} todaySchedules={todaySchedules} weekSchedules={weekSchedules} urgentSchedules={urgentSchedules} inProgressTasks={inProgressTasks} overdueTasks={overdueTasks} setActiveMenu={setActiveMenu}/>}
           {activeMenu==="일정 관리"&&<ScheduleBoard schedules={schedules} onEdit={s=>{setEditingSched(s);setShowSchedModal(true);}} onDelete={deleteSched}/>}
           {activeMenu==="업무 관리"&&<TaskBoard tasks={tasks} onEdit={t=>{setEditingTask(t);setShowTaskModal(true);}} onDelete={deleteTask} onStatusChange={updateTaskStatus}/>}
-          {activeMenu==="캘린더"&&<CalendarView schedules={schedules} currentMonth={currentMonth} setCurrentMonth={setCurrentMonth} todayStr={todayStr} selectedSched={selectedSched} setSelectedSched={setSelectedSched} onDateClick={d=>{setEditingSched(null);setShowSchedModal({prefill:d});}} onEditSched={s=>{setEditingSched(s);setShowSchedModal(true);}} onDeleteSched={deleteSched}/>}
+          {activeMenu==="캘린더"&&<CalendarView schedules={schedules} currentMonth={currentMonth} setCurrentMonth={setCurrentMonth} todayStr={todayStr} selectedSched={selectedSched} setSelectedSched={setSelectedSched} onDateClick={d=>{setEditingSched(null);setShowSchedModal({prefillDate:d});}} onEditSched={s=>{setEditingSched(s);setShowSchedModal(true);}} onDeleteSched={deleteSched}/>}
           {activeMenu==="리포트"&&<Reports schedules={schedules} tasks={tasks}/>}
         </div>
       </div>
 
       {/* 모달들 */}
-      {showSchedModal&&<SchedModal initial={editingSched||(showSchedModal?.prefill?{...newSchedDef,start_date:showSchedModal.prefill,end_date:showSchedModal.prefill}:newSchedDef)} onSave={saveSched} onClose={()=>{setShowSchedModal(false);setEditingSched(null);}} isEdit={!!editingSched}/>}
+      {showSchedModal&&<SchedModal initial={editingSched||(showSchedModal?.prefillDate?{...newSchedDef,start_date:showSchedModal.prefillDate,end_date:showSchedModal.prefillDate}:newSchedDef)} onSave={saveSched} onClose={()=>{setShowSchedModal(false);setEditingSched(null);}} isEdit={!!editingSched}/>}
       {showTaskModal&&<TaskModal_ initial={editingTask||newTaskDef} onSave={saveTask} onClose={()=>{setShowTaskModal(false);setEditingTask(null);}} isEdit={!!editingTask}/>}
       {confirmDlg&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200}}>

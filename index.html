@@ -41,14 +41,46 @@
 const {useState,useEffect,useRef,useCallback}=React;
 
 // ── API 설정 ───────────────────────────────────────────
-const API_URL = "https://script.google.com/macros/library/d/1koIDSx33PsHea4UAMKMvNrf9X-sIYMy0wDSnRttUFItcWZrf6-66eQMV/10";
+const API_URL = "https://script.google.com/macros/s/AKfycbxVQZ3js02-pNONeIz0j3TQcNZLopctNxA92iGW8IrcFBGHimnNzn5tYp2ysptzEo79pQ/exec";
 const SCHED_HEADERS = ["id","title","description","owner_name","owner_email","start_date","start_time","end_date","end_time","priority"];
 const TASK_HEADERS  = ["id","title","owner_name","part","start_date","due_date","progress","status"];
 
 async function apiGet(sheet){
   const r=await fetch(`${API_URL}?sheet=${sheet}`);
   const d=await r.json();
-  return d.ok?d.data:[];
+  if(!d.ok)return[];
+  // Sheets에서 날짜가 Date 객체 문자열로 올 경우 yyyy-MM-dd 형식으로 정규화
+  return (d.data||[]).map(row=>{
+    const normalized={...row};
+    ["start_date","end_date","due_date"].forEach(key=>{
+      if(normalized[key]){
+        const v=String(normalized[key]);
+        // Date 객체 문자열이면 파싱해서 yyyy-MM-dd로 변환
+        if(v.includes("T")||v.includes("/")||(!v.match(/^\d{4}-\d{2}-\d{2}$/)&&v.length>0)){
+          const dt=new Date(v);
+          if(!isNaN(dt)){
+            const yy=dt.getFullYear();
+            const mm=String(dt.getMonth()+1).padStart(2,"0");
+            const dd=String(dt.getDate()).padStart(2,"0");
+            normalized[key]=`${yy}-${mm}-${dd}`;
+          }
+        }
+      }
+    });
+    ["start_time","end_time"].forEach(key=>{
+      if(normalized[key]){
+        const v=String(normalized[key]);
+        // HH:MM 형식이 아니면 정규화
+        if(v.includes("T")){
+          const dt=new Date(v);
+          if(!isNaN(dt)){
+            normalized[key]=`${String(dt.getHours()).padStart(2,"0")}:${String(dt.getMinutes()).padStart(2,"0")}`;
+          }
+        }
+      }
+    });
+    return normalized;
+  });
 }
 async function apiPost(payload){
   const params=new URLSearchParams({payload:JSON.stringify(payload)});
@@ -144,8 +176,12 @@ function App(){
     isSaving.current=true;
     setSyncStatus("저장중");
     await apiUpsert("schedules",row);
-    isSaving.current=false;
-    await loadData();
+    setSyncStatus("동기화됨");
+    // Sheets 반영 대기 후 재조회
+    setTimeout(async()=>{
+      isSaving.current=false;
+      await loadData();
+    }, 3000);
   }
   async function deleteSched(id){
     const target=schedules.find(s=>s.id===id);
@@ -155,8 +191,8 @@ function App(){
       isSaving.current=true;
       setSyncStatus("저장중");
       await apiDelete("schedules",id);
-      isSaving.current=false;
-      await loadData();
+      setSyncStatus("동기화됨");
+      setTimeout(async()=>{isSaving.current=false;await loadData();},3000);
     }});
   }
   async function saveTask(data){
@@ -169,8 +205,11 @@ function App(){
     isSaving.current=true;
     setSyncStatus("저장중");
     await apiUpsert("tasks",row);
-    isSaving.current=false;
-    await loadData();
+    setSyncStatus("동기화됨");
+    setTimeout(async()=>{
+      isSaving.current=false;
+      await loadData();
+    }, 3000);
   }
   async function deleteTask(id){
     const target=tasks.find(t=>t.id===id);
@@ -180,8 +219,8 @@ function App(){
       isSaving.current=true;
       setSyncStatus("저장중");
       await apiDelete("tasks",id);
-      isSaving.current=false;
-      await loadData();
+      setSyncStatus("동기화됨");
+      setTimeout(async()=>{isSaving.current=false;await loadData();},3000);
     }});
   }
   async function updateTaskStatus(id,status){
@@ -193,8 +232,8 @@ function App(){
     isSaving.current=true;
     setSyncStatus("저장중");
     await apiUpsert("tasks",row);
-    isSaving.current=false;
-    await loadData();
+    setSyncStatus("동기화됨");
+    setTimeout(async()=>{isSaving.current=false;await loadData();},3000);
   }
 
   const [loginError,setLoginError]=useState("");

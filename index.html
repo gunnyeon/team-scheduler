@@ -212,9 +212,13 @@ function App(){
     setShowSchedModal(false);    // 모달 즉시 닫기
     setEditingSched(null);
     setSyncStatus("저장중");
-    // API 호출은 백그라운드에서 처리 (await 없음)
-    isSaving.current=true;
-    apiUpsert("schedules",row).then(()=>loadAfterSave("schedules",row.id)).catch(()=>{isSaving.current=false;setSyncStatus("오류");});
+    // 다음 틱에서 API 호출 (렌더링 완료 후 실행)
+    setTimeout(()=>{
+      isSaving.current=true;
+      apiUpsert("schedules",row)
+        .then(()=>loadAfterSave("schedules",row.id))
+        .catch(()=>{isSaving.current=false;setSyncStatus("오류");});
+    },0);
   }
   async function deleteSched(id){
     const target=schedules.find(s=>s.id===id);
@@ -226,17 +230,21 @@ function App(){
       apiDelete("schedules",id).then(()=>{isSaving.current=false;loadData();}).catch(()=>{isSaving.current=false;setSyncStatus("오류");});
     }});
   }
-  async function saveTask(data){
+  function saveTask(data){
     const isEdit=!!data.id;
     const row={...data,id:data.id||`t${Date.now()}`};
     const updated=isEdit?tasks.map(t=>t.id===row.id?row:t):[...tasks,row];
-    setTasks(updated);           // 로컬 즉시 반영
-    setShowTaskModal(false);     // 모달 즉시 닫기
+    setTasks(updated);
+    setShowTaskModal(false);
     setEditingTask(null);
     setSyncStatus("저장중");
-    // API 호출은 백그라운드에서 처리 (await 없음)
-    isSaving.current=true;
-    apiUpsert("tasks",row).then(()=>loadAfterSave("tasks",row.id)).catch(()=>{isSaving.current=false;setSyncStatus("오류");});
+    // 렌더링 완료 후 다음 틱에서 API 호출 (버벅임 방지)
+    setTimeout(()=>{
+      isSaving.current=true;
+      apiUpsert("tasks",row)
+        .then(()=>loadAfterSave("tasks",row.id))
+        .catch(()=>{isSaving.current=false;setSyncStatus("오류");});
+    },0);
   }
   async function deleteTask(id){
     const target=tasks.find(t=>t.id===id);
@@ -409,6 +417,7 @@ function Dashboard({schedules,tasks,todaySchedules,weekSchedules,urgentSchedules
           {label:"오늘 일정",value:todaySchedules.length,icon:"📅",color:"#6C63FF",onClick:()=>setActiveMenu("캘린더")},
           {label:"이번주 일정",value:weekSchedules.length,icon:"🗓",color:"#F9A8D4"},
           {label:"마감 임박",value:urgentSchedules.length,icon:"⚠️",color:"#FB923C"},
+          {label:"할 일",value:tasks.filter(t=>t.status==="할 일").length,icon:"📋",color:"#818CF8",onClick:()=>setActiveMenu("업무 관리")},
           {label:"진행 중 업무",value:inProgressTasks.length,icon:"⚡",color:"#2EC4B6",onClick:()=>setActiveMenu("업무 관리")},
           {label:"기한 초과 업무",value:overdueTasks.length,icon:"🚨",color:"#F87171",onClick:()=>setActiveMenu("업무 관리"),alert:overdueTasks.length>0},
         ].map(s=>(
@@ -459,7 +468,8 @@ function Dashboard({schedules,tasks,todaySchedules,weekSchedules,urgentSchedules
         <SecCard title="이번주 일정" accent="#F9A8D4">{weekSchedules.length===0?<Empty text="이번주 일정 없음"/>:weekSchedules.map(s=><SchedRow key={s.id} s={s} onClick={onSchedClick}/>)}</SecCard>
         <SecCard title="마감 임박 일정" accent="#FB923C">{urgentSchedules.length===0?<Empty text="임박한 일정 없음"/>:urgentSchedules.map(s=><SchedRow key={s.id} s={s} onClick={onSchedClick}/>)}</SecCard>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20}}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:20}}>
+        <SecCard title="할 일" accent="#818CF8">{tasks.filter(t=>t.status==="할 일").length===0?<Empty text="할 일 없음"/>:tasks.filter(t=>t.status==="할 일").map(t=><TaskRow key={t.id} t={t}/>)}</SecCard>
         <SecCard title="진행 중 업무" accent="#2EC4B6">{inProgressTasks.length===0?<Empty text="진행 중인 업무 없음"/>:inProgressTasks.map(t=><TaskRow key={t.id} t={t}/>)}</SecCard>
         <SecCard title="업무 현황" accent="#F9A8D4">
           {TASK_STATUSES.map(st=>{const count=tasks.filter(t=>t.status===st).length;const pct=tasks.length?Math.round(count/tasks.length*100):0;const c=STATUS_COLORS[st];return <div key={st} style={{marginBottom:10}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:12,color:c.text}}>{st}</span><span style={{fontSize:12,color:"#6B7280"}}>{count}개 ({pct}%)</span></div><div style={{height:6,background:"#2A2A4A",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${pct}%`,background:c.border,borderRadius:3,transition:"width 0.5s"}}/></div></div>;})}

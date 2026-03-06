@@ -446,7 +446,7 @@ function Dashboard({schedules,tasks,todaySchedules,weekSchedules,urgentSchedules
 function SecCard({title,accent,children}){return <div style={{background:"#161628",border:`1px solid ${accent}33`,borderRadius:14,padding:"18px 20px"}}><h3 style={{margin:"0 0 14px",fontSize:14,fontWeight:700,color:accent}}>{title}</h3>{children}</div>;}
 function Empty({text}){return <p style={{color:"#4B4B6B",fontSize:13,textAlign:"center",padding:"12px 0"}}>{text}</p>;}
 function SchedRow({s,onClick}){const pc=PRIORITY_COLORS[s.priority]||PRIORITY_COLORS.medium;return <div onClick={()=>onClick&&onClick(s)} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 6px",borderBottom:"1px solid #2A2A4A",borderRadius:6,cursor:onClick?"pointer":"default",transition:"background 0.15s"}} onMouseEnter={e=>{if(onClick)e.currentTarget.style.background="rgba(108,99,255,0.08)";}} onMouseLeave={e=>e.currentTarget.style.background="transparent"}><div style={{width:8,height:8,borderRadius:"50%",background:pc.bg,flexShrink:0}}/><div style={{flex:1,minWidth:0}}><p style={{margin:0,fontSize:13,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.title}</p><p style={{margin:0,fontSize:11,color:"#6B7280"}}>{s.owner_name}</p><p style={{margin:"2px 0 0",fontSize:11,color:"#8B8BAD"}}>{s.start_date}<span style={{color:"#C4B5FD",marginLeft:3}}>({getDayOfWeek(s.start_date)})</span>{s.start_time&&<span style={{color:"#A78BFA"}}> {s.start_time}</span>}{" → "}{s.end_date}<span style={{color:"#C4B5FD",marginLeft:3}}>({getDayOfWeek(s.end_date)})</span>{s.end_time&&<span style={{color:"#A78BFA"}}> {s.end_time}</span>}</p></div><div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}><span style={{fontSize:10,padding:"2px 7px",borderRadius:5,background:pc.bg,color:pc.text}}>{s.priority==="high"?"높음":s.priority==="medium"?"중간":"낮음"}</span>{onClick&&<span style={{fontSize:10,color:"#6B7280"}}>→</span>}</div></div>;}
-function TaskRow({t}){const c=STATUS_COLORS[t.status]||STATUS_COLORS["할 일"];return <div style={{padding:"8px 0",borderBottom:"1px solid #2A2A4A"}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:13,fontWeight:600}}>{t.title}</span><span style={{fontSize:11,color:c.text,padding:"2px 7px",borderRadius:5,background:c.bg}}>{t.status}</span></div>{t.due_date&&<p style={{margin:"2px 0 4px",fontSize:10,color:"#FB923C"}}>📅 완료예정: {t.due_date} ({getDayOfWeek(t.due_date)})</p>}<div style={{display:"flex",alignItems:"center",gap:8}}><div style={{flex:1,height:5,background:"#2A2A4A",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${t.progress}%`,background:c.border,borderRadius:3}}/></div><span style={{fontSize:11,color:"#6B7280",flexShrink:0}}>{t.progress}%</span></div></div>;}
+function TaskRow({t}){const c=STATUS_COLORS[t.status]||STATUS_COLORS["할 일"];return <div style={{padding:"8px 0",borderBottom:"1px solid #2A2A4A"}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:13,fontWeight:600}}>{t.title}</span><span style={{fontSize:11,color:c.text,padding:"2px 7px",borderRadius:5,background:c.bg}}>{t.status}</span></div><div style={{display:"flex",gap:10,margin:"3px 0 4px",flexWrap:"wrap"}}>{t.start_date&&<p style={{margin:0,fontSize:10,color:"#8B8BAD"}}>🗓 시작: {t.start_date} ({getDayOfWeek(t.start_date)})</p>}{t.due_date&&<p style={{margin:0,fontSize:10,color:"#FB923C"}}>📅 완료예정: {t.due_date} ({getDayOfWeek(t.due_date)})</p>}</div><div style={{display:"flex",alignItems:"center",gap:8}}><div style={{flex:1,height:5,background:"#2A2A4A",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${t.progress}%`,background:c.border,borderRadius:3}}/></div><span style={{fontSize:11,color:"#6B7280",flexShrink:0}}>{t.progress}%</span></div></div>;}
 
 // ── 일정 관리 (리스트형) ──────────────────────────────
 function ScheduleBoard({schedules,onEdit,onDelete}){
@@ -568,9 +568,9 @@ function TaskBoard({tasks,onEdit,onDelete,onStatusChange}){
       <input value={nameFilter} onChange={e=>setNameFilter(e.target.value)} placeholder="🔍 담당자 검색" style={{...inp,width:160,fontSize:12,padding:"5px 12px",marginLeft:"auto"}}/>
       <span style={{fontSize:12,color:"#6B7280"}}>총 {visibleTasks.length}건</span>
     </div>
-    <div style={{background:"#1E1E3A",borderRadius:"10px 10px 0 0",padding:"10px 20px",display:"grid",gridTemplateColumns:"130px 1fr 110px 110px 90px 160px 90px",gap:10,alignItems:"center",borderBottom:"1px solid #2A2A4A"}}>
-      {["파트","제목","담당자","완료예정일","진행률","상태",""].map((h,i)=>(
-        <span key={i} style={{fontSize:11,fontWeight:700,color:"#6B7280",textAlign:i===6?"right":"left"}}>{h}</span>
+    <div style={{background:"#1E1E3A",borderRadius:"10px 10px 0 0",padding:"10px 20px",display:"grid",gridTemplateColumns:"130px 1fr 110px 110px 110px 90px 160px 90px",gap:10,alignItems:"center",borderBottom:"1px solid #2A2A4A"}}>
+      {["파트","제목","담당자","시작일","완료예정일","진행률","상태",""].map((h,i)=>(
+        <span key={i} style={{fontSize:11,fontWeight:700,color:"#6B7280",textAlign:i===7?"right":"left"}}>{h}</span>
       ))}
     </div>
     <div style={{background:"#161628",border:"1px solid #2A2A4A",borderTop:"none",borderRadius:"0 0 10px 10px",overflow:"hidden"}}>
@@ -589,7 +589,7 @@ function TaskBoard({tasks,onEdit,onDelete,onStatusChange}){
             const isLast=gi===groupOrder.length-1&&ti===partTasks.length-1;
             const isOverdue=task.due_date&&task.due_date<today&&task.status!=="완료";
             return <div key={task.id}
-              style={{display:"grid",gridTemplateColumns:"130px 1fr 110px 110px 90px 160px 90px",gap:10,alignItems:"center",padding:"11px 20px",borderBottom:isLast?"none":"1px solid #2A2A4A22",position:"relative",transition:"background 0.15s"}}
+              style={{display:"grid",gridTemplateColumns:"130px 1fr 110px 110px 110px 90px 160px 90px",gap:10,alignItems:"center",padding:"11px 20px",borderBottom:isLast?"none":"1px solid #2A2A4A22",position:"relative",transition:"background 0.15s"}}
               onMouseEnter={e=>e.currentTarget.style.background="rgba(108,99,255,0.05)"}
               onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
               <div style={{position:"absolute",left:0,top:0,bottom:0,width:3,background:tpc?.border||"#3A3A5A",borderRadius:2}}/>
@@ -599,6 +599,7 @@ function TaskBoard({tasks,onEdit,onDelete,onStatusChange}){
                 <div style={{width:20,height:20,borderRadius:"50%",background:getAvatarColor(task.owner_name),display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:"#fff",flexShrink:0}}>{(task.owner_name||"?")[0]}</div>
                 <span style={{fontSize:12,color:"#A78BFA",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{task.owner_name}</span>
               </div>
+              <span style={{fontSize:12,color:task.start_date?"#E8E8F0":"#4B4B6B"}}>{task.start_date?<span>{task.start_date} <span style={{color:"#C4B5FD"}}>({getDayOfWeek(task.start_date)})</span></span>:"—"}</span>
               <span style={{fontSize:12,color:isOverdue?"#F87171":task.due_date?"#FB923C":"#4B4B6B",fontWeight:isOverdue?700:400}}>{task.due_date?<span>{task.due_date} <span style={{color:"#C4B5FD"}}>({getDayOfWeek(task.due_date)})</span></span>:"—"}{isOverdue&&<span style={{marginLeft:3}}>⚠</span>}</span>
               <div style={{display:"flex",alignItems:"center",gap:6}}>
                 <div style={{flex:1,height:5,background:"#2A2A4A",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${task.progress}%`,background:sc.border,borderRadius:3,transition:"width 0.4s"}}/></div>

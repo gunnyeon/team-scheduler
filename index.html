@@ -142,6 +142,8 @@ function App(){
   const initialized=useRef(false);
   const polling=useRef(null);
   const [appLoading,setAppLoading]=useState(false);
+  const [currentMonth2,setCurrentMonth2]=useState(new Date());
+  const [selectedSched2,setSelectedSched2]=useState(null);
 
   const todayStr=getLocalDateStr(new Date());
   const weekEndDate=new Date(); weekEndDate.setDate(weekEndDate.getDate()+6);
@@ -196,8 +198,8 @@ function App(){
   const inProgressTasks =sortTasks(tasks.filter(t=>t.status==="진행 중"));
   const overdueTasks    =tasks.filter(t=>t.due_date&&t.due_date<todayStr&&t.status!=="완료").sort((a,b)=>a.due_date.localeCompare(b.due_date));
 
-  const menus=["대시보드","캘린더","일정 관리","업무 관리","리포트"];
-  const menuIcons={"대시보드":"▦","캘린더":"🗓","일정 관리":"📅","업무 관리":"✓","리포트":"📊"};
+  const menus=["대시보드","캘린더(주요일정)","캘린더(출장일정)","일정 관리","업무 관리","리포트"];
+  const menuIcons={"대시보드":"▦","캘린더(주요일정)":"🗓","캘린더(출장일정)":"✈️","일정 관리":"📅","업무 관리":"✓","리포트":"📊"};
   const newSchedDef={title:"",description:"",owner_name:myName||"",owner_email:"",start_date:todayStr,start_time:"09:00",end_date:todayStr,end_time:"18:00",priority:"medium"};
   const newTaskDef={title:"",owner_name:myName||"",part:"",start_date:todayStr,due_date:"",progress:0,status:"할 일"};
 
@@ -379,10 +381,11 @@ function App(){
           </div>
         </div>
         <div style={{flex:1,overflow:"auto",padding:"24px 28px"}}>
-          {activeMenu==="대시보드"&&<Dashboard schedules={schedules} tasks={tasks} todaySchedules={todaySchedules} weekSchedules={weekSchedules} urgentSchedules={urgentSchedules} inProgressTasks={inProgressTasks} overdueTasks={overdueTasks} setActiveMenu={setActiveMenu} todayStr={todayStr} weekEndStr={weekEndStr} onSchedClick={s=>{setCurrentMonth(new Date(s.start_date+"T00:00:00"));setSelectedSched(s);setActiveMenu("캘린더");}}/>}
+          {activeMenu==="대시보드"&&<Dashboard schedules={schedules} tasks={tasks} todaySchedules={todaySchedules} weekSchedules={weekSchedules} urgentSchedules={urgentSchedules} inProgressTasks={inProgressTasks} overdueTasks={overdueTasks} setActiveMenu={setActiveMenu} todayStr={todayStr} weekEndStr={weekEndStr} onSchedClick={s=>{setCurrentMonth(new Date(s.start_date+"T00:00:00"));setSelectedSched(s);setActiveMenu("캘린더(주요일정)");}}/>}
           {activeMenu==="일정 관리"&&<ScheduleBoard schedules={schedules} onEdit={s=>{setEditingSched(s);setShowSchedModal(true);}} onDelete={deleteSched}/>}
           {activeMenu==="업무 관리"&&<TaskBoard tasks={tasks} onEdit={t=>{setEditingTask(t);setShowTaskModal(true);}} onDelete={deleteTask} onStatusChange={updateTaskStatus}/>}
-          {activeMenu==="캘린더"&&<CalendarView schedules={schedules} currentMonth={currentMonth} setCurrentMonth={setCurrentMonth} todayStr={todayStr} selectedSched={selectedSched} setSelectedSched={setSelectedSched} onDateClick={d=>{setEditingSched(null);setShowSchedModal({prefillDate:d});}} onEditSched={s=>{setEditingSched(s);setShowSchedModal(true);}} onDeleteSched={deleteSched}/>}
+          {activeMenu==="캘린더(주요일정)"&&<CalendarView schedules={schedules} currentMonth={currentMonth} setCurrentMonth={setCurrentMonth} todayStr={todayStr} selectedSched={selectedSched} setSelectedSched={setSelectedSched} onDateClick={d=>{setEditingSched(null);setShowSchedModal({prefillDate:d});}} onEditSched={s=>{setEditingSched(s);setShowSchedModal(true);}} onDeleteSched={deleteSched}/>}
+          {activeMenu==="캘린더(출장일정)"&&<CalendarView schedules={schedules} currentMonth={currentMonth2} setCurrentMonth={setCurrentMonth2} todayStr={todayStr} selectedSched={selectedSched2} setSelectedSched={setSelectedSched2} onDateClick={d=>{setEditingSched(null);setShowSchedModal({prefillDate:d});}} onEditSched={s=>{setEditingSched(s);setShowSchedModal(true);}} onDeleteSched={deleteSched}/>}
           {activeMenu==="리포트"&&<Reports schedules={schedules} tasks={tasks}/>}
         </div>
       </div>

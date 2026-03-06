@@ -1,243 +1,164 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TeamSync - 팀 협업 일정관리</title>
-
-<!-- ================================================
-  ✅ 설정: 아래 URL을 Apps Script 배포 URL로 교체하세요
-  예) https://script.google.com/macros/s/AKfycb.../exec
-================================================= -->
-<script>
-  const API_URL = "https://script.google.com/macros/s/AKfycbzMki5LpXlcyDUdfDgkfGkOSJw_KOMG5dDD-iyqPn0tRMQ7YKqlIh6dkjKSn2xPJX1xOQ/exec";
-</script>
-
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>TeamSync</title>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700;800&display=swap" rel="stylesheet"/>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: #0F0F1A; color: #E8E8F0; font-family: 'Noto Sans KR', sans-serif; overflow: hidden; }
-  ::-webkit-scrollbar { width: 4px; height: 4px; }
-  ::-webkit-scrollbar-track { background: #1E1E3A; }
-  ::-webkit-scrollbar-thumb { background: #3A3A5A; border-radius: 2px; }
-  input, select, textarea { font-family: inherit; }
-  input[type=date]::-webkit-calendar-picker-indicator { filter: invert(0.7); }
-  .add-btn { opacity: 0; transition: opacity 0.15s; }
-  .cal-day:hover .add-btn { opacity: 1 !important; }
-  .cal-day:hover { background: rgba(108,99,255,0.06) !important; }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:#0F0F1A;color:#E8E8F0;font-family:'Noto Sans KR',sans-serif;}
+  ::-webkit-scrollbar{width:5px;height:5px;}
+  ::-webkit-scrollbar-track{background:#1E1E3A;}
+  ::-webkit-scrollbar-thumb{background:#3A3A6A;border-radius:3px;}
+  .add-btn{opacity:0;transition:opacity 0.15s;}
+  .cal-day:hover .add-btn{opacity:1!important;}
+  select option{background:#1E1E3A;color:#E8E8F0;}
 </style>
 </head>
 <body>
 <div id="root"></div>
-
 <script type="text/babel">
-const { useState, useEffect, useCallback, useRef } = React;
+const {useState,useEffect,useRef,useCallback}=React;
 
-// ── 상수 ────────────────────────────────────────────
-const AVATAR_COLORS = ["#6C63FF","#FF6B9D","#2EC4B6","#FB923C","#4ADE80","#F9A8D4","#60A5FA","#FBBF24"];
-function getAvatarColor(name) {
-  let h = 0; for (let c of (name||"?")) h = (h*31+c.charCodeAt(0))%AVATAR_COLORS.length;
-  return AVATAR_COLORS[h];
-}
-const PRIORITY_COLORS = {
-  high:   { bg: "#FF4D6D", text: "#fff" },
-  medium: { bg: "#FF9F1C", text: "#fff" },
-  low:    { bg: "#2EC4B6", text: "#fff" },
-};
-const TASK_STATUSES = ["할 일","진행 중","검토","완료"];
-const STATUS_COLORS = {
-  "할 일":  { bg:"#EEF2FF", border:"#818CF8", text:"#4338CA" },
-  "진행 중":{ bg:"#FFF7ED", border:"#FB923C", text:"#C2410C" },
-  "검토":   { bg:"#FDF4FF", border:"#C084FC", text:"#7E22CE" },
-  "완료":   { bg:"#F0FDF4", border:"#4ADE80", text:"#15803D" },
-};
-const SCHEDULE_HEADERS = ["id","title","description","owner_name","start_date","start_time","end_date","end_time","priority","status"];
-const TASK_HEADERS     = ["id","title","owner_name","part","start_date","due_date","progress","status"];
-const ACTIVITY_HEADERS = ["id","name","action","target","time"];
-const PRESENCE_HEADERS = ["id","name","ts"];
+// ── API 설정 ───────────────────────────────────────────
+const API_URL = "https://script.google.com/macros/s/AKfycbxopHuZrvl1782ABDo7Dz0w7ldTM1OLxTC7A_oogAJ6RJHD6Bfbv3weXsgLkUUUMgOK/exec";
+const SCHED_HEADERS = ["id","title","description","owner_name","start_date","start_time","end_date","end_time","priority"];
+const TASK_HEADERS  = ["id","title","owner_name","part","start_date","due_date","progress","status"];
 
-// ── API 헬퍼 ────────────────────────────────────────
-async function apiGet(sheet) {
-  try {
-    const res = await fetch(`${API_URL}?sheet=${sheet}`);
-    const json = await res.json();
-    return json.data || [];
-  } catch(e) { return []; }
+async function apiGet(sheet){
+  const r=await fetch(`${API_URL}?sheet=${sheet}`);
+  const d=await r.json();
+  return d.ok?d.data:[];
 }
-// Apps Script CORS 우회: POST 대신 GET 쿼리스트링으로 데이터 전달
-async function apiPost(body) {
-  try {
-    const params = new URLSearchParams({ payload: JSON.stringify(body) });
-    const res = await fetch(`${API_URL}?${params}`);
-    return await res.json();
-  } catch(e) { console.error("API 오류:", e); }
+async function apiPost(payload){
+  const params=new URLSearchParams({payload:JSON.stringify(payload)});
+  await fetch(`${API_URL}?${params}`);
 }
-async function apiUpsert(sheet, row) {
-  await apiPost({ sheet, action:"upsert", row });
-}
-async function apiDelete(sheet, id) {
-  await apiPost({ sheet, action:"delete", id });
-}
-async function apiInit(sheet, headers) {
-  await apiPost({ sheet, action:"init", headers });
-}
+async function apiInit(sheet,headers){await apiPost({sheet,action:"init",headers});}
+async function apiUpsert(sheet,row){await apiPost({sheet,action:"upsert",row});}
+async function apiDelete(sheet,id){await apiPost({sheet,action:"delete",id});}
 
-// ── 버튼 스타일 ─────────────────────────────────────
-function btn(bg, color="#fff") {
-  return { background:bg, color, border:"none", borderRadius:8, padding:"8px 16px",
-    fontSize:13, fontWeight:600, cursor:"pointer", whiteSpace:"nowrap" };
-}
-const inp = {
-  width:"100%", background:"#1E1E3A", border:"1px solid #2A2A4A", borderRadius:8,
-  padding:"9px 12px", fontSize:13, color:"#E8E8F0", outline:"none",
-};
+// ── 상수 ──────────────────────────────────────────────
+const AVATAR_COLORS=["#6C63FF","#FF6B9D","#2EC4B6","#FB923C","#4ADE80","#F9A8D4","#60A5FA","#FBBF24"];
+function getAvatarColor(name){let h=0;for(let c of(name||"?"))h=(h*31+c.charCodeAt(0))%AVATAR_COLORS.length;return AVATAR_COLORS[h];}
+const PRIORITY_COLORS={high:{bg:"#FF4D6D",text:"#fff"},medium:{bg:"#FF9F1C",text:"#fff"},low:{bg:"#2EC4B6",text:"#fff"}};
+const TASK_STATUSES=["할 일","진행 중","검토","완료"];
+const STATUS_COLORS={"할 일":{bg:"#EEF2FF",border:"#818CF8",text:"#4338CA"},"진행 중":{bg:"#FFF7ED",border:"#FB923C",text:"#C2410C"},"검토":{bg:"#FDF4FF",border:"#C084FC",text:"#7E22CE"},"완료":{bg:"#F0FDF4",border:"#4ADE80",text:"#15803D"}};
+const PARTS=["PM파트","기획파트","SUB파트","BS파트","공정파트","안전파트","설계파트"];
+const PART_COLORS={"PM파트":{bg:"#1E1B4B",border:"#818CF8",text:"#A5B4FC"},"기획파트":{bg:"#172554",border:"#60A5FA",text:"#93C5FD"},"SUB파트":{bg:"#14532D",border:"#4ADE80",text:"#86EFAC"},"BS파트":{bg:"#4A044E",border:"#E879F9",text:"#F0ABFC"},"공정파트":{bg:"#431407",border:"#FB923C",text:"#FED7AA"},"안전파트":{bg:"#450A0A",border:"#F87171",text:"#FCA5A5"},"설계파트":{bg:"#2E1065",border:"#C084FC",text:"#E9D5FF"}};
+const HOLIDAYS={"01-01":"신정","03-01":"삼일절","05-05":"어린이날","06-06":"현충일","08-15":"광복절","10-03":"개천절","10-09":"한글날","12-25":"성탄절","2025-01-28":"설날 연휴","2025-01-29":"설날","2025-01-30":"설날 연휴","2025-05-05":"어린이날/부처님오신날","2025-10-05":"추석 연휴","2025-10-06":"추석","2025-10-07":"추석 연휴","2026-02-16":"설날 연휴","2026-02-17":"설날","2026-02-18":"설날 연휴","2026-05-24":"부처님오신날","2026-09-24":"추석 연휴","2026-09-25":"추석","2026-09-26":"추석 연휴"};
+function getHoliday(ds){return HOLIDAYS[ds]||HOLIDAYS[ds.slice(5)]||null;}
 
-// ── 메인 앱 ─────────────────────────────────────────
-function App() {
-  const [myName, setMyName]     = useState(() => sessionStorage.getItem("ts-name")||"");
-  const [nameInput, setNameInput] = useState("");
-  const [activeMenu, setActiveMenu] = useState("대시보드");
-  const [schedules, setSchedules] = useState([]);
-  const [tasks, setTasks]         = useState([]);
-  const [onlineUsers, setOnlineUsers] = useState([]);
-  const [activityFeed, setActivityFeed] = useState([]);
-  const [showFeed, setShowFeed]   = useState(false);
-  const [syncStatus, setSyncStatus] = useState("동기화됨");
-  const [lastSync, setLastSync]   = useState(new Date());
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [showSchedModal, setShowSchedModal] = useState(false);
-  const [showTaskModal, setShowTaskModal]   = useState(false);
-  const [editingSched, setEditingSched]     = useState(null);
-  const [editingTask, setEditingTask]       = useState(null);
-  const [confirmDlg, setConfirmDlg]         = useState(null);
-  const [currentMonth, setCurrentMonth]     = useState(new Date());
-  const [selectedSched, setSelectedSched]   = useState(null);
-  const myId = useRef(`u-${Math.random().toString(36).slice(2,8)}`);
-  const timer = useRef(null);
-  const initialized = useRef(false);
+const btn=(bg,color="#fff")=>({background:bg,color,border:"none",borderRadius:8,padding:"8px 16px",fontSize:13,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"});
+const inp={width:"100%",background:"#1E1E3A",border:"1px solid #2A2A4A",borderRadius:8,padding:"9px 12px",fontSize:13,color:"#E8E8F0",outline:"none",boxSizing:"border-box"};
 
-  const todayStr = new Date().toISOString().slice(0,10);
-  const weekEndDate = new Date(); weekEndDate.setDate(weekEndDate.getDate()+6);
-  const weekEndStr = weekEndDate.toISOString().slice(0,10);
+// ── 메인 앱 ───────────────────────────────────────────
+function App(){
+  const [myName,setMyName]=useState(()=>{try{return sessionStorage.getItem("ts-name")||"";}catch{return "";}});
+  const [nameInput,setNameInput]=useState("");
+  const [activeMenu,setActiveMenu]=useState("대시보드");
+  const [schedules,setSchedules]=useState([]);
+  const [tasks,setTasks]=useState([]);
+  const [syncStatus,setSyncStatus]=useState("동기화됨");
+  const [lastSync,setLastSync]=useState(new Date());
+  const [sidebarOpen,setSidebarOpen]=useState(true);
+  const [showSchedModal,setShowSchedModal]=useState(false);
+  const [showTaskModal,setShowTaskModal]=useState(false);
+  const [editingSched,setEditingSched]=useState(null);
+  const [editingTask,setEditingTask]=useState(null);
+  const [confirmDlg,setConfirmDlg]=useState(null);
+  const [currentMonth,setCurrentMonth]=useState(new Date());
+  const [selectedSched,setSelectedSched]=useState(null);
+  const initialized=useRef(false);
+  const polling=useRef(null);
 
-  // ── 초기화 ─────────────────────────────────────────
-  async function initialize() {
-    await Promise.all([
-      apiInit("schedules", SCHEDULE_HEADERS),
-      apiInit("tasks",     TASK_HEADERS),
-      apiInit("activity",  ACTIVITY_HEADERS),
-      apiInit("presence",  PRESENCE_HEADERS),
-    ]);
-    initialized.current = true;
+  const todayStr=new Date().toISOString().slice(0,10);
+  const weekEndDate=new Date(); weekEndDate.setDate(weekEndDate.getDate()+6);
+  const weekEndStr=weekEndDate.toISOString().slice(0,10);
+
+  async function initialize(){
+    try{
+      setSyncStatus("연결 중");
+      await Promise.all([apiInit("schedules",SCHED_HEADERS),apiInit("tasks",TASK_HEADERS)]);
+      await loadData();
+      initialized.current=true;
+    }catch(e){setSyncStatus("오류");}
   }
 
-  // ── 데이터 로드 ────────────────────────────────────
-  const loadAll = useCallback(async (name) => {
-    try {
-      const [s, t, a, p] = await Promise.all([
-        apiGet("schedules"), apiGet("tasks"),
-        apiGet("activity"),  apiGet("presence"),
-      ]);
-      setSchedules(s);
-      setTasks(t);
-      setActivityFeed(a.sort((x,y)=>Number(y.time)-Number(x.time)).slice(0,30));
-      const now = Date.now();
-      const alive = p.filter(u => now - Number(u.ts) < 12000);
-      setOnlineUsers(alive);
-      setLastSync(new Date());
-      setSyncStatus("동기화됨");
-      // 내 presence 갱신
-      if (name) {
-        await apiUpsert("presence", { id: myId.current, name, ts: now });
-      }
-    } catch(e) { setSyncStatus("오류"); }
-  }, []);
-
-  useEffect(() => {
-    if (!myName) return;
-    (async () => {
-      if (!initialized.current) await initialize();
-      await loadAll(myName);
-      timer.current = setInterval(() => loadAll(myName), 3000);
-    })();
-    return () => clearInterval(timer.current);
-  }, [myName]);
-
-  // ── 활동 로그 ──────────────────────────────────────
-  async function logActivity(action, target) {
-    if (!myName) return;
-    await apiUpsert("activity", {
-      id: `a-${Date.now()}`, name: myName, action, target, time: Date.now()
-    });
+  async function loadData(){
+    try{
+      const [s,t]=await Promise.all([apiGet("schedules"),apiGet("tasks")]);
+      setSchedules(s); setTasks(t);
+      setLastSync(new Date()); setSyncStatus("동기화됨");
+    }catch(e){setSyncStatus("오류");}
   }
 
-  // ── 일정 CRUD ──────────────────────────────────────
-  async function saveSched(data) {
+  useEffect(()=>{
+    if(!myName)return;
+    if(!initialized.current)initialize();
+    polling.current=setInterval(loadData,10000);
+    return()=>clearInterval(polling.current);
+  },[myName]);
+
+  const todaySchedules  =schedules.filter(s=>s.start_date<=todayStr&&s.end_date>=todayStr);
+  const weekSchedules   =schedules.filter(s=>s.start_date<=weekEndStr&&s.end_date>=todayStr);
+  const urgentSchedules =schedules.filter(s=>s.end_date>=todayStr&&s.end_date<=weekEndStr);
+  const inProgressTasks =tasks.filter(t=>t.status==="진행 중");
+  const overdueTasks    =tasks.filter(t=>t.due_date&&t.due_date<todayStr&&t.status!=="완료").sort((a,b)=>a.due_date.localeCompare(b.due_date));
+
+  const menus=["대시보드","캘린더","일정 관리","업무 관리","리포트"];
+  const menuIcons={"대시보드":"▦","캘린더":"🗓","일정 관리":"📅","업무 관리":"✓","리포트":"📊"};
+  const newSchedDef={title:"",description:"",owner_name:myName||"",start_date:todayStr,start_time:"09:00",end_date:todayStr,end_time:"18:00",priority:"medium"};
+  const newTaskDef={title:"",owner_name:myName||"",part:"",start_date:todayStr,due_date:"",progress:0,status:"할 일"};
+
+  async function saveSched(data){
+    const isEdit=!!data.id;
+    const row={...data,id:data.id||`s${Date.now()}`};
+    const updated=isEdit?schedules.map(s=>s.id===row.id?row:s):[...schedules,row];
+    setSchedules(updated);
     setSyncStatus("저장중");
-    const isEdit = !!(data.id);
-    const row = { ...data, id: data.id || `s${Date.now()}` };
-    setSchedules(prev => isEdit
-      ? prev.map(s => s.id===row.id ? row : s)
-      : [...prev, row]);
-    await apiUpsert("schedules", row);
-    await logActivity(isEdit?"일정 수정":"일정 추가", data.title);
+    await apiUpsert("schedules",row);
     setSyncStatus("동기화됨");
     setShowSchedModal(false); setEditingSched(null);
   }
-  async function deleteSched(id) {
-    const t = schedules.find(s=>s.id===id);
-    setConfirmDlg({ message:`"${t?.title}" 일정을 삭제하시겠습니까?`, onConfirm: async () => {
-      setSchedules(prev => prev.filter(s=>s.id!==id));
-      await apiDelete("schedules", id);
-      await logActivity("일정 삭제", t?.title);
+  async function deleteSched(id){
+    const target=schedules.find(s=>s.id===id);
+    setConfirmDlg({message:`"${target?.title}" 일정을 삭제하시겠습니까?`,onConfirm:async()=>{
+      const updated=schedules.filter(s=>s.id!==id);
+      setSchedules(updated); setSyncStatus("저장중");
+      await apiDelete("schedules",id); setSyncStatus("동기화됨");
     }});
   }
-
-  // ── 업무 CRUD ──────────────────────────────────────
-  async function saveTask(data) {
-    setSyncStatus("저장중");
-    const row = { ...data, id: editingTask?.id || `t${Date.now()}` };
-    setTasks(prev => editingTask
-      ? prev.map(t => t.id===row.id ? row : t)
-      : [...prev, row]);
-    await apiUpsert("tasks", row);
-    await logActivity(editingTask?"업무 수정":"업무 추가", data.title);
-    setSyncStatus("동기화됨");
+  async function saveTask(data){
+    const isEdit=!!data.id;
+    const row={...data,id:data.id||`t${Date.now()}`};
+    const updated=isEdit?tasks.map(t=>t.id===row.id?row:t):[...tasks,row];
+    setTasks(updated); setSyncStatus("저장중");
+    await apiUpsert("tasks",row); setSyncStatus("동기화됨");
     setShowTaskModal(false); setEditingTask(null);
   }
-  async function deleteTask(id) {
-    const t = tasks.find(t=>t.id===id);
-    setConfirmDlg({ message:`"${t?.title}" 업무를 삭제하시겠습니까?`, onConfirm: async () => {
-      setTasks(prev => prev.filter(t=>t.id!==id));
-      await apiDelete("tasks", id);
-      await logActivity("업무 삭제", t?.title);
+  async function deleteTask(id){
+    const target=tasks.find(t=>t.id===id);
+    setConfirmDlg({message:`"${target?.title}" 업무를 삭제하시겠습니까?`,onConfirm:async()=>{
+      const updated=tasks.filter(t=>t.id!==id);
+      setTasks(updated); setSyncStatus("저장중");
+      await apiDelete("tasks",id); setSyncStatus("동기화됨");
     }});
   }
-  async function updateTaskStatus(id, status) {
-    const t = tasks.find(t=>t.id===id);
-    const row = {...t, status};
-    setTasks(prev => prev.map(x => x.id===id ? row : x));
-    await apiUpsert("tasks", row);
-    await logActivity(`상태 → ${status}`, t?.title);
+  async function updateTaskStatus(id,status){
+    const task=tasks.find(t=>t.id===id);
+    if(!task)return;
+    const row={...task,status};
+    const updated=tasks.map(t=>t.id===id?row:t);
+    setTasks(updated); setSyncStatus("저장중");
+    await apiUpsert("tasks",row); setSyncStatus("동기화됨");
   }
 
-  const todaySchedules   = schedules.filter(s=>s.start_date<=todayStr&&s.end_date>=todayStr);
-  const weekSchedules    = schedules.filter(s=>s.start_date<=weekEndStr&&s.end_date>=todayStr);
-  const urgentSchedules  = schedules.filter(s=>s.end_date>=todayStr&&s.end_date<=weekEndStr);
-  const inProgressTasks  = tasks.filter(t=>t.status==="진행 중");
-  const completedTasks   = tasks.filter(t=>t.status==="완료");
-  const overdueTasks     = tasks.filter(t=>t.due_date&&t.due_date<todayStr&&t.status!=="완료").sort((a,b)=>a.due_date.localeCompare(b.due_date));
-
-  const menus = ["대시보드","캘린더","일정 관리","업무 관리","리포트"];
-  const icons = {"대시보드":"▦","캘린더":"🗓","일정 관리":"📅","업무 관리":"✓","리포트":"📊"};
-
-  const newSchedDef = { title:"", description:"", owner_name:myName||"", start_date:todayStr, start_time:"09:00", end_date:todayStr, end_time:"18:00", priority:"medium", status:"upcoming" };
-  const newTaskDef  = { title:"", owner_name:myName||"", part:"", start_date:todayStr, due_date:"", progress:0, status:"할 일" };
-
-  // ── 입장 화면 ─────────────────────────────────────
-  if (!myName) return (
+  if(!myName) return (
     <div style={{height:"100vh",background:"#0F0F1A",display:"flex",alignItems:"center",justifyContent:"center"}}>
       <div style={{background:"#161628",border:"1px solid #2A2A4A",borderRadius:20,padding:"44px 48px",width:360,textAlign:"center"}}>
         <div style={{width:64,height:64,borderRadius:18,background:"linear-gradient(135deg,#6C63FF,#FF6B9D)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,margin:"0 auto 20px"}}>⚡</div>
@@ -245,10 +166,10 @@ function App() {
         <p style={{color:"#6B7280",fontSize:13,margin:"0 0 28px"}}>팀 협업 일정관리 시스템</p>
         <p style={{color:"#8B8BAD",fontSize:13,margin:"0 0 10px",textAlign:"left"}}>이름을 입력하고 시작하세요</p>
         <input value={nameInput} onChange={e=>setNameInput(e.target.value)}
-          onKeyDown={e=>{if(e.key==="Enter"&&nameInput.trim()){const n=nameInput.trim();sessionStorage.setItem("ts-name",n);setMyName(n);}}}
+          onKeyDown={e=>{if(e.key==="Enter"&&nameInput.trim()){const n=nameInput.trim();try{sessionStorage.setItem("ts-name",n);}catch{}setMyName(n);}}}
           placeholder="홍길동" autoFocus
-          style={{...inp,border:"1px solid #6C63FF66",borderRadius:10,padding:"11px 14px",fontSize:15,marginBottom:12}}/>
-        <button onClick={()=>{if(nameInput.trim()){const n=nameInput.trim();sessionStorage.setItem("ts-name",n);setMyName(n);}}}
+          style={{width:"100%",background:"#1E1E3A",border:"1px solid #6C63FF66",borderRadius:10,padding:"11px 14px",fontSize:15,color:"#E8E8F0",outline:"none",boxSizing:"border-box",marginBottom:12}}/>
+        <button onClick={()=>{if(nameInput.trim()){const n=nameInput.trim();try{sessionStorage.setItem("ts-name",n);}catch{}setMyName(n);}}}
           style={{width:"100%",background:"linear-gradient(90deg,#6C63FF,#9C5CF7)",border:"none",borderRadius:10,padding:12,fontSize:14,fontWeight:700,color:"#fff",cursor:"pointer"}}>
           입장하기 →
         </button>
@@ -256,7 +177,6 @@ function App() {
     </div>
   );
 
-  // ── 메인 레이아웃 ─────────────────────────────────
   return (
     <div style={{display:"flex",height:"100vh",background:"#0F0F1A",color:"#E8E8F0",overflow:"hidden"}}>
       {/* 사이드바 */}
@@ -268,62 +188,22 @@ function App() {
         </div>
         <nav style={{padding:"16px 8px",flex:1}}>
           {menus.map(m=>(
-            <div key={m} onClick={()=>setActiveMenu(m)} style={{
-              display:"flex",alignItems:"center",gap:12,padding:"10px 12px",borderRadius:10,marginBottom:4,cursor:"pointer",
-              background:activeMenu===m?"linear-gradient(90deg,rgba(108,99,255,0.2),rgba(255,107,157,0.1))":"transparent",
-              borderLeft:activeMenu===m?"3px solid #6C63FF":"3px solid transparent",
-              color:activeMenu===m?"#A78BFA":"#8B8BAD",
-            }}>
-              <span style={{fontSize:16,flexShrink:0}}>{icons[m]}</span>
+            <div key={m} onClick={()=>setActiveMenu(m)} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 12px",borderRadius:10,marginBottom:4,cursor:"pointer",background:activeMenu===m?"linear-gradient(90deg,rgba(108,99,255,0.2),rgba(255,107,157,0.1))":"transparent",borderLeft:activeMenu===m?"3px solid #6C63FF":"3px solid transparent",color:activeMenu===m?"#A78BFA":"#8B8BAD"}}>
+              <span style={{fontSize:16,flexShrink:0}}>{menuIcons[m]}</span>
               {sidebarOpen&&<span style={{fontSize:13,fontWeight:activeMenu===m?700:400,whiteSpace:"nowrap"}}>{m}</span>}
             </div>
           ))}
         </nav>
-        <div style={{padding:"0 12px",display:"flex",flexDirection:"column",gap:8}}>
-          {/* 접속자 */}
-          {sidebarOpen&&(
-            <div style={{background:"#1E1E3A",borderRadius:10,padding:"10px 12px"}}>
-              <p style={{margin:"0 0 8px",fontSize:11,color:"#6B7280",fontWeight:600}}>접속 중 ({onlineUsers.length}명)</p>
-              {onlineUsers.map(u=>(
-                <div key={u.id} style={{display:"flex",alignItems:"center",gap:7,marginBottom:5}}>
-                  <div style={{width:22,height:22,borderRadius:"50%",background:getAvatarColor(u.name),display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:"#fff",flexShrink:0}}>{(u.name||"?")[0]}</div>
-                  <span style={{fontSize:12,color:u.id===myId.current?"#A78BFA":"#E8E8F0"}}>{u.name}{u.id===myId.current?" (나)":""}</span>
-                  <div style={{width:6,height:6,borderRadius:"50%",background:"#4ADE80",marginLeft:"auto",boxShadow:"0 0 5px #4ADE80"}}/>
-                </div>
-              ))}
-            </div>
-          )}
-          {!sidebarOpen&&onlineUsers.slice(0,3).map(u=>(
-            <div key={u.id} title={u.name} style={{width:28,height:28,borderRadius:"50%",background:getAvatarColor(u.name),display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:"#fff",margin:"0 auto",border:u.id===myId.current?"2px solid #A78BFA":"none"}}>{(u.name||"?")[0]}</div>
-          ))}
-          {/* 동기화 상태 & 활동 피드 */}
-          <div onClick={()=>sidebarOpen&&setShowFeed(v=>!v)} style={{background:"#1E1E3A",borderRadius:10,padding:"8px 12px",display:"flex",alignItems:"center",gap:8,cursor:"pointer"}}>
+        <div style={{padding:"0 12px"}}>
+          <div style={{background:"#1E1E3A",borderRadius:10,padding:"8px 12px",display:"flex",alignItems:"center",gap:8}}>
             <div style={{width:8,height:8,borderRadius:"50%",background:syncStatus==="동기화됨"?"#4ADE80":syncStatus==="저장중"?"#FB923C":"#F87171",flexShrink:0,boxShadow:syncStatus==="동기화됨"?"0 0 6px #4ADE80":"none"}}/>
-            {sidebarOpen&&<span style={{fontSize:11,color:"#6B7280",flex:1}}>{syncStatus==="동기화됨"?"실시간 동기화":syncStatus==="저장중"?"저장 중...":"오류"}</span>}
-            {sidebarOpen&&<span style={{fontSize:10,color:"#4B4B6B"}}>활동 {showFeed?"▲":"▼"}</span>}
+            {sidebarOpen&&<span style={{fontSize:11,color:"#6B7280",flex:1}}>{syncStatus==="동기화됨"?"실시간 동기화":syncStatus==="저장중"?"저장 중...":syncStatus}</span>}
           </div>
-          {sidebarOpen&&showFeed&&(
-            <div style={{background:"#1E1E3A",borderRadius:10,padding:"10px 12px",maxHeight:200,overflow:"auto"}}>
-              <p style={{margin:"0 0 8px",fontSize:11,color:"#6B7280",fontWeight:600}}>최근 활동</p>
-              {activityFeed.length===0&&<p style={{fontSize:11,color:"#4B4B6B"}}>활동 없음</p>}
-              {activityFeed.map(a=>(
-                <div key={a.id} style={{marginBottom:7,paddingBottom:7,borderBottom:"1px solid #2A2A4A"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:2}}>
-                    <div style={{width:16,height:16,borderRadius:"50%",background:getAvatarColor(a.name),display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:"#fff",flexShrink:0}}>{(a.name||"?")[0]}</div>
-                    <span style={{fontSize:11,color:"#A78BFA",fontWeight:600}}>{a.name}</span>
-                  </div>
-                  <p style={{margin:0,fontSize:10,color:"#8B8BAD"}}>{a.action}: <span style={{color:"#E8E8F0"}}>{a.target}</span></p>
-                  <p style={{margin:0,fontSize:9,color:"#4B4B6B"}}>{new Date(Number(a.time)).toLocaleString("ko-KR")}</p>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       </div>
 
       {/* 메인 */}
       <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column"}}>
-        {/* 헤더 */}
         <div style={{padding:"16px 28px",borderBottom:"1px solid #2A2A4A",background:"#0F0F1A",display:"flex",alignItems:"center",gap:16,flexShrink:0}}>
           <div>
             <h1 style={{margin:0,fontSize:20,fontWeight:800}}>{activeMenu}</h1>
@@ -332,27 +212,25 @@ function App() {
           <div style={{marginLeft:"auto",display:"flex",gap:10,alignItems:"center"}}>
             {activeMenu==="일정 관리"&&<button onClick={()=>{setEditingSched(null);setShowSchedModal(true);}} style={btn("#6C63FF")}>+ 일정 추가</button>}
             {activeMenu==="업무 관리"&&<button onClick={()=>{setEditingTask(null);setShowTaskModal(true);}} style={btn("#2EC4B6")}>+ 업무 추가</button>}
-            <button onClick={()=>loadAll(myName)} style={btn("#2A2A4A","#A78BFA")}>↻</button>
+            <button onClick={loadData} style={btn("#2A2A4A","#A78BFA")}>↻</button>
             <div style={{display:"flex",alignItems:"center",gap:8,background:"#1E1E3A",borderRadius:10,padding:"6px 12px"}}>
               <div style={{width:26,height:26,borderRadius:"50%",background:getAvatarColor(myName),display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:"#fff"}}>{myName[0]}</div>
               <span style={{fontSize:13,fontWeight:600}}>{myName}</span>
-              <span title="이름 변경" onClick={()=>{sessionStorage.removeItem("ts-name");setMyName("");setNameInput("");}} style={{fontSize:14,color:"#6B7280",cursor:"pointer",marginLeft:4}}>⏏</span>
+              <span title="이름 변경" onClick={()=>{try{sessionStorage.removeItem("ts-name");}catch{}setMyName("");setNameInput("");}} style={{fontSize:14,color:"#6B7280",cursor:"pointer",marginLeft:4}}>⏏</span>
             </div>
           </div>
         </div>
-
-        {/* 컨텐츠 */}
         <div style={{flex:1,overflow:"auto",padding:"24px 28px"}}>
-          {activeMenu==="대시보드"&&<Dashboard schedules={schedules} tasks={tasks} todaySchedules={todaySchedules} weekSchedules={weekSchedules} urgentSchedules={urgentSchedules} inProgressTasks={inProgressTasks} completedTasks={completedTasks} overdueTasks={overdueTasks} setActiveMenu={setActiveMenu}/>}
+          {activeMenu==="대시보드"&&<Dashboard schedules={schedules} tasks={tasks} todaySchedules={todaySchedules} weekSchedules={weekSchedules} urgentSchedules={urgentSchedules} inProgressTasks={inProgressTasks} overdueTasks={overdueTasks} setActiveMenu={setActiveMenu}/>}
           {activeMenu==="일정 관리"&&<ScheduleBoard schedules={schedules} onEdit={s=>{setEditingSched(s);setShowSchedModal(true);}} onDelete={deleteSched}/>}
           {activeMenu==="업무 관리"&&<TaskBoard tasks={tasks} onEdit={t=>{setEditingTask(t);setShowTaskModal(true);}} onDelete={deleteTask} onStatusChange={updateTaskStatus}/>}
-          {activeMenu==="캘린더"&&<CalendarView schedules={schedules} currentMonth={currentMonth} setCurrentMonth={setCurrentMonth} todayStr={todayStr} selectedSched={selectedSched} setSelectedSched={setSelectedSched} onDateClick={d=>{setEditingSched(null);setTimeout(()=>setShowSchedModal({prefill:d}),0);}} onEditSched={s=>{setEditingSched(s);setShowSchedModal(true);}} onDeleteSched={deleteSched}/>}
+          {activeMenu==="캘린더"&&<CalendarView schedules={schedules} currentMonth={currentMonth} setCurrentMonth={setCurrentMonth} todayStr={todayStr} selectedSched={selectedSched} setSelectedSched={setSelectedSched} onDateClick={d=>{setEditingSched(null);setShowSchedModal({prefill:d});}} onEditSched={s=>{setEditingSched(s);setShowSchedModal(true);}} onDeleteSched={deleteSched}/>}
           {activeMenu==="리포트"&&<Reports schedules={schedules} tasks={tasks}/>}
         </div>
       </div>
 
       {/* 모달들 */}
-      {showSchedModal&&<SchedModal initial={editingSched?editingSched:(showSchedModal&&showSchedModal.prefill?{...newSchedDef,start_date:showSchedModal.prefill,end_date:showSchedModal.prefill}:newSchedDef)} onSave={saveSched} onClose={()=>{setShowSchedModal(false);setEditingSched(null);}} isEdit={!!editingSched}/>}
+      {showSchedModal&&<SchedModal initial={editingSched||(showSchedModal?.prefill?{...newSchedDef,start_date:showSchedModal.prefill,end_date:showSchedModal.prefill}:newSchedDef)} onSave={saveSched} onClose={()=>{setShowSchedModal(false);setEditingSched(null);}} isEdit={!!editingSched}/>}
       {showTaskModal&&<TaskModal_ initial={editingTask||newTaskDef} onSave={saveTask} onClose={()=>{setShowTaskModal(false);setEditingTask(null);}} isEdit={!!editingTask}/>}
       {confirmDlg&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200}}>
@@ -371,7 +249,7 @@ function App() {
 }
 
 // ── 대시보드 ──────────────────────────────────────────
-function Dashboard({schedules,tasks,todaySchedules,weekSchedules,urgentSchedules,inProgressTasks,completedTasks,overdueTasks,setActiveMenu}) {
+function Dashboard({schedules,tasks,todaySchedules,weekSchedules,urgentSchedules,inProgressTasks,overdueTasks,setActiveMenu}){
   return (
     <div>
       {/* 통계 카드 */}
@@ -433,15 +311,7 @@ function Dashboard({schedules,tasks,todaySchedules,weekSchedules,urgentSchedules
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20}}>
         <SecCard title="진행 중 업무" accent="#2EC4B6">{inProgressTasks.length===0?<Empty text="진행 중인 업무 없음"/>:inProgressTasks.map(t=><TaskRow key={t.id} t={t}/>)}</SecCard>
         <SecCard title="업무 현황" accent="#F9A8D4">
-          {TASK_STATUSES.map(st=>{
-            const count=tasks.filter(t=>t.status===st).length;
-            const pct=tasks.length?Math.round(count/tasks.length*100):0;
-            const c=STATUS_COLORS[st];
-            return <div key={st} style={{marginBottom:10}}>
-              <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:12,color:c.text}}>{st}</span><span style={{fontSize:12,color:"#6B7280"}}>{count}개 ({pct}%)</span></div>
-              <div style={{height:6,background:"#2A2A4A",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${pct}%`,background:c.border,borderRadius:3,transition:"width 0.5s"}}/></div>
-            </div>;
-          })}
+          {TASK_STATUSES.map(st=>{const count=tasks.filter(t=>t.status===st).length;const pct=tasks.length?Math.round(count/tasks.length*100):0;const c=STATUS_COLORS[st];return <div key={st} style={{marginBottom:10}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:12,color:c.text}}>{st}</span><span style={{fontSize:12,color:"#6B7280"}}>{count}개 ({pct}%)</span></div><div style={{height:6,background:"#2A2A4A",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${pct}%`,background:c.border,borderRadius:3,transition:"width 0.5s"}}/></div></div>;})}
         </SecCard>
       </div>
     </div>
@@ -449,17 +319,17 @@ function Dashboard({schedules,tasks,todaySchedules,weekSchedules,urgentSchedules
 }
 function SecCard({title,accent,children}){return <div style={{background:"#161628",border:`1px solid ${accent}33`,borderRadius:14,padding:"18px 20px"}}><h3 style={{margin:"0 0 14px",fontSize:14,fontWeight:700,color:accent}}>{title}</h3>{children}</div>;}
 function Empty({text}){return <p style={{color:"#4B4B6B",fontSize:13,textAlign:"center",padding:"12px 0"}}>{text}</p>;}
-function SchedRow({s}){const pc=PRIORITY_COLORS[s.priority]||PRIORITY_COLORS.medium;return <div style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:"1px solid #2A2A4A"}}><div style={{width:8,height:8,borderRadius:"50%",background:pc.bg,flexShrink:0}}/><div style={{flex:1,minWidth:0}}><p style={{margin:0,fontSize:13,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.title}</p><p style={{margin:0,fontSize:11,color:"#6B7280"}}>{s.owner_name} · {s.end_date}{s.end_time?" "+s.end_time:""}</p></div><span style={{fontSize:10,padding:"2px 7px",borderRadius:5,background:pc.bg,color:pc.text,flexShrink:0}}>{s.priority}</span></div>;}
+function SchedRow({s}){const pc=PRIORITY_COLORS[s.priority]||PRIORITY_COLORS.medium;return <div style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:"1px solid #2A2A4A"}}><div style={{width:8,height:8,borderRadius:"50%",background:pc.bg,flexShrink:0}}/><div style={{flex:1,minWidth:0}}><p style={{margin:0,fontSize:13,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.title}</p><p style={{margin:0,fontSize:11,color:"#6B7280"}}>{s.owner_name} · {s.end_date}{s.end_time?" "+s.end_time:""}</p></div><span style={{fontSize:10,padding:"2px 7px",borderRadius:5,background:pc.bg,color:pc.text,flexShrink:0}}>{s.priority==="high"?"높음":s.priority==="medium"?"중간":"낮음"}</span></div>;}
 function TaskRow({t}){const c=STATUS_COLORS[t.status]||STATUS_COLORS["할 일"];return <div style={{padding:"8px 0",borderBottom:"1px solid #2A2A4A"}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:13,fontWeight:600}}>{t.title}</span><span style={{fontSize:11,color:c.text,padding:"2px 7px",borderRadius:5,background:c.bg}}>{t.status}</span></div>{t.due_date&&<p style={{margin:"2px 0 4px",fontSize:10,color:"#FB923C"}}>📅 완료예정: {t.due_date}</p>}<div style={{display:"flex",alignItems:"center",gap:8}}><div style={{flex:1,height:5,background:"#2A2A4A",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${t.progress}%`,background:c.border,borderRadius:3}}/></div><span style={{fontSize:11,color:"#6B7280",flexShrink:0}}>{t.progress}%</span></div></div>;}
 
-// ── 일정 보드 ─────────────────────────────────────────
+// ── 일정 관리 (리스트형) ──────────────────────────────
 function ScheduleBoard({schedules,onEdit,onDelete}){
   const [priority,setPriority]=useState("all");
   const [dateFrom,setDateFrom]=useState("");
   const [dateTo,setDateTo]=useState("");
   const [nameFilter,setNameFilter]=useState("");
   const [showFilter,setShowFilter]=useState(false);
-  const sorted=[...schedules].sort((a,b)=>{const d=a.start_date.localeCompare(b.start_date);if(d!==0)return d;return (a.start_time||"00:00").localeCompare(b.start_time||"00:00");});
+  const sorted=[...schedules].sort((a,b)=>{const d=a.start_date.localeCompare(b.start_date);if(d!==0)return d;return(a.start_time||"00:00").localeCompare(b.start_time||"00:00");});
   const filtered=sorted.filter(s=>{
     if(priority!=="all"&&s.priority!==priority)return false;
     if(dateFrom&&s.start_date<dateFrom)return false;
@@ -471,7 +341,6 @@ function ScheduleBoard({schedules,onEdit,onDelete}){
   const grouped=filtered.reduce((acc,s)=>{const k=s.start_date;if(!acc[k])acc[k]=[];acc[k].push(s);return acc;},{});
   const groupedDates=Object.keys(grouped).sort();
   const DAY_NAMES=["일","월","화","수","목","금","토"];
-
   return <div>
     <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
       {["all","high","medium","low"].map(f=>(
@@ -492,15 +361,11 @@ function ScheduleBoard({schedules,onEdit,onDelete}){
         {hasFilter&&<div style={{gridColumn:"1/-1",textAlign:"right"}}><button onClick={()=>{setPriority("all");setDateFrom("");setDateTo("");setNameFilter("");}} style={{...btn("#2A2A4A","#F87171"),fontSize:11,padding:"4px 12px"}}>초기화</button></div>}
       </div>
     )}
-
-    {/* 테이블 헤더 */}
     <div style={{background:"#1E1E3A",borderRadius:"10px 10px 0 0",padding:"10px 20px",display:"grid",gridTemplateColumns:"1fr 120px 150px 150px 80px 90px",gap:12,alignItems:"center",borderBottom:"1px solid #2A2A4A"}}>
       {["제목","담당자","시작","종료","중요도",""].map((h,i)=>(
         <span key={i} style={{fontSize:11,fontWeight:700,color:"#6B7280",textAlign:i===5?"right":"left"}}>{h}</span>
       ))}
     </div>
-
-    {/* 날짜별 그룹 리스트 */}
     <div style={{background:"#161628",border:"1px solid #2A2A4A",borderTop:"none",borderRadius:"0 0 10px 10px",overflow:"hidden"}}>
       {filtered.length===0&&<Empty text="조건에 맞는 일정이 없습니다."/>}
       {groupedDates.map((date,di)=>{
@@ -509,13 +374,11 @@ function ScheduleBoard({schedules,onEdit,onDelete}){
         const dayName=DAY_NAMES[d.getDay()];
         const isWeekend=d.getDay()===0||d.getDay()===6;
         return <div key={date}>
-          {/* 날짜 구분 헤더 */}
           <div style={{padding:"8px 20px",background:"rgba(108,99,255,0.07)",borderBottom:"1px solid #2A2A4A",display:"flex",alignItems:"center",gap:10}}>
             <span style={{fontSize:13,fontWeight:800,color:isWeekend?"#F87171":"#A78BFA"}}>{date}</span>
             <span style={{fontSize:12,color:isWeekend?"#F87171":"#6B7280",fontWeight:600}}>({dayName})</span>
             <span style={{fontSize:11,color:"#4B4B6B"}}>{dayItems.length}건</span>
           </div>
-          {/* 해당 날짜 일정 행들 */}
           {dayItems.map((s,si)=>{
             const pc=PRIORITY_COLORS[s.priority]||PRIORITY_COLORS.medium;
             const isLast=di===groupedDates.length-1&&si===dayItems.length-1;
@@ -524,29 +387,17 @@ function ScheduleBoard({schedules,onEdit,onDelete}){
               onMouseEnter={e=>e.currentTarget.style.background="rgba(108,99,255,0.05)"}
               onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
               <div style={{position:"absolute",left:0,top:0,bottom:0,width:3,background:pc.bg,borderRadius:2}}/>
-              {/* 제목 + 설명 */}
               <div style={{minWidth:0,paddingLeft:8}}>
                 <p style={{margin:0,fontSize:13,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.title}</p>
                 {s.description&&<p style={{margin:"2px 0 0",fontSize:11,color:"#6B7280",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.description}</p>}
               </div>
-              {/* 담당자 */}
               <div style={{display:"flex",alignItems:"center",gap:6,minWidth:0}}>
                 <div style={{width:20,height:20,borderRadius:"50%",background:getAvatarColor(s.owner_name),display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:"#fff",flexShrink:0}}>{(s.owner_name||"?")[0]}</div>
                 <span style={{fontSize:12,color:"#A78BFA",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.owner_name}</span>
               </div>
-              {/* 시작 */}
-              <span style={{fontSize:12,color:"#E8E8F0"}}>
-                {s.start_date}{s.start_time&&<span style={{color:"#A78BFA",marginLeft:4,fontSize:11}}>{s.start_time}</span>}
-              </span>
-              {/* 종료 */}
-              <span style={{fontSize:12,color:"#E8E8F0"}}>
-                {s.end_date}{s.end_time&&<span style={{color:"#A78BFA",marginLeft:4,fontSize:11}}>{s.end_time}</span>}
-              </span>
-              {/* 중요도 */}
-              <span style={{fontSize:10,padding:"3px 8px",borderRadius:6,background:pc.bg,color:pc.text,fontWeight:700,textAlign:"center"}}>
-                {s.priority==="high"?"높음":s.priority==="medium"?"중간":"낮음"}
-              </span>
-              {/* 버튼 */}
+              <span style={{fontSize:12,color:"#E8E8F0"}}>{s.start_date}{s.start_time&&<span style={{color:"#A78BFA",marginLeft:4,fontSize:11}}>{s.start_time}</span>}</span>
+              <span style={{fontSize:12,color:"#E8E8F0"}}>{s.end_date}{s.end_time&&<span style={{color:"#A78BFA",marginLeft:4,fontSize:11}}>{s.end_time}</span>}</span>
+              <span style={{fontSize:10,padding:"3px 8px",borderRadius:6,background:pc.bg,color:pc.text,fontWeight:700,textAlign:"center"}}>{s.priority==="high"?"높음":s.priority==="medium"?"중간":"낮음"}</span>
               <div style={{display:"flex",gap:4,justifyContent:"flex-end"}}>
                 <button onClick={()=>onEdit(s)} style={{...btn("#2A2A4A","#A78BFA"),fontSize:11,padding:"4px 8px"}}>수정</button>
                 <button onClick={()=>onDelete(s.id)} style={{...btn("#2A2A4A","#F87171"),fontSize:11,padding:"4px 8px"}}>삭제</button>
@@ -559,22 +410,11 @@ function ScheduleBoard({schedules,onEdit,onDelete}){
   </div>;
 }
 
-// ── 업무 보드 ─────────────────────────────────────────
-const PARTS = ["PM파트","기획파트","SUB파트","BS파트","공정파트","안전파트","설계파트"];
-const PART_COLORS = {
-  "PM파트":   {bg:"#1E1B4B",border:"#818CF8",text:"#A5B4FC"},
-  "기획파트": {bg:"#172554",border:"#60A5FA",text:"#93C5FD"},
-  "SUB파트":  {bg:"#14532D",border:"#4ADE80",text:"#86EFAC"},
-  "BS파트":   {bg:"#4A044E",border:"#E879F9",text:"#F0ABFC"},
-  "공정파트": {bg:"#431407",border:"#FB923C",text:"#FED7AA"},
-  "안전파트": {bg:"#450A0A",border:"#F87171",text:"#FCA5A5"},
-  "설계파트": {bg:"#2E1065",border:"#C084FC",text:"#E9D5FF"},
-};
+// ── 업무 관리 (리스트형) ──────────────────────────────
 function TaskBoard({tasks,onEdit,onDelete,onStatusChange}){
   const [activePart,setActivePart]=useState("전체");
   const [statusFilter,setStatusFilter]=useState("전체");
   const [nameFilter,setNameFilter]=useState("");
-
   const visibleTasks=[...tasks]
     .filter(t=>{
       if(activePart!=="전체"&&t.part!==activePart)return false;
@@ -583,107 +423,65 @@ function TaskBoard({tasks,onEdit,onDelete,onStatusChange}){
       return true;
     })
     .sort((a,b)=>(a.due_date||"9999").localeCompare(b.due_date||"9999"));
-
-  // 파트별 그룹화
-  const grouped=visibleTasks.reduce((acc,t)=>{
-    const k=t.part||"미분류";
-    if(!acc[k])acc[k]=[];
-    acc[k].push(t);
-    return acc;
-  },{});
+  const grouped=visibleTasks.reduce((acc,t)=>{const k=t.part||"미분류";if(!acc[k])acc[k]=[];acc[k].push(t);return acc;},{});
   const groupOrder=activePart==="전체"?[...PARTS,"미분류"].filter(p=>grouped[p]):[activePart];
-
+  const today=new Date().toISOString().slice(0,10);
   return <div>
-    {/* 파트 탭 */}
     <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
       {["전체",...PARTS].map(p=>{
         const pc=PART_COLORS[p];
         const count=p==="전체"?tasks.length:tasks.filter(t=>t.part===p).length;
-        return <button key={p} onClick={()=>setActivePart(p)} style={{
-          padding:"6px 14px",borderRadius:20,cursor:"pointer",fontSize:12,fontWeight:600,
-          border:`1px solid ${activePart===p?(pc?.border||"#6C63FF"):"#2A2A4A"}`,
-          background:activePart===p?(pc?.bg||"rgba(108,99,255,0.3)"):"#1E1E3A",
-          color:activePart===p?(pc?.text||"#fff"):"#8B8BAD",
-          display:"flex",alignItems:"center",gap:5,
-        }}>{p}<span style={{fontSize:10,opacity:0.7}}>({count})</span></button>;
+        return <button key={p} onClick={()=>setActivePart(p)} style={{padding:"6px 14px",borderRadius:20,cursor:"pointer",fontSize:12,fontWeight:600,border:`1px solid ${activePart===p?(pc?.border||"#6C63FF"):"#2A2A4A"}`,background:activePart===p?(pc?.bg||"rgba(108,99,255,0.3)"):"#1E1E3A",color:activePart===p?(pc?.text||"#fff"):"#8B8BAD",display:"flex",alignItems:"center",gap:5}}>{p}<span style={{fontSize:10,opacity:0.7}}>({count})</span></button>;
       })}
     </div>
-
-    {/* 상태 필터 + 이름 검색 */}
     <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
       {["전체",...TASK_STATUSES].map(s=>{
         const c=STATUS_COLORS[s];
-        return <button key={s} onClick={()=>setStatusFilter(s)} style={{
-          padding:"5px 12px",borderRadius:20,cursor:"pointer",fontSize:11,fontWeight:600,border:"none",
-          background:statusFilter===s?(c?.border||"#6C63FF"):"#1E1E3A",
-          color:statusFilter===s?"#fff":"#8B8BAD",
-        }}>{s}</button>;
+        return <button key={s} onClick={()=>setStatusFilter(s)} style={{padding:"5px 12px",borderRadius:20,cursor:"pointer",fontSize:11,fontWeight:600,border:"none",background:statusFilter===s?(c?.border||"#6C63FF"):"#1E1E3A",color:statusFilter===s?"#fff":"#8B8BAD"}}>{s}</button>;
       })}
-      <input value={nameFilter} onChange={e=>setNameFilter(e.target.value)} placeholder="🔍 담당자 검색"
-        style={{...inp,width:160,fontSize:12,padding:"5px 12px",marginLeft:"auto"}}/>
+      <input value={nameFilter} onChange={e=>setNameFilter(e.target.value)} placeholder="🔍 담당자 검색" style={{...inp,width:160,fontSize:12,padding:"5px 12px",marginLeft:"auto"}}/>
       <span style={{fontSize:12,color:"#6B7280"}}>총 {visibleTasks.length}건</span>
     </div>
-
-    {/* 테이블 헤더 */}
     <div style={{background:"#1E1E3A",borderRadius:"10px 10px 0 0",padding:"10px 20px",display:"grid",gridTemplateColumns:"130px 1fr 110px 110px 90px 160px 90px",gap:10,alignItems:"center",borderBottom:"1px solid #2A2A4A"}}>
       {["파트","제목","담당자","완료예정일","진행률","상태",""].map((h,i)=>(
         <span key={i} style={{fontSize:11,fontWeight:700,color:"#6B7280",textAlign:i===6?"right":"left"}}>{h}</span>
       ))}
     </div>
-
-    {/* 파트별 그룹 리스트 */}
     <div style={{background:"#161628",border:"1px solid #2A2A4A",borderTop:"none",borderRadius:"0 0 10px 10px",overflow:"hidden"}}>
       {visibleTasks.length===0&&<Empty text="조건에 맞는 업무가 없습니다."/>}
       {groupOrder.map((part,gi)=>{
         const partTasks=grouped[part]||[];
         const pc=PART_COLORS[part];
         return <div key={part}>
-          {/* 파트 구분 헤더 */}
-          <div style={{padding:"8px 20px",background:pc?`${pc.bg}88`:"rgba(42,42,74,0.6)",borderBottom:"1px solid #2A2A4A",display:"flex",alignItems:"center",gap:10}}>
+          <div style={{padding:"8px 20px",background:pc?`${pc.bg}99`:"rgba(42,42,74,0.6)",borderBottom:"1px solid #2A2A4A",display:"flex",alignItems:"center",gap:10}}>
             <span style={{fontSize:12,fontWeight:800,color:pc?.text||"#A78BFA"}}>{part}</span>
             <span style={{fontSize:11,color:pc?.border||"#6B7280"}}>{partTasks.length}건</span>
           </div>
-          {/* 업무 행들 */}
           {partTasks.map((task,ti)=>{
             const tpc=PART_COLORS[task.part];
             const sc=STATUS_COLORS[task.status]||STATUS_COLORS["할 일"];
             const isLast=gi===groupOrder.length-1&&ti===partTasks.length-1;
-            const isOverdue=task.due_date&&task.due_date<new Date().toISOString().slice(0,10)&&task.status!=="완료";
+            const isOverdue=task.due_date&&task.due_date<today&&task.status!=="완료";
             return <div key={task.id}
               style={{display:"grid",gridTemplateColumns:"130px 1fr 110px 110px 90px 160px 90px",gap:10,alignItems:"center",padding:"11px 20px",borderBottom:isLast?"none":"1px solid #2A2A4A22",position:"relative",transition:"background 0.15s"}}
               onMouseEnter={e=>e.currentTarget.style.background="rgba(108,99,255,0.05)"}
               onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
               <div style={{position:"absolute",left:0,top:0,bottom:0,width:3,background:tpc?.border||"#3A3A5A",borderRadius:2}}/>
-              {/* 파트 뱃지 */}
-              <div style={{paddingLeft:8}}>
-                {task.part
-                  ?<span style={{fontSize:10,padding:"3px 9px",borderRadius:10,background:tpc?.bg||"#2A2A4A",color:tpc?.text||"#8B8BAD",border:`1px solid ${tpc?.border||"#3A3A5A"}`,fontWeight:700}}>{task.part}</span>
-                  :<span style={{fontSize:10,color:"#4B4B6B"}}>—</span>}
-              </div>
-              {/* 제목 */}
+              <div style={{paddingLeft:8}}>{task.part?<span style={{fontSize:10,padding:"3px 9px",borderRadius:10,background:tpc?.bg||"#2A2A4A",color:tpc?.text||"#8B8BAD",border:`1px solid ${tpc?.border||"#3A3A5A"}`,fontWeight:700}}>{task.part}</span>:<span style={{fontSize:10,color:"#4B4B6B"}}>—</span>}</div>
               <p style={{margin:0,fontSize:13,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{task.title}</p>
-              {/* 담당자 */}
               <div style={{display:"flex",alignItems:"center",gap:5,minWidth:0}}>
                 <div style={{width:20,height:20,borderRadius:"50%",background:getAvatarColor(task.owner_name),display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:"#fff",flexShrink:0}}>{(task.owner_name||"?")[0]}</div>
                 <span style={{fontSize:12,color:"#A78BFA",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{task.owner_name}</span>
               </div>
-              {/* 완료예정일 */}
-              <span style={{fontSize:12,color:isOverdue?"#F87171":task.due_date?"#FB923C":"#4B4B6B",fontWeight:isOverdue?700:400}}>
-                {task.due_date||"—"}{isOverdue&&" ⚠"}
-              </span>
-              {/* 진행률 바 */}
+              <span style={{fontSize:12,color:isOverdue?"#F87171":task.due_date?"#FB923C":"#4B4B6B",fontWeight:isOverdue?700:400}}>{task.due_date||"—"}{isOverdue&&" ⚠"}</span>
               <div style={{display:"flex",alignItems:"center",gap:6}}>
-                <div style={{flex:1,height:5,background:"#2A2A4A",borderRadius:3,overflow:"hidden"}}>
-                  <div style={{height:"100%",width:`${task.progress}%`,background:sc.border,borderRadius:3,transition:"width 0.4s"}}/>
-                </div>
+                <div style={{flex:1,height:5,background:"#2A2A4A",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${task.progress}%`,background:sc.border,borderRadius:3,transition:"width 0.4s"}}/></div>
                 <span style={{fontSize:10,color:sc.border,fontWeight:700,flexShrink:0}}>{task.progress}%</span>
               </div>
-              {/* 상태 - 드롭다운 */}
               <select value={task.status} onChange={e=>onStatusChange(task.id,e.target.value)}
                 style={{fontSize:11,padding:"4px 8px",borderRadius:8,border:`1px solid ${sc.border}`,background:sc.bg,color:sc.text,fontWeight:700,cursor:"pointer",outline:"none"}}>
                 {TASK_STATUSES.map(s=><option key={s} value={s}>{s}</option>)}
               </select>
-              {/* 버튼 */}
               <div style={{display:"flex",gap:4,justifyContent:"flex-end"}}>
                 <button onClick={()=>onEdit(task)} style={{...btn("#2A2A4A","#A78BFA"),fontSize:11,padding:"4px 8px"}}>수정</button>
                 <button onClick={()=>onDelete(task.id)} style={{...btn("#2A2A4A","#F87171"),fontSize:11,padding:"4px 8px"}}>삭제</button>
@@ -697,31 +495,16 @@ function TaskBoard({tasks,onEdit,onDelete,onStatusChange}){
 }
 
 // ── 캘린더 ────────────────────────────────────────────
-// ── 한국 공휴일 ────────────────────────────────────────
-const HOLIDAYS = {
-  "01-01":"신정","03-01":"삼일절","05-05":"어린이날",
-  "06-06":"현충일","08-15":"광복절","10-03":"개천절",
-  "10-09":"한글날","12-25":"성탄절",
-  "2025-01-28":"설날 연휴","2025-01-29":"설날","2025-01-30":"설날 연휴",
-  "2025-05-05":"어린이날/부처님오신날",
-  "2025-10-05":"추석 연휴","2025-10-06":"추석","2025-10-07":"추석 연휴",
-  "2026-02-16":"설날 연휴","2026-02-17":"설날","2026-02-18":"설날 연휴",
-  "2026-05-24":"부처님오신날",
-  "2026-09-24":"추석 연휴","2026-09-25":"추석","2026-09-26":"추석 연휴",
-};
-function getHoliday(ds){return HOLIDAYS[ds]||HOLIDAYS[ds.slice(5)]||null;}
-
 function CalendarView({schedules,currentMonth,setCurrentMonth,todayStr,selectedSched,setSelectedSched,onDateClick,onEditSched,onDeleteSched}){
-  const year=currentMonth.getFullYear(), month=currentMonth.getMonth();
+  const year=currentMonth.getFullYear(),month=currentMonth.getMonth();
   const days=new Date(year,month+1,0).getDate();
   const firstDay=new Date(year,month,1).getDay();
   const pad=n=>String(n).padStart(2,"0");
   const cells=[];
-  for(let i=0;i<firstDay;i++) cells.push(null);
-  for(let d=1;d<=days;d++) cells.push(d);
+  for(let i=0;i<firstDay;i++)cells.push(null);
+  for(let d=1;d<=days;d++)cells.push(d);
   const getDay=ds=>schedules.filter(s=>s.start_date<=ds&&s.end_date>=ds);
   const todayFull=new Date().toISOString().slice(0,10);
-
   return <div>
     <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:20}}>
       <button onClick={()=>setCurrentMonth(new Date(year,month-1,1))} style={btn("#1E1E3A","#A78BFA")}>◀</button>
@@ -735,7 +518,7 @@ function CalendarView({schedules,currentMonth,setCurrentMonth,todayStr,selectedS
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)"}}>
         {cells.map((day,idx)=>{
-          if(!day) return <div key={`e${idx}`} style={{minHeight:90,borderRight:"1px solid #2A2A4A",borderBottom:"1px solid #2A2A4A"}}/>;
+          if(!day)return <div key={`e${idx}`} style={{minHeight:90,borderRight:"1px solid #2A2A4A",borderBottom:"1px solid #2A2A4A"}}/>;
           const ds=`${year}-${pad(month+1)}-${pad(day)}`;
           const daySch=getDay(ds);
           const isToday=ds===todayFull;
@@ -787,32 +570,18 @@ function Reports({schedules,tasks}){
   const pc={high:0,medium:0,low:0};
   schedules.forEach(s=>{if(pc[s.priority]!==undefined)pc[s.priority]++;});
   return <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20}}>
-    <SecCard title="일정 우선순위 분포" accent="#6C63FF">
-      {Object.entries(pc).map(([p,c])=>{const col=PRIORITY_COLORS[p];const pct=schedules.length?Math.round(c/schedules.length*100):0;return <div key={p} style={{marginBottom:14}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}><span style={{fontSize:13,color:col.bg,fontWeight:600}}>{p==="high"?"높음":p==="medium"?"중간":"낮음"}</span><span style={{fontSize:12,color:"#6B7280"}}>{c}개 ({pct}%)</span></div><div style={{height:8,background:"#2A2A4A",borderRadius:4,overflow:"hidden"}}><div style={{height:"100%",width:`${pct}%`,background:col.bg,borderRadius:4}}/></div></div>;})}
-    </SecCard>
+    <SecCard title="일정 우선순위 분포" accent="#6C63FF">{Object.entries(pc).map(([p,c])=>{const col=PRIORITY_COLORS[p];const pct=schedules.length?Math.round(c/schedules.length*100):0;return <div key={p} style={{marginBottom:14}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}><span style={{fontSize:13,color:col.bg,fontWeight:600}}>{p==="high"?"높음":p==="medium"?"중간":"낮음"}</span><span style={{fontSize:12,color:"#6B7280"}}>{c}개 ({pct}%)</span></div><div style={{height:8,background:"#2A2A4A",borderRadius:4,overflow:"hidden"}}><div style={{height:"100%",width:`${pct}%`,background:col.bg,borderRadius:4}}/></div></div>;})}</SecCard>
     <SecCard title="업무 완료율" accent="#4ADE80">
       <div style={{display:"flex",justifyContent:"center",alignItems:"center",height:140}}>
         <div style={{position:"relative",width:130,height:130}}>
-          <svg width="130" height="130" viewBox="0 0 130 130">
-            <circle cx="65" cy="65" r="55" fill="none" stroke="#2A2A4A" strokeWidth="12"/>
-            <circle cx="65" cy="65" r="55" fill="none" stroke="#4ADE80" strokeWidth="12" strokeDasharray={`${2*Math.PI*55*donePct/100} ${2*Math.PI*55}`} strokeLinecap="round" transform="rotate(-90 65 65)"/>
-          </svg>
-          <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
-            <span style={{fontSize:26,fontWeight:800,color:"#4ADE80"}}>{donePct}%</span>
-            <span style={{fontSize:11,color:"#6B7280"}}>완료</span>
-          </div>
+          <svg width="130" height="130" viewBox="0 0 130 130"><circle cx="65" cy="65" r="55" fill="none" stroke="#2A2A4A" strokeWidth="12"/><circle cx="65" cy="65" r="55" fill="none" stroke="#4ADE80" strokeWidth="12" strokeDasharray={`${2*Math.PI*55*donePct/100} ${2*Math.PI*55}`} strokeLinecap="round" transform="rotate(-90 65 65)"/></svg>
+          <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:26,fontWeight:800,color:"#4ADE80"}}>{donePct}%</span><span style={{fontSize:11,color:"#6B7280"}}>완료</span></div>
         </div>
       </div>
       <p style={{textAlign:"center",color:"#8B8BAD",fontSize:13,margin:0}}>평균 진행률: <strong style={{color:"#E8E8F0"}}>{avgProg}%</strong></p>
     </SecCard>
-    <SecCard title="업무 현황 요약" accent="#F9A8D4">
-      {TASK_STATUSES.map(st=>{const count=tasks.filter(t=>t.status===st).length;const c=STATUS_COLORS[st];return <div key={st} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #2A2A4A"}}><span style={{fontSize:13,color:c.text}}>{st}</span><span style={{fontSize:13,fontWeight:700}}>{count}개</span></div>;})}
-    </SecCard>
-    <SecCard title="전체 통계" accent="#FB923C">
-      {[["총 일정",schedules.length,"#6C63FF"],["총 업무",tasks.length,"#2EC4B6"],["완료된 업무",tasks.filter(t=>t.status==="완료").length,"#4ADE80"],["고우선 일정",pc.high,"#FF4D6D"]].map(([l,v,c])=>(
-        <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #2A2A4A"}}><span style={{fontSize:13,color:"#8B8BAD"}}>{l}</span><span style={{fontSize:16,fontWeight:800,color:c}}>{v}</span></div>
-      ))}
-    </SecCard>
+    <SecCard title="업무 현황 요약" accent="#F9A8D4">{TASK_STATUSES.map(st=>{const count=tasks.filter(t=>t.status===st).length;const c=STATUS_COLORS[st];return <div key={st} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #2A2A4A"}}><span style={{fontSize:13,color:c.text}}>{st}</span><span style={{fontSize:13,fontWeight:700}}>{count}개</span></div>;})}</SecCard>
+    <SecCard title="전체 통계" accent="#FB923C">{[["총 일정",schedules.length,"#6C63FF"],["총 업무",tasks.length,"#2EC4B6"],["완료된 업무",tasks.filter(t=>t.status==="완료").length,"#4ADE80"],["고우선 일정",pc.high,"#FF4D6D"]].map(([l,v,c])=><div key={l} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #2A2A4A"}}><span style={{fontSize:13,color:"#8B8BAD"}}>{l}</span><span style={{fontSize:16,fontWeight:800,color:c}}>{v}</span></div>)}</SecCard>
   </div>;
 }
 
@@ -826,7 +595,7 @@ function ModalWrap({title,children,onClose,onSave}){
       </div>
       <div style={{display:"flex",flexDirection:"column",gap:14}}>{children}</div>
       <div style={{display:"flex",gap:10,marginTop:20,justifyContent:"flex-end"}}>
-        <button onClick={onClose} style={{...btn("#2A2A4A","#8B8BAD")}}>취소</button>
+        <button onClick={onClose} style={btn("#2A2A4A","#8B8BAD")}>취소</button>
         <button onClick={onSave} style={btn("#6C63FF")}>저장</button>
       </div>
     </div>
@@ -837,37 +606,37 @@ function Fld({label,children}){return <div><label style={{display:"block",fontSi
 function SchedModal({initial,onSave,onClose,isEdit}){
   const [f,setF]=useState({...initial});
   const s=(k,v)=>setF(p=>({...p,[k]:v}));
-  return <ModalWrap title={isEdit?"일정 수정":"새 일정 추가"} onClose={onClose} onSave={()=>{if(!f.title.trim()||!f.owner_name.trim()){alert("제목과 담당자를 입력하세요.");return;}onSave(f);}}>
-    <Fld label="일정 제목 *"><input value={f.title} onChange={e=>s("title",e.target.value)} placeholder="일정 제목" style={inp}/></Fld>
-    <Fld label="설명"><textarea value={f.description} onChange={e=>s("description",e.target.value)} rows={3} placeholder="일정 설명 (선택)" style={{...inp,resize:"vertical"}}/></Fld>
-    <Fld label="담당자 이름 *"><input value={f.owner_name} onChange={e=>s("owner_name",e.target.value)} placeholder="담당자 이름" style={inp}/></Fld>
+  return <ModalWrap title={isEdit?"일정 수정":"새 일정 추가"} onClose={onClose} onSave={()=>{if(!f.title?.trim()||!f.owner_name?.trim()){alert("제목과 담당자를 입력하세요.");return;}onSave(f);}}>
+    <Fld label="일정 제목 *"><input value={f.title||""} onChange={e=>s("title",e.target.value)} placeholder="일정 제목을 입력하세요" style={inp}/></Fld>
+    <Fld label="설명"><textarea value={f.description||""} onChange={e=>s("description",e.target.value)} rows={3} placeholder="일정 설명 (선택)" style={{...inp,resize:"vertical"}}/></Fld>
+    <Fld label="담당자 이름 *"><input value={f.owner_name||""} onChange={e=>s("owner_name",e.target.value)} placeholder="담당자 이름" style={inp}/></Fld>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-      <Fld label="시작일"><input type="date" value={f.start_date} onChange={e=>s("start_date",e.target.value)} style={inp}/></Fld>
+      <Fld label="시작일"><input type="date" value={f.start_date||""} onChange={e=>s("start_date",e.target.value)} style={inp}/></Fld>
       <Fld label="시작 시간"><input type="time" value={f.start_time||""} onChange={e=>s("start_time",e.target.value)} style={inp}/></Fld>
     </div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-      <Fld label="종료일"><input type="date" value={f.end_date} onChange={e=>s("end_date",e.target.value)} style={inp}/></Fld>
+      <Fld label="종료일"><input type="date" value={f.end_date||""} onChange={e=>s("end_date",e.target.value)} style={inp}/></Fld>
       <Fld label="종료 시간"><input type="time" value={f.end_time||""} onChange={e=>s("end_time",e.target.value)} style={inp}/></Fld>
     </div>
-    <Fld label="중요도"><select value={f.priority} onChange={e=>s("priority",e.target.value)} style={inp}><option value="high">높음</option><option value="medium">중간</option><option value="low">낮음</option></select></Fld>
+    <Fld label="중요도"><select value={f.priority||"medium"} onChange={e=>s("priority",e.target.value)} style={inp}><option value="high">높음</option><option value="medium">중간</option><option value="low">낮음</option></select></Fld>
   </ModalWrap>;
 }
 
 function TaskModal_({initial,onSave,onClose,isEdit}){
   const [f,setF]=useState({...initial});
   const s=(k,v)=>setF(p=>({...p,[k]:v}));
-  return <ModalWrap title={isEdit?"업무 수정":"새 업무 추가"} onClose={onClose} onSave={()=>{if(!f.title.trim()||!f.owner_name.trim()){alert("제목과 담당자를 입력하세요.");return;}onSave(f);}}>
-    <Fld label="업무 제목 *"><input value={f.title} onChange={e=>s("title",e.target.value)} placeholder="업무 제목" style={inp}/></Fld>
+  return <ModalWrap title={isEdit?"업무 수정":"새 업무 추가"} onClose={onClose} onSave={()=>{if(!f.title?.trim()||!f.owner_name?.trim()){alert("제목과 담당자를 입력하세요.");return;}onSave(f);}}>
+    <Fld label="업무 제목 *"><input value={f.title||""} onChange={e=>s("title",e.target.value)} placeholder="업무 제목을 입력하세요" style={inp}/></Fld>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-      <Fld label="담당자 이름 *"><input value={f.owner_name} onChange={e=>s("owner_name",e.target.value)} placeholder="담당자 이름" style={inp}/></Fld>
+      <Fld label="담당자 이름 *"><input value={f.owner_name||""} onChange={e=>s("owner_name",e.target.value)} placeholder="담당자 이름" style={inp}/></Fld>
       <Fld label="파트"><select value={f.part||""} onChange={e=>s("part",e.target.value)} style={inp}><option value="">파트 선택</option>{PARTS.map(p=><option key={p} value={p}>{p}</option>)}</select></Fld>
     </div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
       <Fld label="시작일"><input type="date" value={f.start_date||""} onChange={e=>s("start_date",e.target.value)} style={inp}/></Fld>
       <Fld label="완료 예정일"><input type="date" value={f.due_date||""} onChange={e=>s("due_date",e.target.value)} style={inp}/></Fld>
     </div>
-    <Fld label={`진행률: ${f.progress}%`}><input type="range" min={0} max={100} value={f.progress} onChange={e=>s("progress",Number(e.target.value))} style={{width:"100%",accentColor:"#6C63FF"}}/></Fld>
-    <Fld label="상태"><select value={f.status} onChange={e=>s("status",e.target.value)} style={inp}>{TASK_STATUSES.map(x=><option key={x} value={x}>{x}</option>)}</select></Fld>
+    <Fld label={`진행률: ${f.progress||0}%`}><input type="range" min={0} max={100} value={f.progress||0} onChange={e=>s("progress",Number(e.target.value))} style={{width:"100%",accentColor:"#6C63FF"}}/></Fld>
+    <Fld label="상태"><select value={f.status||"할 일"} onChange={e=>s("status",e.target.value)} style={inp}>{TASK_STATUSES.map(x=><option key={x} value={x}>{x}</option>)}</select></Fld>
   </ModalWrap>;
 }
 

@@ -153,9 +153,8 @@ function App(){
   const weekEndDate=new Date(); weekEndDate.setDate(weekEndDate.getDate()+6);
   const weekEndStr=getLocalDateStr(weekEndDate);
 
-  const isSaving=useRef(false);
-  const pendingOps=useRef(0); // 진행 중인 API 요청 수
-  const saveCooldown=useRef(0); // 저장 직후 폴링 스킵용 타임스탬프
+  const localVersion=useRef(0); // 로컬 변경 버전 카운터
+  const serverVersion=useRef(0);  // 서버 응답 버전 카운터
 
   async function initialize(){
     setAppLoading(true);
@@ -172,28 +171,19 @@ function App(){
   }
 
   async function loadData(){
-    if(pendingOps.current>0)return; // 저장/삭제 진행 중엔 폴링 스킵
-    if(Date.now()<saveCooldown.current)return; // 저장 직후 2초간 폴링 스킵
+    const reqVer=++serverVersion.current;
     try{
       const [s,tr,t]=await Promise.all([apiGet("schedules"),apiGet("trips"),apiGet("tasks")]);
+      // 요청 시작 후 로컬 변경이 있었으면 무시 (로컬이 항상 우선)
+      if(reqVer<localVersion.current)return;
       setSchedules(s); setTrips(tr); setTasks(t);
       setLastSync(new Date()); setSyncStatus("동기화됨");
     }catch(e){setSyncStatus("오류");}
   }
 
-  // 저장/삭제 완료 후 상태만 해제 (로컬 즉시반영 + 폴링이 동기화)
-  function afterSave(){
-    pendingOps.current=Math.max(0,pendingOps.current-1);
-    isSaving.current=false;
-    saveCooldown.current=Date.now()+2000; // 저장 완료 후 2초간 폴링 스킵
-    setSyncStatus("동기화됨");
-  }
-  function beforeSave(){
-    pendingOps.current++;
-    isSaving.current=true;
-    setSyncStatus("저장중");
-    // 쿨다운은 afterSave에서만 설정 - 로컬 즉시반영 방해 안함
-  }
+  // 로컬 변경 시 버전 올림 → 진행 중인 폴링 응답을 무효화
+  function bumpLocal(){ localVersion.current++; setSyncStatus("저장중"); }
+  function afterSave(){ setSyncStatus("동기화됨"); }
 
   useEffect(()=>{
     if(!myName)return;
@@ -227,8 +217,8 @@ function App(){
     setSchedules(updated);       // 로컬 즉시 반영
     setShowSchedModal(false);    // 모달 즉시 닫기
     setEditingSched(null);
-    beforeSave();
-    apiUpsert("schedules",row).then(()=>afterSave()).catch(()=>{pendingOps.current=Math.max(0,pendingOps.current-1);isSaving.current=false;setSyncStatus("오류");});
+    bumpLocal();
+    apiUpsert("schedules",row).then(()=>afterSave()).catch(()=>{setSyncStatus("오류");});
   }
   function saveTrip(data){
     const isEdit=!!data.id;
@@ -237,16 +227,16 @@ function App(){
     setTrips(updated);
     setShowTripModal(false);
     setEditingTrip(null);
-    beforeSave();
-    apiUpsert("trips",row).then(()=>afterSave()).catch(()=>{pendingOps.current=Math.max(0,pendingOps.current-1);isSaving.current=false;setSyncStatus("오류");});
+    bumpLocal();
+    apiUpsert("trips",row).then(()=>afterSave()).catch(()=>{setSyncStatus("오류");});
   }
   async function deleteTrip(id){
     const target=trips.find(s=>s.id===id);
     setConfirmDlg({message:`"${target?.title}" 출장일정을 삭제하시겠습니까?`,onConfirm:()=>{
       setTrips(trips.filter(s=>s.id!==id));
       setConfirmDlg(null);
-      beforeSave();
-      apiDelete("trips",id).then(()=>afterSave()).catch(()=>{pendingOps.current=Math.max(0,pendingOps.current-1);isSaving.current=false;setSyncStatus("오류");});
+      bumpLocal();
+      apiDelete("trips",id).then(()=>afterSave()).catch(()=>{setSyncStatus("오류");});
     }});
   }
   async function deleteSched(id){
@@ -254,8 +244,8 @@ function App(){
     setConfirmDlg({message:`"${target?.title}" 일정을 삭제하시겠습니까?`,onConfirm:()=>{
       setSchedules(schedules.filter(s=>s.id!==id)); // 로컬 즉시 반영
       setConfirmDlg(null);
-      beforeSave();
-      apiDelete("schedules",id).then(()=>afterSave()).catch(()=>{pendingOps.current=Math.max(0,pendingOps.current-1);isSaving.current=false;setSyncStatus("오류");});
+      bumpLocal();
+      apiDelete("schedules",id).then(()=>afterSave()).catch(()=>{setSyncStatus("오류");});
     }});
   }
   function saveTask(data){
@@ -265,16 +255,16 @@ function App(){
     setTasks(updated);
     setShowTaskModal(false);
     setEditingTask(null);
-    beforeSave();
-    apiUpsert("tasks",row).then(()=>afterSave()).catch(()=>{pendingOps.current=Math.max(0,pendingOps.current-1);isSaving.current=false;setSyncStatus("오류");});
+    bumpLocal();
+    apiUpsert("tasks",row).then(()=>afterSave()).catch(()=>{setSyncStatus("오류");});
   }
   async function deleteTask(id){
     const target=tasks.find(t=>t.id===id);
     setConfirmDlg({message:`"${target?.title}" 업무를 삭제하시겠습니까?`,onConfirm:()=>{
       setTasks(tasks.filter(t=>t.id!==id)); // 로컬 즉시 반영
       setConfirmDlg(null);
-      beforeSave();
-      apiDelete("tasks",id).then(()=>afterSave()).catch(()=>{pendingOps.current=Math.max(0,pendingOps.current-1);isSaving.current=false;setSyncStatus("오류");});
+      bumpLocal();
+      apiDelete("tasks",id).then(()=>afterSave()).catch(()=>{setSyncStatus("오류");});
     }});
   }
   async function updateTaskStatus(id,status){
@@ -283,8 +273,8 @@ function App(){
     const row={...task,status};
     const updated=tasks.map(t=>t.id===id?row:t);
     setTasks(updated);
-    beforeSave();
-    apiUpsert("tasks",row).then(()=>afterSave()).catch(()=>{pendingOps.current=Math.max(0,pendingOps.current-1);isSaving.current=false;setSyncStatus("오류");});
+    bumpLocal();
+    apiUpsert("tasks",row).then(()=>afterSave()).catch(()=>{setSyncStatus("오류");});
   }
 
   const [loginError,setLoginError]=useState("");

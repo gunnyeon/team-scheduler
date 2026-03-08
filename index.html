@@ -463,7 +463,7 @@ function Dashboard({schedules,trips,tasks,todaySchedules,weekSchedules,weekTrips
   return (
     <div>
       {/* 통계 카드 */}
-      <div style={{display:"grid",gridTemplateColumns:isMobile?"repeat(2,1fr)":"repeat(auto-fill,minmax(170px,1fr))",gap:isMobile?10:16,marginBottom:isMobile?16:24}}>
+      <div style={{display:"grid",gridTemplateColumns:isMobile?"repeat(2,1fr)":"repeat(6,1fr)",gap:isMobile?10:16,marginBottom:isMobile?16:24}}>
         {[
           {label:"오늘 일정",value:todaySchedules.length,icon:"📅",color:"#6C63FF",onClick:()=>setActiveMenu("캘린더")},
           {label:"이번주 일정",value:weekSchedules.length,icon:"🗓",color:"#F9A8D4"},
@@ -513,13 +513,11 @@ function Dashboard({schedules,trips,tasks,todaySchedules,weekSchedules,weekTrips
         </div>
       )}
 
-      {/* 하단 섹션 */}
-      <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr 1fr",gap:isMobile?12:20,marginBottom:isMobile?12:20}}>
+      {/* 하단 섹션 - 6개 카드를 하나의 그리드로 정렬 */}
+      <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr 1fr",gap:isMobile?12:20}}>
         <SecCard title="오늘 일정" accent="#6C63FF">{todaySchedules.length===0?<Empty text="오늘 일정 없음"/>:todaySchedules.map(s=><SchedRow key={s.id} s={s} onClick={onSchedClick}/>)}</SecCard>
         <SecCard title="이번주 일정 (주요)" accent="#F9A8D4">{weekSchedules.length===0?<Empty text="이번주 일정 없음"/>:weekSchedules.map(s=><SchedRow key={s.id} s={s} onClick={onSchedClick}/>)}</SecCard>
         <SecCard title="이번주 출장일정 ✈️" accent="#FB923C">{(weekTrips||[]).length===0?<Empty text="이번주 출장일정 없음"/>:(weekTrips||[]).map(s=><SchedRow key={s.id} s={s} onClick={onTripClick}/>)}</SecCard>
-      </div>
-      <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr 1fr",gap:isMobile?12:20}}>
         <SecCard title="할 일 (1주일 이내)" accent="#818CF8">{sortTasks(tasks.filter(t=>t.status==="할 일"&&(!t.due_date||(t.due_date>=todayStr&&t.due_date<=weekEndStr)))).length===0?<Empty text="1주일 이내 할 일 없음"/>:sortTasks(tasks.filter(t=>t.status==="할 일"&&(!t.due_date||(t.due_date>=todayStr&&t.due_date<=weekEndStr)))).map(t=><TaskRow key={t.id} t={t}/>)}</SecCard>
         <SecCard title="진행 중 업무 (1주일 이내)" accent="#2EC4B6">{inProgressTasks.filter(t=>!t.due_date||(t.due_date>=todayStr&&t.due_date<=weekEndStr)).length===0?<Empty text="1주일 이내 진행 중 업무 없음"/>:inProgressTasks.filter(t=>!t.due_date||(t.due_date>=todayStr&&t.due_date<=weekEndStr)).map(t=><TaskRow key={t.id} t={t}/>)}</SecCard>
         <SecCard title="업무 현황" accent="#F9A8D4">

@@ -39,37 +39,55 @@
   @media(max-width:1024px){
     .sidebar{width:64px!important;}
     .sidebar-label{display:none!important;}
-    .main-padding{padding:16px 16px!important;}
-    .header-padding{padding:12px 16px!important;}
+    .main-padding{padding:16px 14px!important;}
+    .header-padding{padding:12px 14px!important;}
     .dash-grid-5{grid-template-columns:repeat(3,1fr)!important;}
-    .dash-grid-2{grid-template-columns:1fr!important;}
+    .dash-grid-2{grid-template-columns:1fr 1fr!important;}
     .dash-grid-3{grid-template-columns:1fr 1fr!important;}
-    .task-grid{grid-template-columns:100px 1fr 90px 90px 90px 70px 130px 80px!important;}
-    .sched-grid{grid-template-columns:1fr 100px 120px 120px 70px 80px!important;}
-    .cal-day{min-height:70px!important;}
     .modal-box{max-width:95vw!important;padding:18px 16px!important;}
+    /* 테이블 헤더/행 - 태블릿 축소 */
+    .task-table-header,.task-table-row{grid-template-columns:90px 1fr 80px 90px 90px 70px 130px 70px!important;gap:6px!important;padding:8px 12px!important;}
+    .sched-table-header,.sched-table-row{grid-template-columns:1fr 90px 110px 110px 60px 70px!important;gap:6px!important;padding:8px 12px!important;}
   }
   /* 모바일 (~ 767px) */
   @media(max-width:767px){
     .sidebar{display:none!important;}
     .mobile-nav{display:flex!important;}
-    .main-padding{padding:12px 10px!important;}
-    .header-padding{padding:10px 12px!important;}
+    .main-padding{padding:10px 8px 70px 8px!important;}
+    .header-padding{padding:8px 12px!important;}
     .header-title{font-size:15px!important;}
     .header-sync{display:none!important;}
     .dash-grid-5{grid-template-columns:repeat(2,1fr)!important;}
     .dash-grid-2{grid-template-columns:1fr!important;}
     .dash-grid-3{grid-template-columns:1fr!important;}
-    .task-grid{grid-template-columns:1fr 80px 80px!important;}
-    .task-col-hide{display:none!important;}
-    .sched-grid{grid-template-columns:1fr 80px!important;}
-    .sched-col-hide{display:none!important;}
-    .cal-grid{grid-template-columns:repeat(7,1fr)!important;}
-    .cal-day{min-height:52px!important;padding:4px 2px!important;}
-    .cal-day-num{font-size:11px!important;width:20px!important;height:20px!important;}
-    .modal-box{max-width:100vw!important;width:100%!important;border-radius:16px 16px 0 0!important;position:fixed!important;bottom:0!important;margin:0!important;}
-    .modal-wrap{align-items:flex-end!important;}
+    /* 캘린더 모바일 */
+    .cal-day{min-height:56px!important;padding:3px 2px!important;}
+    .cal-header-label{font-size:11px!important;}
+    /* 업무/일정 테이블 → 카드형 전환 */
+    .task-table-header{display:none!important;}
+    .sched-table-header{display:none!important;}
+    .task-table-row{display:block!important;padding:12px 14px!important;border-bottom:1px solid #2A2A4A22!important;}
+    .sched-table-row{display:block!important;padding:12px 14px!important;border-bottom:1px solid #2A2A4A22!important;}
+    .task-col-part{display:inline-block!important;margin-bottom:6px!important;}
+    .task-col-title{display:block!important;font-size:14px!important;margin-bottom:4px!important;white-space:normal!important;}
+    .task-col-owner{display:inline-flex!important;margin-bottom:6px!important;margin-right:10px!important;}
+    .task-col-start{display:inline-block!important;font-size:11px!important;margin-right:8px!important;color:#8B8BAD!important;}
+    .task-col-due{display:inline-block!important;font-size:11px!important;margin-right:8px!important;}
+    .task-col-progress{display:block!important;margin-bottom:6px!important;}
+    .task-col-status{display:inline-block!important;margin-right:8px!important;}
+    .task-col-actions{display:inline-flex!important;float:right!important;}
+    .sched-col-title{display:block!important;font-size:14px!important;margin-bottom:4px!important;white-space:normal!important;}
+    .sched-col-owner{display:inline-flex!important;margin-bottom:4px!important;margin-right:10px!important;}
+    .sched-col-start{display:block!important;font-size:11px!important;color:#8B8BAD!important;margin-bottom:2px!important;}
+    .sched-col-end{display:block!important;font-size:11px!important;color:#8B8BAD!important;margin-bottom:6px!important;}
+    .sched-col-priority{display:inline-block!important;margin-right:8px!important;}
+    .sched-col-actions{display:inline-flex!important;float:right!important;}
+    /* 모달 바텀시트 */
+    .modal-box{max-width:100vw!important;width:100%!important;border-radius:20px 20px 0 0!important;position:fixed!important;bottom:0!important;max-height:92vh!important;}
+    .modal-wrap{align-items:flex-end!important;padding:0!important;}
     .login-box{width:92vw!important;padding:32px 20px!important;}
+    /* 필터 버튼 스크롤 */
+    .filter-scroll{overflow-x:auto!important;flex-wrap:nowrap!important;-webkit-overflow-scrolling:touch!important;}
   }
 </style>
 </head>
@@ -585,7 +603,7 @@ function ScheduleBoard({schedules,onEdit,onDelete}){
   const groupedDates=Object.keys(grouped).sort();
   const DAY_NAMES=["일","월","화","수","목","금","토"];
   return <div>
-    <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
+    <div className="filter-scroll" style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
       {["all","high","medium","low"].map(f=>(
         <button key={f} onClick={()=>setPriority(f)} style={{padding:"6px 14px",borderRadius:20,border:"none",cursor:"pointer",fontSize:12,fontWeight:600,background:priority===f?"#6C63FF":"#1E1E3A",color:priority===f?"#fff":"#8B8BAD"}}>
           {f==="all"?"전체":f==="high"?"높음":f==="medium"?"중간":"낮음"}
@@ -604,7 +622,7 @@ function ScheduleBoard({schedules,onEdit,onDelete}){
         {hasFilter&&<div style={{gridColumn:"1/-1",textAlign:"right"}}><button onClick={()=>{setPriority("all");setDateFrom("");setDateTo("");setNameFilter("");}} style={{...btn("#2A2A4A","#F87171"),fontSize:11,padding:"4px 12px"}}>초기화</button></div>}
       </div>
     )}
-    <div style={{background:"#1E1E3A",borderRadius:"10px 10px 0 0",padding:"10px 20px",display:"grid",gridTemplateColumns:"1fr 120px 150px 150px 80px 90px",gap:12,alignItems:"center",borderBottom:"1px solid #2A2A4A"}}>
+    <div className="sched-table-header" style={{background:"#1E1E3A",borderRadius:"10px 10px 0 0",padding:"10px 20px",display:"grid",gridTemplateColumns:"1fr 120px 150px 150px 80px 90px",gap:12,alignItems:"center",borderBottom:"1px solid #2A2A4A"}}>
       {["제목","담당자","시작","종료","중요도",""].map((h,i)=>(
         <span key={i} style={{fontSize:11,fontWeight:700,color:"#6B7280",textAlign:i===5?"right":"left"}}>{h}</span>
       ))}
@@ -625,23 +643,23 @@ function ScheduleBoard({schedules,onEdit,onDelete}){
           {dayItems.map((s,si)=>{
             const pc=PRIORITY_COLORS[s.priority]||PRIORITY_COLORS.medium;
             const isLast=di===groupedDates.length-1&&si===dayItems.length-1;
-            return <div key={s.id}
+            return <div key={s.id} className="sched-table-row"
               style={{display:"grid",gridTemplateColumns:"1fr 120px 150px 150px 80px 90px",gap:12,alignItems:"center",padding:"11px 20px",borderBottom:isLast?"none":"1px solid #2A2A4A22",position:"relative",transition:"background 0.15s"}}
               onMouseEnter={e=>e.currentTarget.style.background="rgba(108,99,255,0.05)"}
               onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
               <div style={{position:"absolute",left:0,top:0,bottom:0,width:3,background:pc.bg,borderRadius:2}}/>
-              <div style={{minWidth:0,paddingLeft:8}}>
+              <div className="sched-col-title" style={{minWidth:0,paddingLeft:8}}>
                 <p style={{margin:0,fontSize:13,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.title}</p>
                 {s.description&&<p style={{margin:"2px 0 0",fontSize:11,color:"#6B7280",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.description}</p>}
               </div>
-              <div style={{display:"flex",alignItems:"center",gap:6,minWidth:0}}>
+              <div className="sched-col-owner" style={{display:"flex",alignItems:"center",gap:6,minWidth:0}}>
                 <div style={{width:20,height:20,borderRadius:"50%",background:getAvatarColor(s.owner_name),display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:"#fff",flexShrink:0}}>{(s.owner_name||"?")[0]}</div>
                 <span style={{fontSize:12,color:"#A78BFA",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.owner_name}</span>
               </div>
-              <span style={{fontSize:12,color:"#E8E8F0"}}>{s.start_date}{s.start_time&&<span style={{color:"#A78BFA",marginLeft:4,fontSize:11}}>{s.start_time}</span>}</span>
-              <span style={{fontSize:12,color:"#E8E8F0"}}>{s.end_date}{s.end_time&&<span style={{color:"#A78BFA",marginLeft:4,fontSize:11}}>{s.end_time}</span>}</span>
-              <span style={{fontSize:10,padding:"3px 8px",borderRadius:6,background:pc.bg,color:pc.text,fontWeight:700,textAlign:"center"}}>{s.priority==="high"?"높음":s.priority==="medium"?"중간":"낮음"}</span>
-              <div style={{display:"flex",gap:4,justifyContent:"flex-end"}}>
+              <span className="sched-col-start" style={{fontSize:12,color:"#E8E8F0"}}>{s.start_date}{s.start_time&&<span style={{color:"#A78BFA",marginLeft:4,fontSize:11}}>{s.start_time}</span>}</span>
+              <span className="sched-col-end" style={{fontSize:12,color:"#E8E8F0"}}>{s.end_date}{s.end_time&&<span style={{color:"#A78BFA",marginLeft:4,fontSize:11}}>{s.end_time}</span>}</span>
+              <span className="sched-col-priority" style={{fontSize:10,padding:"3px 8px",borderRadius:6,background:pc.bg,color:pc.text,fontWeight:700,textAlign:"center"}}>{s.priority==="high"?"높음":s.priority==="medium"?"중간":"낮음"}</span>
+              <div className="sched-col-actions" style={{display:"flex",gap:4,justifyContent:"flex-end"}}>
                 <button onClick={()=>onEdit(s)} style={{...btn("#2A2A4A","#A78BFA"),fontSize:11,padding:"4px 8px"}}>수정</button>
                 <button onClick={()=>onDelete(s.id)} style={{...btn("#2A2A4A","#F87171"),fontSize:11,padding:"4px 8px"}}>삭제</button>
               </div>
@@ -670,7 +688,7 @@ function TaskBoard({tasks,onEdit,onDelete,onStatusChange}){
   const groupOrder=activePart==="전체"?[...PARTS,"미분류"].filter(p=>grouped[p]):[activePart];
   const today=getLocalDateStr(new Date());
   return <div>
-    <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
+    <div className="filter-scroll" style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
       {["전체",...PARTS].map(p=>{
         const pc=PART_COLORS[p];
         const count=p==="전체"?tasks.length:tasks.filter(t=>t.part===p).length;
@@ -685,7 +703,7 @@ function TaskBoard({tasks,onEdit,onDelete,onStatusChange}){
       <input value={nameFilter} onChange={e=>setNameFilter(e.target.value)} placeholder="🔍 담당자 검색" style={{...inp,width:160,fontSize:12,padding:"5px 12px",marginLeft:"auto"}}/>
       <span style={{fontSize:12,color:"#6B7280"}}>총 {visibleTasks.length}건</span>
     </div>
-    <div style={{background:"#1E1E3A",borderRadius:"10px 10px 0 0",padding:"10px 20px",display:"grid",gridTemplateColumns:"130px 1fr 110px 110px 110px 90px 160px 90px",gap:10,alignItems:"center",borderBottom:"1px solid #2A2A4A"}}>
+    <div className="task-table-header" style={{background:"#1E1E3A",borderRadius:"10px 10px 0 0",padding:"10px 20px",display:"grid",gridTemplateColumns:"130px 1fr 110px 110px 110px 90px 160px 90px",gap:10,alignItems:"center",borderBottom:"1px solid #2A2A4A"}}>
       {["파트","제목","담당자","시작일","완료예정일","진행률","상태",""].map((h,i)=>(
         <span key={i} style={{fontSize:11,fontWeight:700,color:"#6B7280",textAlign:i===7?"right":"left"}}>{h}</span>
       ))}
@@ -705,20 +723,20 @@ function TaskBoard({tasks,onEdit,onDelete,onStatusChange}){
             const sc=STATUS_COLORS[task.status]||STATUS_COLORS["할 일"];
             const isLast=gi===groupOrder.length-1&&ti===partTasks.length-1;
             const isOverdue=task.due_date&&task.due_date<today&&task.status!=="완료";
-            return <div key={task.id}
+            return <div key={task.id} className="task-table-row"
               style={{display:"grid",gridTemplateColumns:"130px 1fr 110px 110px 110px 90px 160px 90px",gap:10,alignItems:"center",padding:"11px 20px",borderBottom:isLast?"none":"1px solid #2A2A4A22",position:"relative",transition:"background 0.15s"}}
               onMouseEnter={e=>e.currentTarget.style.background="rgba(108,99,255,0.05)"}
               onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
               <div style={{position:"absolute",left:0,top:0,bottom:0,width:3,background:tpc?.border||"#3A3A5A",borderRadius:2}}/>
-              <div style={{paddingLeft:8}}>{task.part?<span style={{fontSize:10,padding:"3px 9px",borderRadius:10,background:tpc?.bg||"#2A2A4A",color:tpc?.text||"#8B8BAD",border:`1px solid ${tpc?.border||"#3A3A5A"}`,fontWeight:700}}>{task.part}</span>:<span style={{fontSize:10,color:"#4B4B6B"}}>—</span>}</div>
-              <p style={{margin:0,fontSize:13,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{task.title}</p>
-              <div style={{display:"flex",alignItems:"center",gap:5,minWidth:0}}>
+              <div className="task-col-part" style={{paddingLeft:8}}>{task.part?<span style={{fontSize:10,padding:"3px 9px",borderRadius:10,background:tpc?.bg||"#2A2A4A",color:tpc?.text||"#8B8BAD",border:`1px solid ${tpc?.border||"#3A3A5A"}`,fontWeight:700}}>{task.part}</span>:<span style={{fontSize:10,color:"#4B4B6B"}}>—</span>}</div>
+              <p className="task-col-title" style={{margin:0,fontSize:13,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{task.title}</p>
+              <div className="task-col-owner" style={{display:"flex",alignItems:"center",gap:5,minWidth:0}}>
                 <div style={{width:20,height:20,borderRadius:"50%",background:getAvatarColor(task.owner_name),display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:"#fff",flexShrink:0}}>{(task.owner_name||"?")[0]}</div>
                 <span style={{fontSize:12,color:"#A78BFA",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{task.owner_name}</span>
               </div>
-              <span style={{fontSize:12,color:task.start_date?"#E8E8F0":"#4B4B6B"}}>{task.start_date?<span>{task.start_date} <span style={{color:"#C4B5FD"}}>({getDayOfWeek(task.start_date)})</span></span>:"—"}</span>
-              <span style={{fontSize:12,color:isOverdue?"#F87171":task.due_date?"#FB923C":"#4B4B6B",fontWeight:isOverdue?700:400}}>{task.due_date?<span>{task.due_date} <span style={{color:"#C4B5FD"}}>({getDayOfWeek(task.due_date)})</span></span>:"—"}{isOverdue&&<span style={{marginLeft:3}}>⚠</span>}</span>
-              <div style={{display:"flex",alignItems:"center",gap:6}}>
+              <span className="task-col-start" style={{fontSize:12,color:task.start_date?"#E8E8F0":"#4B4B6B"}}>{task.start_date?<span>{task.start_date} <span style={{color:"#C4B5FD"}}>({getDayOfWeek(task.start_date)})</span></span>:"—"}</span>
+              <span className="task-col-due" style={{fontSize:12,color:isOverdue?"#F87171":task.due_date?"#FB923C":"#4B4B6B",fontWeight:isOverdue?700:400}}>{task.due_date?<span>{task.due_date} <span style={{color:"#C4B5FD"}}>({getDayOfWeek(task.due_date)})</span></span>:"—"}{isOverdue&&<span style={{marginLeft:3}}>⚠</span>}</span>
+              <div className="task-col-progress" style={{display:"flex",alignItems:"center",gap:6}}>
                 <div style={{flex:1,height:5,background:"#2A2A4A",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${task.progress}%`,background:sc.border,borderRadius:3,transition:"width 0.4s"}}/></div>
                 <span style={{fontSize:10,color:sc.border,fontWeight:700,flexShrink:0}}>{task.progress}%</span>
               </div>
@@ -726,7 +744,7 @@ function TaskBoard({tasks,onEdit,onDelete,onStatusChange}){
                 style={{fontSize:11,padding:"4px 8px",borderRadius:8,border:`1px solid ${sc.border}`,background:sc.bg,color:sc.text,fontWeight:700,cursor:"pointer",outline:"none"}}>
                 {TASK_STATUSES.map(s=><option key={s} value={s}>{s}</option>)}
               </select>
-              <div style={{display:"flex",gap:4,justifyContent:"flex-end"}}>
+              <div className="task-col-actions" style={{display:"flex",gap:4,justifyContent:"flex-end"}}>
                 <button onClick={()=>onEdit(task)} style={{...btn("#2A2A4A","#A78BFA"),fontSize:11,padding:"4px 8px"}}>수정</button>
                 <button onClick={()=>onDelete(task.id)} style={{...btn("#2A2A4A","#F87171"),fontSize:11,padding:"4px 8px"}}>삭제</button>
               </div>

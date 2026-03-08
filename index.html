@@ -33,6 +33,44 @@
   .add-btn{opacity:0;transition:opacity 0.15s;}
   .cal-day:hover .add-btn{opacity:1!important;}
   select option{background:#1E1E3A;color:#E8E8F0;}
+
+  /* ── 반응형 ── */
+  /* 태블릿 (768px ~ 1024px) */
+  @media(max-width:1024px){
+    .sidebar{width:64px!important;}
+    .sidebar-label{display:none!important;}
+    .main-padding{padding:16px 16px!important;}
+    .header-padding{padding:12px 16px!important;}
+    .dash-grid-5{grid-template-columns:repeat(3,1fr)!important;}
+    .dash-grid-2{grid-template-columns:1fr!important;}
+    .dash-grid-3{grid-template-columns:1fr 1fr!important;}
+    .task-grid{grid-template-columns:100px 1fr 90px 90px 90px 70px 130px 80px!important;}
+    .sched-grid{grid-template-columns:1fr 100px 120px 120px 70px 80px!important;}
+    .cal-day{min-height:70px!important;}
+    .modal-box{max-width:95vw!important;padding:18px 16px!important;}
+  }
+  /* 모바일 (~ 767px) */
+  @media(max-width:767px){
+    .sidebar{display:none!important;}
+    .mobile-nav{display:flex!important;}
+    .main-padding{padding:12px 10px!important;}
+    .header-padding{padding:10px 12px!important;}
+    .header-title{font-size:15px!important;}
+    .header-sync{display:none!important;}
+    .dash-grid-5{grid-template-columns:repeat(2,1fr)!important;}
+    .dash-grid-2{grid-template-columns:1fr!important;}
+    .dash-grid-3{grid-template-columns:1fr!important;}
+    .task-grid{grid-template-columns:1fr 80px 80px!important;}
+    .task-col-hide{display:none!important;}
+    .sched-grid{grid-template-columns:1fr 80px!important;}
+    .sched-col-hide{display:none!important;}
+    .cal-grid{grid-template-columns:repeat(7,1fr)!important;}
+    .cal-day{min-height:52px!important;padding:4px 2px!important;}
+    .cal-day-num{font-size:11px!important;width:20px!important;height:20px!important;}
+    .modal-box{max-width:100vw!important;width:100%!important;border-radius:16px 16px 0 0!important;position:fixed!important;bottom:0!important;margin:0!important;}
+    .modal-wrap{align-items:flex-end!important;}
+    .login-box{width:92vw!important;padding:32px 20px!important;}
+  }
 </style>
 </head>
 <body>
@@ -156,15 +194,17 @@ function App(){
   const lastLocalChange=useRef(0); // 마지막 로컬 변경 시각 (ms)
 
   async function initialize(){
+    if(initialized.current)return;
     setAppLoading(true);
     try{
       setSyncStatus("연결 중");
-      await Promise.all([apiInit("schedules",SCHED_HEADERS),apiInit("trips",TRIP_HEADERS),apiInit("tasks",TASK_HEADERS)]);
+      // apiInit은 백그라운드 (시트 생성은 오래 걸릴 수 있음)
+      Promise.all([apiInit("schedules",SCHED_HEADERS),apiInit("trips",TRIP_HEADERS),apiInit("tasks",TASK_HEADERS)]).catch(()=>{});
       await loadData();
       initialized.current=true;
     }catch(e){
       setSyncStatus("오류");
-      initialized.current=true; // 오류여도 화면은 표시
+      initialized.current=true;
     }
     setAppLoading(false);
   }
@@ -186,12 +226,14 @@ function App(){
 
   useEffect(()=>{
     if(!myName)return;
-    if(!initialized.current){
+    if(initialized.current){
+      // 로그인 시 이미 데이터 로드됨 → 로딩화면 없이 바로 시작
+      setAppLoading(false);
+      polling.current=setInterval(loadData,3000);
+    } else {
       initialize().then(()=>{
         polling.current=setInterval(loadData,3000);
       });
-    } else {
-      polling.current=setInterval(loadData,3000);
     }
     return()=>clearInterval(polling.current);
   },[myName]);
@@ -285,36 +327,43 @@ function App(){
     setLoginLoading(true);
     setLoginError("");
     try{
-      // members 시트 직접 fetch (오류 응답도 확인)
-      const res=await fetch(`${API_URL}?sheet=members`);
-      const json=await res.json();
-
-      // API 자체 오류
+      // members 확인 + 데이터 프리페치를 동시에 시작
+      const [membersRes, schedsRes, tripsRes, tasksRes] = await Promise.all([
+        fetch(`${API_URL}?sheet=members`),
+        fetch(`${API_URL}?sheet=schedules`),
+        fetch(`${API_URL}?sheet=trips`),
+        fetch(`${API_URL}?sheet=tasks`),
+      ]);
+      const json=await membersRes.json();
       if(!json.ok){
         setLoginError(`⚠️ 서버 오류: ${json.error||"알 수 없는 오류"}. Apps Script를 재배포하거나 관리자에게 문의하세요.`);
         setLoginLoading(false);
         return;
       }
-
       const members=json.data||[];
-
-      // members 시트 비어있음
       if(members.length===0){
         setLoginError("⚠️ 허용 목록이 비어있습니다. Sheets members 시트에 이름을 추가하세요.");
         setLoginLoading(false);
         return;
       }
-
       const allowed=members.map(m=>String(m.name||"").trim()).filter(Boolean);
       if(!allowed.includes(n)){
         setLoginError("❌ 등록되지 않은 이름입니다. 관리자에게 문의하세요.");
         setLoginLoading(false);
         return;
       }
+      // 인증 성공 - 프리페치 결과 즉시 파싱해서 state에 적용
+      try{
+        const [sd, tr, tk] = await Promise.all([schedsRes.json(), tripsRes.json(), tasksRes.json()]);
+        if(sd.ok) setSchedules(sd.data||[]);
+        if(tr.ok) setTrips(tr.data||[]);
+        if(tk.ok) setTasks(tk.data||[]);
+        setLastSync(new Date());
+        initialized.current=true;
+      }catch{}
       try{sessionStorage.setItem("ts-name",n);}catch{}
       setMyName(n);
     }catch(e){
-      // API_URL 미설정 또는 네트워크 오류
       if(API_URL==="YOUR_APPS_SCRIPT_URL_HERE"){
         setLoginError("⚠️ API URL이 설정되지 않았습니다. index.html의 API_URL을 확인하세요.");
       } else {
@@ -326,7 +375,7 @@ function App(){
 
   if(!myName) return (
     <div style={{height:"100vh",background:"#0F0F1A",display:"flex",alignItems:"center",justifyContent:"center"}}>
-      <div style={{background:"#161628",border:"1px solid #2A2A4A",borderRadius:20,padding:"44px 48px",width:380,textAlign:"center"}}>
+      <div className="login-box" style={{background:"#161628",border:"1px solid #2A2A4A",borderRadius:20,padding:"44px 48px",width:380,textAlign:"center"}}>
         <div style={{width:64,height:64,borderRadius:18,background:"linear-gradient(135deg,#6C63FF,#FF6B9D)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,margin:"0 auto 20px"}}>🏢</div>
         <h1 style={{margin:"0 0 6px",fontSize:24,fontWeight:800,color:"#A78BFA"}}>TeamSync</h1>
         <p style={{color:"#6B7280",fontSize:13,margin:"0 0 28px"}}>건축공사팀 일정관리 플랫폼</p>
@@ -360,34 +409,34 @@ function App(){
   return (
     <div style={{display:"flex",height:"100vh",background:"#0F0F1A",color:"#E8E8F0",overflow:"hidden"}}>
       {/* 사이드바 */}
-      <div style={{width:sidebarOpen?224:64,transition:"width 0.3s",background:"linear-gradient(180deg,#161628,#1A1A35)",borderRight:"1px solid #2A2A4A",display:"flex",flexDirection:"column",padding:"0 0 16px",flexShrink:0}}>
+      <div className="sidebar" style={{width:sidebarOpen?224:64,transition:"width 0.3s",background:"linear-gradient(180deg,#161628,#1A1A35)",borderRight:"1px solid #2A2A4A",display:"flex",flexDirection:"column",padding:"0 0 16px",flexShrink:0}}>
         <div style={{padding:"20px 16px 24px",borderBottom:"1px solid #2A2A4A",display:"flex",alignItems:"center",gap:10}}>
           <div style={{width:36,height:36,borderRadius:10,background:"linear-gradient(135deg,#6C63FF,#FF6B9D)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>🏢</div>
-          {sidebarOpen&&<span style={{fontWeight:800,fontSize:15,color:"#A78BFA"}}>TeamSync</span>}
+          {sidebarOpen&&<span className="sidebar-label" style={{fontWeight:800,fontSize:15,color:"#A78BFA"}}>TeamSync</span>}
           <div style={{marginLeft:"auto",cursor:"pointer",color:"#6B7280",fontSize:18}} onClick={()=>setSidebarOpen(v=>!v)}>{sidebarOpen?"◀":"▶"}</div>
         </div>
         <nav style={{padding:"16px 8px",flex:1}}>
           {menus.map(m=>(
             <div key={m} onClick={()=>setActiveMenu(m)} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 12px",borderRadius:10,marginBottom:4,cursor:"pointer",background:activeMenu===m?"linear-gradient(90deg,rgba(108,99,255,0.2),rgba(255,107,157,0.1))":"transparent",borderLeft:activeMenu===m?"3px solid #6C63FF":"3px solid transparent",color:activeMenu===m?"#A78BFA":"#8B8BAD"}}>
               <span style={{fontSize:16,flexShrink:0}}>{menuIcons[m]}</span>
-              {sidebarOpen&&<span style={{fontSize:13,fontWeight:activeMenu===m?700:400,whiteSpace:"nowrap"}}>{m}</span>}
+              {sidebarOpen&&<span className="sidebar-label" style={{fontSize:13,fontWeight:activeMenu===m?700:400,whiteSpace:"nowrap"}}>{m}</span>}
             </div>
           ))}
         </nav>
         <div style={{padding:"0 12px"}}>
           <div style={{background:"#1E1E3A",borderRadius:10,padding:"8px 12px",display:"flex",alignItems:"center",gap:8}}>
             <div style={{width:8,height:8,borderRadius:"50%",background:syncStatus==="동기화됨"?"#4ADE80":syncStatus==="저장중"?"#FB923C":"#F87171",flexShrink:0,boxShadow:syncStatus==="동기화됨"?"0 0 6px #4ADE80":"none"}}/>
-            {sidebarOpen&&<span style={{fontSize:11,color:"#6B7280",flex:1}}>{syncStatus==="동기화됨"?"실시간 동기화":syncStatus==="저장중"?"저장 중...":syncStatus}</span>}
+            {sidebarOpen&&<span className="sidebar-label" style={{fontSize:11,color:"#6B7280",flex:1}}>{syncStatus==="동기화됨"?"실시간 동기화":syncStatus==="저장중"?"저장 중...":syncStatus}</span>}
           </div>
         </div>
       </div>
 
       {/* 메인 */}
       <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column"}}>
-        <div style={{padding:"16px 28px",borderBottom:"1px solid #2A2A4A",background:"#0F0F1A",display:"flex",alignItems:"center",gap:16,flexShrink:0}}>
+        <div className="header-padding" style={{padding:"16px 28px",borderBottom:"1px solid #2A2A4A",background:"#0F0F1A",display:"flex",alignItems:"center",gap:16,flexShrink:0}}>
           <div>
-            <h1 style={{margin:0,fontSize:20,fontWeight:800}}>{activeMenu}</h1>
-            <p style={{margin:0,fontSize:12,color:"#6B7280"}}>마지막 동기화: {lastSync.toLocaleTimeString("ko-KR")}</p>
+            <h1 className="header-title" style={{margin:0,fontSize:20,fontWeight:800}}>{activeMenu}</h1>
+            <p className="header-sync" style={{margin:0,fontSize:12,color:"#6B7280"}}>마지막 동기화: {lastSync.toLocaleTimeString("ko-KR")}</p>
           </div>
           <div style={{marginLeft:"auto",display:"flex",gap:10,alignItems:"center"}}>
             {activeMenu==="일정 관리"&&<button onClick={()=>{setEditingSched(null);setShowSchedModal(true);}} style={btn("#6C63FF")}>+ 일정 추가</button>}
@@ -401,7 +450,7 @@ function App(){
             </div>
           </div>
         </div>
-        <div style={{flex:1,overflow:"auto",padding:"24px 28px"}}>
+        <div className="main-padding" style={{flex:1,overflow:"auto",padding:"24px 28px"}}>
           {activeMenu==="대시보드"&&<Dashboard schedules={schedules} trips={trips} tasks={tasks} todaySchedules={todaySchedules} weekSchedules={weekSchedules} weekTrips={weekTrips} urgentSchedules={urgentSchedules} inProgressTasks={inProgressTasks} overdueTasks={overdueTasks} setActiveMenu={setActiveMenu} todayStr={todayStr} weekEndStr={weekEndStr} onSchedClick={s=>{setCurrentMonth(new Date(s.start_date+"T00:00:00"));setSelectedSched(s);setActiveMenu("캘린더(주요일정)");}} onTripClick={s=>{setCurrentMonth2(new Date(s.start_date+"T00:00:00"));setSelectedSched2(s);setActiveMenu("캘린더(출장일정)");}}/>}
           {activeMenu==="일정 관리"&&<ScheduleBoard schedules={schedules} onEdit={s=>{setEditingSched(s);setShowSchedModal(true);}} onDelete={deleteSched}/>}
           {activeMenu==="업무 관리"&&<TaskBoard tasks={tasks} onEdit={t=>{setEditingTask(t);setShowTaskModal(true);}} onDelete={deleteTask} onStatusChange={updateTaskStatus}/>}
@@ -427,6 +476,15 @@ function App(){
           </div>
         </div>
       )}
+    {/* 모바일 하단 내비 */}
+      <div className="mobile-nav" style={{display:"none",position:"fixed",bottom:0,left:0,right:0,background:"#161628",borderTop:"1px solid #2A2A4A",zIndex:50,padding:"6px 0",justifyContent:"space-around",alignItems:"center"}}>
+        {menus.map(m=>(
+          <div key={m} onClick={()=>setActiveMenu(m)} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2,padding:"4px 8px",cursor:"pointer",color:activeMenu===m?"#A78BFA":"#6B7280",flex:1}}>
+            <span style={{fontSize:18}}>{menuIcons[m]}</span>
+            <span style={{fontSize:9,fontWeight:activeMenu===m?700:400,textAlign:"center",lineHeight:1.2}}>{m.replace("캘린더(","").replace(")","").replace("일정 관리","일정").replace("업무 관리","업무").replace("리포트","리포트")}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -436,7 +494,7 @@ function Dashboard({schedules,trips,tasks,todaySchedules,weekSchedules,weekTrips
   return (
     <div>
       {/* 통계 카드 */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(170px,1fr))",gap:16,marginBottom:24}}>
+      <div className="dash-grid-5" style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(170px,1fr))",gap:16,marginBottom:24}}>
         {[
           {label:"오늘 일정",value:todaySchedules.length,icon:"📅",color:"#6C63FF",onClick:()=>setActiveMenu("캘린더")},
           {label:"이번주 일정",value:weekSchedules.length,icon:"🗓",color:"#F9A8D4"},
@@ -487,12 +545,12 @@ function Dashboard({schedules,trips,tasks,todaySchedules,weekSchedules,weekTrips
       )}
 
       {/* 하단 섹션 */}
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:20,marginBottom:20}}>
+      <div className="dash-grid-2" style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:20,marginBottom:20}}>
         <SecCard title="오늘 일정" accent="#6C63FF">{todaySchedules.length===0?<Empty text="오늘 일정 없음"/>:todaySchedules.map(s=><SchedRow key={s.id} s={s} onClick={onSchedClick}/>)}</SecCard>
         <SecCard title="이번주 일정 (주요)" accent="#F9A8D4">{weekSchedules.length===0?<Empty text="이번주 일정 없음"/>:weekSchedules.map(s=><SchedRow key={s.id} s={s} onClick={onSchedClick}/>)}</SecCard>
         <SecCard title="이번주 출장일정 ✈️" accent="#FB923C">{(weekTrips||[]).length===0?<Empty text="이번주 출장일정 없음"/>:(weekTrips||[]).map(s=><SchedRow key={s.id} s={s} onClick={onTripClick}/>)}</SecCard>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:20}}>
+      <div className="dash-grid-3" style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:20}}>
         <SecCard title="할 일 (1주일 이내)" accent="#818CF8">{sortTasks(tasks.filter(t=>t.status==="할 일"&&(!t.due_date||(t.due_date>=todayStr&&t.due_date<=weekEndStr)))).length===0?<Empty text="1주일 이내 할 일 없음"/>:sortTasks(tasks.filter(t=>t.status==="할 일"&&(!t.due_date||(t.due_date>=todayStr&&t.due_date<=weekEndStr)))).map(t=><TaskRow key={t.id} t={t}/>)}</SecCard>
         <SecCard title="진행 중 업무 (1주일 이내)" accent="#2EC4B6">{inProgressTasks.filter(t=>!t.due_date||(t.due_date>=todayStr&&t.due_date<=weekEndStr)).length===0?<Empty text="1주일 이내 진행 중 업무 없음"/>:inProgressTasks.filter(t=>!t.due_date||(t.due_date>=todayStr&&t.due_date<=weekEndStr)).map(t=><TaskRow key={t.id} t={t}/>)}</SecCard>
         <SecCard title="업무 현황" accent="#F9A8D4">
@@ -712,7 +770,7 @@ function CalendarView({schedules,currentMonth,setCurrentMonth,todayStr,selectedS
           const isSun=idx%7===0; const isSat=idx%7===6;
           const col=(isSun||holiday)?"#F87171":isSat?"#60A5FA":"#E8E8F0";
           return <div key={day} className="cal-day" onClick={()=>onDateClick(ds)}
-            style={{minHeight:90,padding:"8px 6px",borderRight:"1px solid #2A2A4A",borderBottom:"1px solid #2A2A4A",background:isToday?"rgba(108,99,255,0.08)":holiday?"rgba(248,113,113,0.04)":"transparent",cursor:"pointer",transition:"background 0.15s",position:"relative"}}>
+            className="cal-day-cell" style={{minHeight:90,padding:"8px 6px",borderRight:"1px solid #2A2A4A",borderBottom:"1px solid #2A2A4A",background:isToday?"rgba(108,99,255,0.08)":holiday?"rgba(248,113,113,0.04)":"transparent",cursor:"pointer",transition:"background 0.15s",position:"relative"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:2}}>
               <span style={{width:26,height:26,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:"50%",background:isToday?"#6C63FF":"transparent",fontSize:13,fontWeight:isToday?800:400,color:isToday?"#fff":col}}>{day}</span>
               <span className="add-btn" style={{fontSize:16,color:"#6C63FF",fontWeight:700,lineHeight:1,paddingRight:2}}>+</span>
@@ -773,8 +831,8 @@ function Reports({schedules,tasks}){
 
 // ── 모달 공통 ─────────────────────────────────────────
 function ModalWrap({title,children,onClose,onSave}){
-  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100,padding:20}} onClick={e=>e.target===e.currentTarget&&onClose()}>
-    <div style={{background:"#161628",border:"1px solid #2A2A4A",borderRadius:16,width:"100%",maxWidth:480,padding:"24px 28px",maxHeight:"90vh",overflow:"auto"}}>
+  return <div className="modal-wrap" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100,padding:20}} onClick={e=>e.target===e.currentTarget&&onClose()}>
+    <div className="modal-box" style={{background:"#161628",border:"1px solid #2A2A4A",borderRadius:16,width:"100%",maxWidth:480,padding:"24px 28px",maxHeight:"90vh",overflow:"auto"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
         <h2 style={{margin:0,fontSize:18,fontWeight:800,color:"#A78BFA"}}>{title}</h2>
         <button onClick={onClose} style={{background:"none",border:"none",color:"#6B7280",cursor:"pointer",fontSize:22}}>×</button>

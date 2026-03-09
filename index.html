@@ -119,7 +119,7 @@ function getDayOfWeek(dateStr){
   return isNaN(d)?"":days[d.getDay()];
 }
 
-const PRIORITY_COLORS={high:{bg:"#FF4D6D",text:"#fff"},medium:{bg:"#FF9F1C",text:"#fff"},low:{bg:"#2EC4B6",text:"#fff"}};
+const PRIORITY_COLORS={high:{bg:"#FEE2E2",text:"#991B1B",border:"#F87171"},medium:{bg:"#FEF3C7",text:"#92400E",border:"#FBBF24"},low:{bg:"#D1FAE5",text:"#065F46",border:"#34D399"}};
 const TASK_STATUSES=["할 일","진행 중","검토","완료"];
 const STATUS_COLORS={"할 일":{bg:"#EEF2FF",border:"#818CF8",text:"#4338CA"},"진행 중":{bg:"#FFF7ED",border:"#FB923C",text:"#C2410C"},"검토":{bg:"#FDF4FF",border:"#C084FC",text:"#7E22CE"},"완료":{bg:"#F0FDF4",border:"#4ADE80",text:"#15803D"}};
 const PARTS=["PM파트","기획파트","SUB파트","BS파트","공정파트","안전파트","설계파트"];

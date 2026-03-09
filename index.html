@@ -200,29 +200,43 @@ function App(){
   }
 
   async function loadData(){
-    const reqAt=Date.now(); // 요청 시작 시각 기록
+    const reqAt=Date.now();
     try{
       const [s,tr,t,lv]=await Promise.all([apiGet("schedules"),apiGet("trips"),apiGet("tasks"),apiGet("leaves")]);
-      // 요청이 시작된 후에 로컬 변경이 있었으면 → 서버 응답 무시
+      // 요청 시작 후 로컬 변경이 있으면 무시 (내가 방금 저장한 데이터를 서버가 덮어쓰지 않도록)
       if(lastLocalChange.current>reqAt)return;
-      setSchedules(s); setTrips(tr); setTasks(t); setLeaves(lv);
+      // JSON 문자열 비교로 실제 변경 시에만 setState → 불필요한 리렌더 방지
+      setSchedules(prev=>{const next=JSON.stringify(s);return JSON.stringify(prev)===next?prev:s;});
+      setTrips(prev=>{const next=JSON.stringify(tr);return JSON.stringify(prev)===next?prev:tr;});
+      setTasks(prev=>{const next=JSON.stringify(t);return JSON.stringify(prev)===next?prev:t;});
+      setLeaves(prev=>{const next=JSON.stringify(lv);return JSON.stringify(prev)===next?prev:lv;});
       setLastSync(new Date()); setSyncStatus("동기화됨");
     }catch(e){setSyncStatus("오류");}
   }
 
   // 로컬 변경 시 버전 올림 → 진행 중인 폴링 응답을 무효화
   function bumpLocal(){ lastLocalChange.current=Date.now(); setSyncStatus("저장중"); }
-  function afterSave(){ lastLocalChange.current=Date.now()+1000; setSyncStatus("동기화됨"); loadData(); }
+  function afterSave(){
+    // 저장 직후 1.5초간 폴링 응답 무시 (충돌 방지)
+    lastLocalChange.current=Date.now()+1500;
+    setSyncStatus("동기화됨");
+    // 폴링 리셋 후 2초 뒤 1회 로드 (저장 완료 후 서버 반영 시간 확보)
+    clearInterval(polling.current);
+    setTimeout(()=>{
+      loadData();
+      polling.current=setInterval(loadData,3000);
+    },800);
+  }
 
   useEffect(()=>{
     if(!myName)return;
     if(initialized.current){
       // 로그인 시 이미 데이터 로드됨 → 로딩화면 없이 바로 시작
       setAppLoading(false);
-      polling.current=setInterval(loadData,1500);
+      polling.current=setInterval(loadData,3000);
     } else {
       initialize().then(()=>{
-        polling.current=setInterval(loadData,1500);
+        polling.current=setInterval(loadData,3000);
       });
     }
     return()=>clearInterval(polling.current);
@@ -495,20 +509,24 @@ function Dashboard({schedules,trips,tasks,todaySchedules,weekSchedules,weekTrips
       {/* 통계 카드 */}
       <div style={{display:"grid",gridTemplateColumns:isMobile?"repeat(2,1fr)":"repeat(6,1fr)",gap:isMobile?10:16,marginBottom:isMobile?16:24}}>
         {[
-          {label:"오늘 일정",value:todaySchedules.length,icon:"📅",color:"#6C63FF",onClick:()=>setActiveMenu("캘린더(주요일정)")},
-          {label:"이번주 일정",value:weekSchedules.length,icon:"🗓",color:"#F9A8D4",onClick:()=>setActiveMenu("캘린더(주요일정)")},
-          {label:"이번주 출장일정",value:(weekTrips||[]).length,icon:"✈️",color:"#FB923C",onClick:()=>setActiveMenu("캘린더(출장일정)")},
-          {label:"할 일",value:tasks.filter(t=>t.status==="할 일").length,icon:"📋",color:"#818CF8",onClick:()=>setActiveMenu("업무 관리")},
-          {label:"진행 중 업무",value:inProgressTasks.length,icon:"⚡",color:"#2EC4B6",onClick:()=>setActiveMenu("업무 관리")},
-          {label:"기한 초과 업무",value:overdueTasks.length,icon:"🚨",color:"#F87171",onClick:()=>setActiveMenu("업무 관리"),alert:overdueTasks.length>0},
+          {label:"오늘 일정",value:todaySchedules.length,icon:"📅",color:"#6C63FF",bg:"#EDE9FE",border:"#C4B5FD",onClick:()=>setActiveMenu("캘린더(주요일정)")},
+          {label:"이번주 일정",value:weekSchedules.length,icon:"🗓",color:"#9D174D",bg:"#FDF2F8",border:"#FBCFE8",onClick:()=>setActiveMenu("캘린더(주요일정)")},
+          {label:"이번주 출장일정",value:(weekTrips||[]).length,icon:"✈️",color:"#C2410C",bg:"#FFF7ED",border:"#FED7AA",onClick:()=>setActiveMenu("캘린더(출장일정)")},
+          {label:"할 일",value:tasks.filter(t=>t.status==="할 일").length,icon:"📋",color:"#4338CA",bg:"#EEF2FF",border:"#C7D2FE",onClick:()=>setActiveMenu("업무 관리")},
+          {label:"진행 중 업무",value:inProgressTasks.length,icon:"⚡",color:"#0F766E",bg:"#F0FDFA",border:"#99F6E4",onClick:()=>setActiveMenu("업무 관리")},
+          {label:"기한 초과 업무",value:overdueTasks.length,icon:"🚨",color:"#DC2626",bg:overdueTasks.length>0?"#FFF5F5":"#FEF2F2",border:overdueTasks.length>0?"#FCA5A5":"#FECACA",onClick:()=>setActiveMenu("업무 관리"),alert:overdueTasks.length>0},
         ].map(s=>(
           <div key={s.label} onClick={s.onClick}
-            style={{background:s.alert?"linear-gradient(135deg,#2D0A0A,#3A1010)":"linear-gradient(135deg,#161628,#1E1E3A)",border:`1px solid ${s.alert?"#F8717166":s.color+"33"}`,borderRadius:14,padding:"20px 22px",cursor:s.onClick?"pointer":"default",transition:"transform 0.2s",position:"relative",overflow:"hidden"}}
-            onMouseEnter={e=>s.onClick&&(e.currentTarget.style.transform="translateY(-2px)")} onMouseLeave={e=>(e.currentTarget.style.transform="none")}>
-            {s.alert&&<div style={{position:"absolute",top:0,left:0,right:0,height:2,background:"linear-gradient(90deg,#F87171,#FF4D6D)"}}/>}
+            style={{background:s.bg,border:`1.5px solid ${s.border}`,borderRadius:14,padding:"20px 22px",cursor:s.onClick?"pointer":"default",transition:"transform 0.2s, box-shadow 0.2s",position:"relative",overflow:"hidden",boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}
+            onMouseEnter={e=>{if(s.onClick){e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 6px 20px rgba(0,0,0,0.10)";}}}
+            onMouseLeave={e=>{e.currentTarget.style.transform="none";e.currentTarget.style.boxShadow="0 1px 4px rgba(0,0,0,0.06)";}}>
+            {s.alert&&<div style={{position:"absolute",top:0,left:0,right:0,height:3,background:"linear-gradient(90deg,#F87171,#FF4D6D)",borderRadius:"14px 14px 0 0"}}/>}
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-              <div><p style={{margin:"0 0 8px",fontSize:12,color:s.alert?"#FCA5A5":"#718096"}}>{s.label}</p><p style={{margin:0,fontSize:28,fontWeight:800,color:s.color}}>{s.value}</p></div>
-              <div style={{width:42,height:42,borderRadius:12,background:`${s.color}22`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20}}>{s.icon}</div>
+              <div>
+                <p style={{margin:"0 0 8px",fontSize:12,fontWeight:600,color:"#718096"}}>{s.label}</p>
+                <p style={{margin:0,fontSize:28,fontWeight:800,color:s.color}}>{s.value}</p>
+              </div>
+              <div style={{width:44,height:44,borderRadius:12,background:"rgba(255,255,255,0.7)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,boxShadow:"0 1px 4px rgba(0,0,0,0.08)"}}>{s.icon}</div>
             </div>
           </div>
         ))}
@@ -542,6 +560,43 @@ function Dashboard({schedules,trips,tasks,todaySchedules,weekSchedules,weekTrips
           </div>
         </div>
       )}
+
+      {/* 준공 임박 현장 배너 */}
+      {(()=>{
+        const STORAGE_KEY="teamsync-site-pm-v2";
+        let sites=[];
+        try{const d=localStorage.getItem(STORAGE_KEY);if(d)sites=JSON.parse(d);}catch{}
+        const today=new Date();
+        const urgent=sites.filter(s=>{
+          if(!s.completion)return false;
+          const diff=Math.ceil((new Date(s.completion+"T00:00:00")-today)/(1000*60*60*24));
+          return diff>=0&&diff<=30;
+        }).sort((a,b)=>a.completion.localeCompare(b.completion));
+        if(urgent.length===0)return null;
+        return <div style={{background:"linear-gradient(90deg,rgba(245,158,11,0.08),rgba(248,113,113,0.05))",border:"1px solid #FBBF24",borderRadius:14,padding:"14px 20px",marginBottom:20}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+            <span style={{fontSize:18}}>🏗</span>
+            <h3 style={{margin:0,fontSize:14,fontWeight:800,color:"#D97706"}}>준공 임박 현장 {urgent.length}건 — D-30일 이내</h3>
+            <button onClick={()=>setActiveMenu("현장별PM")} style={{marginLeft:"auto",...btn("#F59E0B"),fontSize:11,padding:"4px 12px"}}>현장 현황 →</button>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:6}}>
+            {urgent.map(s=>{
+              const days=Math.ceil((new Date(s.completion+"T00:00:00")-today)/(1000*60*60*24));
+              return <div key={s.id} style={{display:"flex",alignItems:"center",gap:12,background:"#fff",borderRadius:10,padding:"10px 16px",border:"1px solid #FDE68A",borderLeft:"4px solid #F59E0B"}}>
+                <div style={{width:36,height:36,borderRadius:"50%",background:getAvatarColor(s.pm),display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:800,color:"#fff",flexShrink:0}}>{(s.pm||"?")[0]}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <p style={{margin:0,fontSize:14,fontWeight:800,color:"#1A1A2E",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.name}</p>
+                  <p style={{margin:0,fontSize:12,color:"#718096"}}>담당 PM: <strong style={{color:"#6C63FF"}}>{s.pm}</strong>{s.location&&<span style={{marginLeft:8,color:"#A0AEC0"}}>📍 {s.location}</span>}</p>
+                </div>
+                <div style={{textAlign:"right",flexShrink:0}}>
+                  <p style={{margin:0,fontSize:13,fontWeight:800,color:days<=7?"#F87171":"#D97706"}}>D-{days}</p>
+                  <p style={{margin:0,fontSize:11,color:"#A0AEC0"}}>{s.completion}</p>
+                </div>
+              </div>;
+            })}
+          </div>
+        </div>;
+      })()}
 
       {/* 하단 섹션 - 6개 카드를 하나의 그리드로 정렬 */}
       <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr 1fr",gap:isMobile?12:20}}>
@@ -865,84 +920,129 @@ function CalendarView({schedules,currentMonth,setCurrentMonth,todayStr,selectedS
 
 // ── 현장별 PM 현황 ─────────────────────────────────────
 function SitePMBoard(){
-  const STORAGE_KEY="teamsync-site-pm-v1";
-  function loadSites(){try{const d=localStorage.getItem(STORAGE_KEY);return d?JSON.parse(d):[
-    {id:"s1",name:"○○ 신축공사",pm:"홍길동",completion:"2025-12-31",memo:""},
-    {id:"s2",name:"□□ 리모델링",pm:"이순신",completion:"2026-06-30",memo:""},
-  ];}catch{return[];}}
+  const STORAGE_KEY="teamsync-site-pm-v2";
+  const defaultSites=[
+    {id:"s1",name:"○○ 신축공사",pm:"홍길동",completion:"2025-12-31",location:"서울 강남구",scale:"지상5층",client:"○○건설",memo:""},
+    {id:"s2",name:"□□ 리모델링",pm:"이순신",completion:"2026-06-30",location:"경기 수원시",scale:"지상3층",client:"□□주택",memo:""},
+  ];
+  function loadSites(){try{const d=localStorage.getItem(STORAGE_KEY);return d?JSON.parse(d):defaultSites;}catch{return defaultSites;}}
   const [sites,setSites]=useState(loadSites);
   const [showModal,setShowModal]=useState(false);
   const [editing,setEditing]=useState(null);
-  const [form,setForm]=useState({name:"",pm:"",completion:"",memo:""});
-  function save(d){
-    const list=editing?sites.map(s=>s.id===editing.id?{...s,...d}:s):[...sites,{...d,id:`pm${Date.now()}`}];
+  const [searchQ,setSearchQ]=useState("");
+  const emptyForm={name:"",pm:"",completion:"",location:"",scale:"",client:"",memo:""};
+  const [form,setForm]=useState(emptyForm);
+  const sf=k=>e=>setForm(f=>({...f,[k]:e.target.value}));
+  function saveSite(){
+    if(!form.name.trim()||!form.pm.trim()){alert("현장명과 담당PM을 입력하세요.");return;}
+    const list=editing?sites.map(s=>s.id===editing.id?{...s,...form}:s):[...sites,{...form,id:`pm${Date.now()}`}];
     setSites(list);
     try{localStorage.setItem(STORAGE_KEY,JSON.stringify(list));}catch{}
-    setShowModal(false);setEditing(null);
+    setShowModal(false);setEditing(null);setForm(emptyForm);
   }
-  function del(id){if(!window.confirm("삭제하시겠습니까?"))return;const list=sites.filter(s=>s.id!==id);setSites(list);try{localStorage.setItem(STORAGE_KEY,JSON.stringify(list));}catch{};}
-  function openNew(){setEditing(null);setForm({name:"",pm:"",completion:"",memo:""});setShowModal(true);}
-  function openEdit(s){setEditing(s);setForm({name:s.name,pm:s.pm,completion:s.completion,memo:s.memo||""});setShowModal(true);}
-  const today=getLocalDateStr(new Date());
-  const daysLeft=d=>{if(!d)return null;const diff=Math.ceil((new Date(d+"T00:00:00")-new Date())/(1000*60*60*24));return diff;};
+  function del(id){
+    if(!window.confirm("이 현장을 삭제하시겠습니까?"))return;
+    const list=sites.filter(s=>s.id!==id);
+    setSites(list);
+    try{localStorage.setItem(STORAGE_KEY,JSON.stringify(list));}catch{}
+  }
+  function openNew(){setEditing(null);setForm(emptyForm);setShowModal(true);}
+  function openEdit(s){setEditing(s);setForm({name:s.name,pm:s.pm,completion:s.completion||"",location:s.location||"",scale:s.scale||"",client:s.client||"",memo:s.memo||""});setShowModal(true);}
+  const daysLeft=d=>{if(!d)return null;return Math.ceil((new Date(d+"T00:00:00")-new Date())/(1000*60*60*24));};
+  const q=searchQ.trim().toLowerCase();
+  const filtered=q?sites.filter(s=>s.name.toLowerCase().includes(q)||s.pm.toLowerCase().includes(q)||(s.location||"").toLowerCase().includes(q)||(s.client||"").toLowerCase().includes(q)):sites;
+  const inpSt={width:"100%",border:"1px solid #CBD5E0",borderRadius:8,padding:"10px 12px",fontSize:14,color:"#2D3748",outline:"none",boxSizing:"border-box"};
+  const lbl=(t,req)=><label style={{display:"block",fontSize:12,fontWeight:700,color:"#4A5568",marginBottom:5}}>{t}{req&&<span style={{color:"#F87171"}}> *</span>}</label>;
   return <div>
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
-      <p style={{margin:0,fontSize:13,color:"#718096"}}>현장별 PM 담당자 현황입니다. 수정 버튼으로 변경 가능합니다.</p>
-      <button onClick={openNew} style={{...btn("#6C63FF"),fontSize:13,padding:"8px 18px"}}>+ 현장 추가</button>
+    {/* 검색 + 추가 버튼 */}
+    <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:20,flexWrap:"wrap"}}>
+      <div style={{flex:1,minWidth:200,position:"relative"}}>
+        <span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",color:"#A0AEC0",fontSize:16,pointerEvents:"none"}}>🔍</span>
+        <input value={searchQ} onChange={e=>setSearchQ(e.target.value)} placeholder="현장명 또는 PM 이름으로 검색..."
+          style={{width:"100%",border:"1px solid #CBD5E0",borderRadius:10,padding:"10px 12px 10px 38px",fontSize:14,color:"#2D3748",outline:"none",boxSizing:"border-box",background:"#fff"}}/>
+        {searchQ&&<button onClick={()=>setSearchQ("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#A0AEC0",cursor:"pointer",fontSize:18,lineHeight:1}}>×</button>}
+      </div>
+      <span style={{fontSize:13,color:"#718096",whiteSpace:"nowrap"}}>{filtered.length}개 현장</span>
+      <button onClick={openNew} style={{...btn("#6C63FF"),fontSize:13,padding:"10px 20px",whiteSpace:"nowrap"}}>+ 현장 추가</button>
     </div>
-    {sites.length===0&&<div style={{textAlign:"center",padding:"48px 0",color:"#A0AEC0",fontSize:14}}>등록된 현장이 없습니다. 현장을 추가해주세요.</div>}
-    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:16}}>
-      {sites.map(s=>{
+    {/* 검색 결과 없음 */}
+    {filtered.length===0&&<div style={{textAlign:"center",padding:"48px 0",color:"#A0AEC0",fontSize:14}}>
+      {q?`"${searchQ}"에 해당하는 현장이 없습니다.`:"등록된 현장이 없습니다."}
+    </div>}
+    {/* 카드 그리드 */}
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))",gap:18}}>
+      {filtered.map(s=>{
         const days=daysLeft(s.completion);
-        const urgent=days!==null&&days<=30;
+        const urgent=days!==null&&days>=0&&days<=30;
         const done=days!==null&&days<0;
-        return <div key={s.id} style={{background:"#fff",border:`2px solid ${done?"#CBD5E0":urgent?"#FBBF24":"#6C63FF33"}`,borderRadius:16,padding:"20px 22px",boxShadow:"0 2px 8px rgba(0,0,0,0.07)",position:"relative",overflow:"hidden"}}>
-          <div style={{position:"absolute",top:0,left:0,right:0,height:4,background:done?"#CBD5E0":urgent?"linear-gradient(90deg,#FBBF24,#F87171)":"linear-gradient(90deg,#6C63FF,#9F7AEA)"}}/>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
-            <div style={{flex:1,paddingRight:10}}>
-              <p style={{margin:"0 0 2px",fontSize:11,color:"#A0AEC0",fontWeight:600,textTransform:"uppercase",letterSpacing:1}}>현장명</p>
-              <h3 style={{margin:0,fontSize:16,fontWeight:800,color:"#2D3748",lineHeight:1.3}}>{s.name}</h3>
+        const barColor=done?"#CBD5E0":urgent?"#F59E0B":"#6C63FF";
+        const dTag=done
+          ?<span style={{fontSize:11,padding:"3px 10px",borderRadius:12,background:"#F7FAFC",color:"#A0AEC0",fontWeight:700,border:"1px solid #CBD5E0"}}>준공완료</span>
+          :urgent?<span style={{fontSize:11,padding:"3px 10px",borderRadius:12,background:"#FFFBEB",color:"#D97706",fontWeight:800,border:"1px solid #FBBF24"}}>⚠ D-{days}</span>
+          :<span style={{fontSize:11,padding:"3px 10px",borderRadius:12,background:"#EDE9FE",color:"#6C63FF",fontWeight:700,border:"1px solid #C4B5FD"}}>D-{days??"-"}</span>;
+        return <div key={s.id} style={{background:"#fff",border:`1px solid ${urgent?"#FBBF24":done?"#E2E8F0":"#E2E8F0"}`,borderRadius:16,boxShadow:`0 2px 10px rgba(0,0,0,0.07)`,overflow:"hidden",display:"flex",flexDirection:"column"}}>
+          {/* 상단 컬러바 */}
+          <div style={{height:5,background:done?"#CBD5E0":urgent?"linear-gradient(90deg,#FBBF24,#F87171)":"linear-gradient(90deg,#6C63FF,#9F7AEA)"}}/>
+          <div style={{padding:"18px 20px",flex:1}}>
+            {/* 헤더 행: 현장명 + D-태그 */}
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14}}>
+              <div style={{flex:1,paddingRight:8}}>
+                <p style={{margin:"0 0 3px",fontSize:11,color:"#A0AEC0",fontWeight:600,letterSpacing:0.5}}>현장명</p>
+                <h3 style={{margin:0,fontSize:16,fontWeight:800,color:"#1A1A2E",lineHeight:1.35}}>{s.name}</h3>
+              </div>
+              {dTag}
             </div>
-            {done?<span style={{fontSize:10,padding:"3px 9px",borderRadius:12,background:"#F7FAFC",color:"#A0AEC0",fontWeight:700,border:"1px solid #CBD5E0",flexShrink:0}}>준공완료</span>
-            :urgent?<span style={{fontSize:10,padding:"3px 9px",borderRadius:12,background:"#FFFBEB",color:"#D97706",fontWeight:700,border:"1px solid #FBBF24",flexShrink:0}}>D-{days}</span>
-            :<span style={{fontSize:10,padding:"3px 9px",borderRadius:12,background:"#EDE9FE",color:"#6C63FF",fontWeight:700,border:"1px solid #C4B5FD",flexShrink:0}}>D-{days??"-"}</span>}
+            {/* PM 정보 */}
+            <div style={{display:"flex",alignItems:"center",gap:10,background:"#F8FAFC",borderRadius:10,padding:"10px 14px",marginBottom:12}}>
+              <div style={{width:38,height:38,borderRadius:"50%",background:getAvatarColor(s.pm),display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,fontWeight:800,color:"#fff",flexShrink:0}}>{(s.pm||"?")[0]}</div>
+              <div>
+                <p style={{margin:0,fontSize:11,color:"#A0AEC0",fontWeight:600}}>담당 PM</p>
+                <p style={{margin:0,fontSize:15,fontWeight:800,color:"#2D3748"}}>{s.pm||"미지정"}</p>
+              </div>
+            </div>
+            {/* 현장 상세 정보 */}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
+              {[
+                {label:"준공일자",value:s.completion?`${s.completion} (${getDayOfWeek(s.completion)})`:"-",color:done?"#A0AEC0":urgent?"#D97706":"#2D3748"},
+                {label:"현장 위치",value:s.location||"-",color:"#4A5568"},
+                {label:"규모",value:s.scale||"-",color:"#4A5568"},
+                {label:"발주처",value:s.client||"-",color:"#4A5568"},
+              ].map(({label,value,color})=><div key={label} style={{background:"#F8FAFC",borderRadius:8,padding:"8px 10px"}}>
+                <p style={{margin:"0 0 2px",fontSize:10,color:"#A0AEC0",fontWeight:600}}>{label}</p>
+                <p style={{margin:0,fontSize:12,fontWeight:700,color}}>{value}</p>
+              </div>)}
+            </div>
+            {s.memo&&<p style={{margin:0,fontSize:12,color:"#718096",background:"#FFFBEB",borderRadius:8,padding:"8px 10px",lineHeight:1.5,borderLeft:"3px solid #FBBF24"}}>📌 {s.memo}</p>}
           </div>
-          <div style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",background:"#F8FAFC",borderRadius:10,marginBottom:12}}>
-            <div style={{width:40,height:40,borderRadius:"50%",background:getAvatarColor(s.pm),display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:800,color:"#fff",flexShrink:0}}>{(s.pm||"?")[0]}</div>
-            <div>
-              <p style={{margin:0,fontSize:11,color:"#A0AEC0",fontWeight:600}}>담당 PM</p>
-              <p style={{margin:0,fontSize:15,fontWeight:800,color:"#2D3748"}}>{s.pm||"미지정"}</p>
-            </div>
+          {/* 액션 버튼 */}
+          <div style={{padding:"10px 20px 14px",display:"flex",gap:8,borderTop:"1px solid #F0F4F8"}}>
+            <button onClick={()=>openEdit(s)} style={{flex:1,...btn("#EEF2F7","#6C63FF"),fontSize:12,padding:"7px 0"}}>✏ 수정</button>
+            <button onClick={()=>del(s.id)} style={{flex:1,...btn("#FFF5F5","#F87171"),fontSize:12,padding:"7px 0"}}>🗑 삭제</button>
           </div>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:s.memo?10:0}}>
-            <div>
-              <p style={{margin:0,fontSize:11,color:"#A0AEC0",fontWeight:600}}>준공일자</p>
-              <p style={{margin:0,fontSize:13,fontWeight:700,color:done?"#A0AEC0":urgent?"#D97706":"#2D3748"}}>{s.completion?`${s.completion} (${getDayOfWeek(s.completion)})`:"-"}</p>
-            </div>
-            <div style={{display:"flex",gap:6}}>
-              <button onClick={()=>openEdit(s)} style={{...btn("#EEF2F7","#6C63FF"),fontSize:11,padding:"5px 12px"}}>✏ 수정</button>
-              <button onClick={()=>del(s.id)} style={{...btn("#FFF5F5","#F87171"),fontSize:11,padding:"5px 12px"}}>삭제</button>
-            </div>
-          </div>
-          {s.memo&&<p style={{margin:0,fontSize:12,color:"#718096",background:"#F8FAFC",borderRadius:8,padding:"8px 10px",marginTop:10,lineHeight:1.5}}>{s.memo}</p>}
         </div>;
       })}
     </div>
-    {showModal&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200,padding:16}}>
-      <div style={{background:"#fff",borderRadius:18,padding:"28px 30px",width:"100%",maxWidth:440,boxShadow:"0 8px 40px rgba(0,0,0,0.18)"}}>
+    {/* 추가/수정 모달 */}
+    {showModal&&<div style={{position:"fixed",inset:0,background:"rgba(30,30,60,0.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200,padding:16,overflowY:"auto"}}>
+      <div style={{background:"#fff",borderRadius:18,padding:"28px 30px",width:"100%",maxWidth:520,boxShadow:"0 8px 40px rgba(0,0,0,0.18)",margin:"auto"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:22}}>
-          <h2 style={{margin:0,fontSize:17,fontWeight:800,color:"#6C63FF"}}>{editing?"현장 정보 수정":"새 현장 추가"}</h2>
-          <button onClick={()=>{setShowModal(false);setEditing(null);}} style={{background:"none",border:"none",fontSize:22,color:"#A0AEC0",cursor:"pointer",lineHeight:1}}>×</button>
+          <h2 style={{margin:0,fontSize:18,fontWeight:800,color:"#6C63FF"}}>{editing?"현장 정보 수정":"새 현장 추가"}</h2>
+          <button onClick={()=>{setShowModal(false);setEditing(null);}} style={{background:"none",border:"none",fontSize:24,color:"#A0AEC0",cursor:"pointer",lineHeight:1}}>×</button>
         </div>
         <div style={{display:"flex",flexDirection:"column",gap:14}}>
-          <div><label style={{display:"block",fontSize:12,fontWeight:700,color:"#4A5568",marginBottom:5}}>현장명 *</label><input value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} placeholder="○○ 신축공사" style={{width:"100%",border:"1px solid #CBD5E0",borderRadius:8,padding:"10px 12px",fontSize:14,color:"#2D3748",outline:"none",boxSizing:"border-box"}}/></div>
-          <div><label style={{display:"block",fontSize:12,fontWeight:700,color:"#4A5568",marginBottom:5}}>담당 PM *</label><input value={form.pm} onChange={e=>setForm(f=>({...f,pm:e.target.value}))} placeholder="홍길동" style={{width:"100%",border:"1px solid #CBD5E0",borderRadius:8,padding:"10px 12px",fontSize:14,color:"#2D3748",outline:"none",boxSizing:"border-box"}}/></div>
-          <div><label style={{display:"block",fontSize:12,fontWeight:700,color:"#4A5568",marginBottom:5}}>준공일자</label><input type="date" value={form.completion} onChange={e=>setForm(f=>({...f,completion:e.target.value}))} style={{width:"100%",border:"1px solid #CBD5E0",borderRadius:8,padding:"10px 12px",fontSize:14,color:"#2D3748",outline:"none",boxSizing:"border-box"}}/></div>
-          <div><label style={{display:"block",fontSize:12,fontWeight:700,color:"#4A5568",marginBottom:5}}>비고</label><textarea value={form.memo} onChange={e=>setForm(f=>({...f,memo:e.target.value}))} rows={2} placeholder="메모 (선택)" style={{width:"100%",border:"1px solid #CBD5E0",borderRadius:8,padding:"10px 12px",fontSize:14,color:"#2D3748",outline:"none",boxSizing:"border-box",resize:"vertical"}}/></div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+            <div style={{gridColumn:"1/-1"}}>{lbl("현장명",true)}<input value={form.name} onChange={sf("name")} placeholder="○○ 신축공사" style={inpSt}/></div>
+            <div>{lbl("담당 PM",true)}<input value={form.pm} onChange={sf("pm")} placeholder="홍길동" style={inpSt}/></div>
+            <div>{lbl("준공일자")}<input type="date" value={form.completion} onChange={sf("completion")} style={inpSt}/></div>
+            <div>{lbl("현장 위치")}<input value={form.location} onChange={sf("location")} placeholder="서울 강남구" style={inpSt}/></div>
+            <div>{lbl("규모")}<input value={form.scale} onChange={sf("scale")} placeholder="지상 5층" style={inpSt}/></div>
+            <div style={{gridColumn:"1/-1"}}>{lbl("발주처")}<input value={form.client} onChange={sf("client")} placeholder="○○건설" style={inpSt}/></div>
+            <div style={{gridColumn:"1/-1"}}>{lbl("비고")}<textarea value={form.memo} onChange={sf("memo")} rows={2} placeholder="특이사항 메모" style={{...inpSt,resize:"vertical"}}/></div>
+          </div>
         </div>
         <div style={{display:"flex",gap:10,marginTop:22,justifyContent:"flex-end"}}>
           <button onClick={()=>{setShowModal(false);setEditing(null);}} style={{...btn("#F7FAFC","#718096"),border:"1px solid #CBD5E0"}}>취소</button>
-          <button onClick={()=>{if(!form.name.trim()||!form.pm.trim()){alert("현장명과 담당PM을 입력하세요.");return;}save(form);}} style={btn("#6C63FF")}>저장</button>
+          <button onClick={saveSite} style={btn("#6C63FF")}>저장</button>
         </div>
       </div>
     </div>}

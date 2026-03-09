@@ -7,7 +7,7 @@
 
 <!-- PWA 기본 설정 -->
 <link rel="manifest" href="manifest.json"/>
-<meta name="theme-color" content="#0F0F1A"/>
+<meta name="theme-color" content="#F4F6FA"/>
 <meta name="mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
@@ -26,13 +26,13 @@
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700;800&display=swap" rel="stylesheet"/>
 <style>
   *{box-sizing:border-box;margin:0;padding:0;}
-  body{background:#0F0F1A;color:#E8E8F0;font-family:'Noto Sans KR',sans-serif;}
+  body{background:#F4F6FA;color:#1A1A2E;font-family:'Noto Sans KR',sans-serif;font-size:15px;}
   ::-webkit-scrollbar{width:5px;height:5px;}
-  ::-webkit-scrollbar-track{background:#1E1E3A;}
-  ::-webkit-scrollbar-thumb{background:#3A3A6A;border-radius:3px;}
+  ::-webkit-scrollbar-track{background:#E2E8F0;}
+  ::-webkit-scrollbar-thumb{background:#A0AEC0;border-radius:3px;}
   .add-btn{opacity:0;transition:opacity 0.15s;}
   .cal-day:hover .add-btn{opacity:1!important;}
-  select option{background:#1E1E3A;color:#E8E8F0;}
+  select option{background:#fff;color:#1A1A2E;}
 
   /* ── 반응형 (CSS 보조용 - 주요 반응형은 JS useWindowSize로 처리) ── */
   @media(max-width:767px){
@@ -54,6 +54,7 @@ const API_URL = "https://script.google.com/macros/s/AKfycbx1NCMAD_PyppWDyVc_9TPC
 const SCHED_HEADERS = ["id","title","description","owner_name","owner_email","start_date","start_time","end_date","end_time","priority"];
 const TASK_HEADERS  = ["id","title","owner_name","part","start_date","due_date","progress","status"];
 const TRIP_HEADERS  = ["id","title","description","owner_name","owner_email","start_date","start_time","end_date","end_time","priority"];
+const LEAVE_HEADERS = ["id","title","description","owner_name","owner_email","start_date","start_time","end_date","end_time","priority"];
 
 async function apiGet(sheet){
   const r=await fetch(`${API_URL}?sheet=${sheet}`);
@@ -122,15 +123,15 @@ const PRIORITY_COLORS={high:{bg:"#FF4D6D",text:"#fff"},medium:{bg:"#FF9F1C",text
 const TASK_STATUSES=["할 일","진행 중","검토","완료"];
 const STATUS_COLORS={"할 일":{bg:"#EEF2FF",border:"#818CF8",text:"#4338CA"},"진행 중":{bg:"#FFF7ED",border:"#FB923C",text:"#C2410C"},"검토":{bg:"#FDF4FF",border:"#C084FC",text:"#7E22CE"},"완료":{bg:"#F0FDF4",border:"#4ADE80",text:"#15803D"}};
 const PARTS=["PM파트","기획파트","SUB파트","BS파트","공정파트","안전파트","설계파트"];
-const PART_COLORS={"PM파트":{bg:"#1E1B4B",border:"#818CF8",text:"#A5B4FC"},"기획파트":{bg:"#172554",border:"#60A5FA",text:"#93C5FD"},"SUB파트":{bg:"#14532D",border:"#4ADE80",text:"#86EFAC"},"BS파트":{bg:"#4A044E",border:"#E879F9",text:"#F0ABFC"},"공정파트":{bg:"#431407",border:"#FB923C",text:"#FED7AA"},"안전파트":{bg:"#450A0A",border:"#F87171",text:"#FCA5A5"},"설계파트":{bg:"#2E1065",border:"#C084FC",text:"#E9D5FF"}};
+const PART_COLORS={"PM파트":{bg:"#EDE9FE",border:"#818CF8",text:"#4338CA"},"기획파트":{bg:"#DBEAFE",border:"#60A5FA",text:"#1D4ED8"},"SUB파트":{bg:"#DCFCE7",border:"#4ADE80",text:"#15803D"},"BS파트":{bg:"#FAE8FF",border:"#C084FC",text:"#7E22CE"},"공정파트":{bg:"#FFF7ED",border:"#FB923C",text:"#C2410C"},"안전파트":{bg:"#FEF2F2",border:"#F87171",text:"#DC2626"},"설계파트":{bg:"#F3E8FF",border:"#C084FC",text:"#6D28D9"}};
 const HOLIDAYS={"01-01":"신정","03-01":"삼일절","05-05":"어린이날","06-06":"현충일","08-15":"광복절","10-03":"개천절","10-09":"한글날","12-25":"성탄절","2025-01-28":"설날 연휴","2025-01-29":"설날","2025-01-30":"설날 연휴","2025-05-05":"어린이날/부처님오신날","2025-10-05":"추석 연휴","2025-10-06":"추석","2025-10-07":"추석 연휴","2026-02-16":"설날 연휴","2026-02-17":"설날","2026-02-18":"설날 연휴","2026-05-24":"부처님오신날","2026-09-24":"추석 연휴","2026-09-25":"추석","2026-09-26":"추석 연휴"};
 function getHoliday(ds){return HOLIDAYS[ds]||HOLIDAYS[ds.slice(5)]||null;}
 // 전역 정렬 함수 (Dashboard 등 여러 컴포넌트에서 사용)
 function sortTasks(arr){return[...arr].sort((a,b)=>{const d=(a.start_date||"9999").localeCompare(b.start_date||"9999");return d!==0?d:(a.due_date||"9999").localeCompare(b.due_date||"9999");});}
 function sortSched(arr){return[...arr].sort((a,b)=>{const d=a.start_date.localeCompare(b.start_date);return d!==0?d:(a.start_time||"00:00").localeCompare(b.start_time||"00:00");});}
 
-const btn=(bg,color="#fff")=>({background:bg,color,border:"none",borderRadius:8,padding:"8px 16px",fontSize:13,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"});
-const inp={width:"100%",background:"#1E1E3A",border:"1px solid #2A2A4A",borderRadius:8,padding:"9px 12px",fontSize:13,color:"#E8E8F0",outline:"none",boxSizing:"border-box"};
+const btn=(bg,color="#fff")=>({background:bg,color,border:"none",borderRadius:8,padding:"8px 16px",fontSize:13,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"});
+const inp={width:"100%",background:"#fff",border:"1px solid #CBD5E0",borderRadius:8,padding:"9px 12px",fontSize:13,color:"#2D3748",outline:"none",boxSizing:"border-box"};
 
 function useWindowSize(){
   const [w,setW]=useState(window.innerWidth);
@@ -170,6 +171,11 @@ function App(){
   const [appLoading,setAppLoading]=useState(false);
   const [currentMonth2,setCurrentMonth2]=useState(new Date());
   const [selectedSched2,setSelectedSched2]=useState(null);
+  const [leaves,setLeaves]=useState([]);
+  const [currentMonth3,setCurrentMonth3]=useState(new Date());
+  const [selectedSched3,setSelectedSched3]=useState(null);
+  const [showLeaveModal,setShowLeaveModal]=useState(false);
+  const [editingLeave,setEditingLeave]=useState(null);
 
   const todayStr=getLocalDateStr(new Date());
   const weekEndDate=new Date(); weekEndDate.setDate(weekEndDate.getDate()+6);
@@ -183,7 +189,7 @@ function App(){
     try{
       setSyncStatus("연결 중");
       // apiInit은 백그라운드 (시트 생성은 오래 걸릴 수 있음)
-      Promise.all([apiInit("schedules",SCHED_HEADERS),apiInit("trips",TRIP_HEADERS),apiInit("tasks",TASK_HEADERS)]).catch(()=>{});
+      Promise.all([apiInit("schedules",SCHED_HEADERS),apiInit("trips",TRIP_HEADERS),apiInit("tasks",TASK_HEADERS),apiInit("leaves",LEAVE_HEADERS)]).catch(()=>{});
       await loadData();
       initialized.current=true;
     }catch(e){
@@ -196,10 +202,10 @@ function App(){
   async function loadData(){
     const reqAt=Date.now(); // 요청 시작 시각 기록
     try{
-      const [s,tr,t]=await Promise.all([apiGet("schedules"),apiGet("trips"),apiGet("tasks")]);
+      const [s,tr,t,lv]=await Promise.all([apiGet("schedules"),apiGet("trips"),apiGet("tasks"),apiGet("leaves")]);
       // 요청이 시작된 후에 로컬 변경이 있었으면 → 서버 응답 무시
       if(lastLocalChange.current>reqAt)return;
-      setSchedules(s); setTrips(tr); setTasks(t);
+      setSchedules(s); setTrips(tr); setTasks(t); setLeaves(lv);
       setLastSync(new Date()); setSyncStatus("동기화됨");
     }catch(e){setSyncStatus("오류");}
   }
@@ -229,11 +235,12 @@ function App(){
   const inProgressTasks =sortTasks(tasks.filter(t=>t.status==="진행 중"));
   const overdueTasks    =tasks.filter(t=>t.due_date&&t.due_date<todayStr&&t.status!=="완료").sort((a,b)=>a.due_date.localeCompare(b.due_date));
 
-  const menus=["대시보드","캘린더(주요일정)","캘린더(출장일정)","일정 관리","업무 관리","리포트"];
-  const menuIcons={"대시보드":"▦","캘린더(주요일정)":"🗓","캘린더(출장일정)":"✈️","일정 관리":"📅","업무 관리":"✓","리포트":"📊"};
+  const menus=["대시보드","캘린더(주요일정)","캘린더(출장일정)","캘린더(연차일정)","일정 관리","업무 관리","현장별PM","리포트"];
+  const menuIcons={"대시보드":"▦","캘린더(주요일정)":"🗓","캘린더(출장일정)":"✈️","캘린더(연차일정)":"🌴","일정 관리":"📅","업무 관리":"✓","현장별PM":"🏗","리포트":"📊"};
   const newSchedDef={title:"",description:"",owner_name:myName||"",owner_email:"",start_date:todayStr,start_time:"09:00",end_date:todayStr,end_time:"18:00",priority:"medium"};
   const newTripDef={title:"",description:"",owner_name:myName||"",owner_email:"",start_date:todayStr,start_time:"09:00",end_date:todayStr,end_time:"18:00",priority:"medium"};
   const newTaskDef={title:"",owner_name:myName||"",part:"",start_date:todayStr,due_date:"",progress:0,status:"할 일"};
+  const newLeaveDef={title:"연차",description:"",owner_name:myName||"",owner_email:"",start_date:todayStr,start_time:"09:00",end_date:todayStr,end_time:"18:00",priority:"low"};
 
   async function saveSched(data){
     const isEdit=!!data.id;
@@ -262,6 +269,25 @@ function App(){
       setConfirmDlg(null);
       bumpLocal();
       apiDelete("trips",id).then(()=>afterSave()).catch(()=>{setSyncStatus("오류");});
+    }});
+  }
+  function saveLeave(data){
+    const isEdit=!!data.id;
+    const row={...data,id:data.id||`lv${Date.now()}`};
+    const updated=isEdit?leaves.map(s=>s.id===row.id?row:s):[...leaves,row];
+    setLeaves(updated);
+    setShowLeaveModal(false);
+    setEditingLeave(null);
+    bumpLocal();
+    apiUpsert("leaves",row).then(()=>afterSave()).catch(()=>{setSyncStatus("오류");});
+  }
+  async function deleteLeave(id){
+    const target=leaves.find(s=>s.id===id);
+    setConfirmDlg({message:`"${target?.title}" 연차일정을 삭제하시겠습니까?`,onConfirm:()=>{
+      setLeaves(leaves.filter(s=>s.id!==id));
+      setConfirmDlg(null);
+      bumpLocal();
+      apiDelete("leaves",id).then(()=>afterSave()).catch(()=>{setSyncStatus("오류");});
     }});
   }
   async function deleteSched(id){
@@ -343,32 +369,32 @@ function App(){
   }
 
   if(!myName) return (
-    <div style={{height:"100vh",background:"#0F0F1A",display:"flex",alignItems:"center",justifyContent:"center"}}>
-      <div className="login-box" style={{background:"#161628",border:"1px solid #2A2A4A",borderRadius:20,padding:"44px 48px",width:380,textAlign:"center"}}>
+    <div style={{height:"100vh",background:"#F4F6FA",display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div className="login-box" style={{background:"#FFFFFF",border:"1px solid #E2E8F0",borderRadius:20,padding:"44px 48px",boxShadow:"0 4px 24px rgba(0,0,0,0.10)",width:380,textAlign:"center"}}>
         <div style={{width:64,height:64,borderRadius:18,background:"linear-gradient(135deg,#6C63FF,#FF6B9D)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,margin:"0 auto 20px"}}>🏢</div>
-        <h1 style={{margin:"0 0 6px",fontSize:24,fontWeight:800,color:"#A78BFA"}}>TeamSync</h1>
-        <p style={{color:"#6B7280",fontSize:13,margin:"0 0 28px"}}>건축공사팀 일정관리 플랫폼</p>
-        <p style={{color:"#8B8BAD",fontSize:13,margin:"0 0 10px",textAlign:"left"}}>이름을 입력하고 시작하세요</p>
+        <h1 style={{margin:"0 0 6px",fontSize:24,fontWeight:800,color:"#6C63FF"}}>TeamSync</h1>
+        <p style={{color:"#718096",fontSize:13,margin:"0 0 28px"}}>건축공사팀 일정관리 플랫폼</p>
+        <p style={{color:"#4A5568",fontSize:13,margin:"0 0 10px",textAlign:"left"}}>이름을 입력하고 시작하세요</p>
         <input value={nameInput} onChange={e=>{setNameInput(e.target.value);setLoginError("");}}
           onKeyDown={e=>{if(e.key==="Enter")handleLogin();}}
           placeholder="홍길동" autoFocus
-          style={{width:"100%",background:"#1E1E3A",border:`1px solid ${loginError?"#F8717166":"#6C63FF66"}`,borderRadius:10,padding:"11px 14px",fontSize:15,color:"#E8E8F0",outline:"none",boxSizing:"border-box",marginBottom:loginError?8:12}}/>
+          style={{width:"100%",background:"#EEF2F7",border:`1px solid ${loginError?"#F8717166":"#6C63FF66"}`,borderRadius:10,padding:"11px 14px",fontSize:15,color:"#2D3748",outline:"none",boxSizing:"border-box",marginBottom:loginError?8:12}}/>
         {loginError&&<p style={{color:"#F87171",fontSize:12,margin:"0 0 12px",textAlign:"left"}}>{loginError}</p>}
         <button onClick={handleLogin} disabled={loginLoading}
-          style={{width:"100%",background:loginLoading?"#2A2A4A":"linear-gradient(90deg,#6C63FF,#9C5CF7)",border:"none",borderRadius:10,padding:12,fontSize:14,fontWeight:700,color:loginLoading?"#6B7280":"#fff",cursor:loginLoading?"not-allowed":"pointer"}}>
+          style={{width:"100%",background:loginLoading?"#CBD5E0":"linear-gradient(90deg,#6C63FF,#9C5CF7)",border:"none",borderRadius:10,padding:12,fontSize:14,fontWeight:700,color:loginLoading?"#718096":"#fff",cursor:loginLoading?"not-allowed":"pointer"}}>
           {loginLoading?"확인 중...":"입장하기 →"}
         </button>
-        <p style={{color:"#4B4B6B",fontSize:11,marginTop:16}}>※ 건축공사팀 등록 인원만 입장 가능합니다</p>
+        <p style={{color:"#A0AEC0",fontSize:11,marginTop:16}}>※ 건축공사팀 등록 인원만 입장 가능합니다</p>
       </div>
     </div>
   );
 
   if(appLoading) return (
-    <div style={{height:"100vh",background:"#0F0F1A",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16}}>
+    <div style={{height:"100vh",background:"#F4F6FA",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16}}>
       <div style={{width:48,height:48,borderRadius:14,background:"linear-gradient(135deg,#6C63FF,#FF6B9D)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24}}>🏢</div>
-      <p style={{color:"#A78BFA",fontSize:15,fontWeight:700,margin:0}}>TeamSync</p>
-      <p style={{color:"#6B7280",fontSize:13,margin:0}}>데이터를 불러오는 중...</p>
-      <div style={{width:200,height:3,background:"#1E1E3A",borderRadius:3,overflow:"hidden",marginTop:8}}>
+      <p style={{color:"#6C63FF",fontSize:15,fontWeight:700,margin:0}}>TeamSync</p>
+      <p style={{color:"#718096",fontSize:13,margin:0}}>데이터를 불러오는 중...</p>
+      <div style={{width:200,height:3,background:"#EEF2F7",borderRadius:3,overflow:"hidden",marginTop:8}}>
         <div style={{height:"100%",background:"linear-gradient(90deg,#6C63FF,#FF6B9D)",borderRadius:3,animation:"loading 1.5s ease-in-out infinite"}}/>
       </div>
       <style>{`@keyframes loading{0%{width:0%}50%{width:80%}100%{width:100%}}`}</style>
@@ -376,55 +402,58 @@ function App(){
   );
 
   return (
-    <div style={{display:"flex",height:"100vh",background:"#0F0F1A",color:"#E8E8F0",overflow:"hidden"}}>
+    <div style={{display:"flex",height:"100vh",background:"#F4F6FA",color:"#2D3748",overflow:"hidden"}}>
       {/* 사이드바 */}
-      <div style={{width:isMobile?0:(isTablet||!sidebarOpen)?64:224,transition:"width 0.3s",background:"linear-gradient(180deg,#161628,#1A1A35)",borderRight:isMobile?"none":"1px solid #2A2A4A",display:isMobile?"none":"flex",flexDirection:"column",padding:"0 0 16px",flexShrink:0}}>
-        <div style={{padding:"20px 16px 24px",borderBottom:"1px solid #2A2A4A",display:"flex",alignItems:"center",gap:10}}>
+      <div style={{width:isMobile?0:(isTablet||!sidebarOpen)?64:224,transition:"width 0.3s",background:"linear-gradient(180deg,#FFFFFF,#F8FAFC)",borderRight:isMobile?"none":"1px solid #E2E8F0",display:isMobile?"none":"flex",flexDirection:"column",padding:"0 0 16px",flexShrink:0}}>
+        <div style={{padding:"20px 16px 24px",borderBottom:"1px solid #EEF2F7",display:"flex",alignItems:"center",gap:10}}>
           <div style={{width:36,height:36,borderRadius:10,background:"linear-gradient(135deg,#6C63FF,#FF6B9D)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>🏢</div>
-          {(sidebarOpen&&!isTablet)&&<span style={{fontWeight:800,fontSize:15,color:"#A78BFA"}}>TeamSync</span>}
-          <div style={{marginLeft:"auto",cursor:"pointer",color:"#6B7280",fontSize:18}} onClick={()=>setSidebarOpen(v=>!v)}>{sidebarOpen?"◀":"▶"}</div>
+          {(sidebarOpen&&!isTablet)&&<span style={{fontWeight:800,fontSize:15,color:"#6C63FF"}}>TeamSync</span>}
+          <div style={{marginLeft:"auto",cursor:"pointer",color:"#718096",fontSize:18}} onClick={()=>setSidebarOpen(v=>!v)}>{sidebarOpen?"◀":"▶"}</div>
         </div>
         <nav style={{padding:"16px 8px",flex:1}}>
           {menus.map(m=>(
-            <div key={m} onClick={()=>setActiveMenu(m)} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 12px",borderRadius:10,marginBottom:4,cursor:"pointer",background:activeMenu===m?"linear-gradient(90deg,rgba(108,99,255,0.2),rgba(255,107,157,0.1))":"transparent",borderLeft:activeMenu===m?"3px solid #6C63FF":"3px solid transparent",color:activeMenu===m?"#A78BFA":"#8B8BAD"}}>
+            <div key={m} onClick={()=>setActiveMenu(m)} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 12px",borderRadius:10,marginBottom:4,cursor:"pointer",background:activeMenu===m?"linear-gradient(90deg,rgba(108,99,255,0.12),rgba(255,107,157,0.1))":"transparent",borderLeft:activeMenu===m?"3px solid #6C63FF":"3px solid transparent",color:activeMenu===m?"#6C63FF":"#4A5568"}}>
               <span style={{fontSize:16,flexShrink:0}}>{menuIcons[m]}</span>
-              {(sidebarOpen&&!isTablet)&&<span style={{fontSize:13,fontWeight:activeMenu===m?700:400,whiteSpace:"nowrap"}}>{m}</span>}
+              {(sidebarOpen&&!isTablet)&&<span style={{fontSize:14,fontWeight:activeMenu===m?700:500,whiteSpace:"nowrap"}}>{m}</span>}
             </div>
           ))}
         </nav>
         <div style={{padding:"0 12px"}}>
-          <div style={{background:"#1E1E3A",borderRadius:10,padding:"8px 12px",display:"flex",alignItems:"center",gap:8}}>
+          <div style={{background:"#EEF2F7",borderRadius:10,padding:"8px 12px",display:"flex",alignItems:"center",gap:8}}>
             <div style={{width:8,height:8,borderRadius:"50%",background:syncStatus==="동기화됨"?"#4ADE80":syncStatus==="저장중"?"#FB923C":"#F87171",flexShrink:0,boxShadow:syncStatus==="동기화됨"?"0 0 6px #4ADE80":"none"}}/>
-            {(sidebarOpen&&!isTablet)&&<span style={{fontSize:11,color:"#6B7280",flex:1}}>{syncStatus==="동기화됨"?"실시간 동기화":syncStatus==="저장중"?"저장 중...":syncStatus}</span>}
+            {(sidebarOpen&&!isTablet)&&<span style={{fontSize:11,color:"#718096",flex:1}}>{syncStatus==="동기화됨"?"실시간 동기화":syncStatus==="저장중"?"저장 중...":syncStatus}</span>}
           </div>
         </div>
       </div>
 
       {/* 메인 */}
       <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column"}}>
-        <div style={{padding:isMobile?"10px 12px":"16px 28px",borderBottom:"1px solid #2A2A4A",background:"#0F0F1A",display:"flex",alignItems:"center",gap:isMobile?8:16,flexShrink:0}}>
+        <div style={{padding:isMobile?"10px 12px":"16px 28px",borderBottom:"1px solid #EEF2F7",background:"#F4F6FA",display:"flex",alignItems:"center",gap:isMobile?8:16,flexShrink:0}}>
           <div style={{flex:1,minWidth:0}}>
-            <h1 style={{margin:0,fontSize:isMobile?15:20,fontWeight:800,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{activeMenu}</h1>
-            {!isMobile&&<p style={{margin:0,fontSize:12,color:"#6B7280"}}>마지막 동기화: {lastSync.toLocaleTimeString("ko-KR")}</p>}
+            <h1 style={{margin:0,fontSize:isMobile?16:22,fontWeight:800,color:"#1A1A2E",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{activeMenu}</h1>
+            {!isMobile&&<p style={{margin:0,fontSize:12,color:"#718096"}}>마지막 동기화: {lastSync.toLocaleTimeString("ko-KR")}</p>}
           </div>
           <div style={{display:"flex",gap:isMobile?6:10,alignItems:"center",flexShrink:0}}>
             {(activeMenu==="일정 관리"||activeMenu==="캘린더(주요일정)")&&<button onClick={()=>{setEditingSched(null);setShowSchedModal(true);}} style={{...btn("#6C63FF"),fontSize:isMobile?11:13,padding:isMobile?"6px 10px":"8px 16px"}}>{isMobile?"+ 추가":"+ 일정 추가"}</button>}
             {activeMenu==="캘린더(출장일정)"&&<button onClick={()=>{setEditingTrip(null);setShowTripModal(true);}} style={{...btn("#FB923C"),fontSize:isMobile?11:13,padding:isMobile?"6px 10px":"8px 16px"}}>{isMobile?"+ 추가":"+ 출장일정 추가"}</button>}
+            {activeMenu==="캘린더(연차일정)"&&<button onClick={()=>{setEditingLeave(null);setShowLeaveModal(true);}} style={{...btn("#4ADE80","#15803D"),fontSize:isMobile?11:13,padding:isMobile?"6px 10px":"8px 16px"}}>{isMobile?"+ 추가":"+ 연차 추가"}</button>}
             {activeMenu==="업무 관리"&&<button onClick={()=>{setEditingTask(null);setShowTaskModal(true);}} style={{...btn("#2EC4B6"),fontSize:isMobile?11:13,padding:isMobile?"6px 10px":"8px 16px"}}>{isMobile?"+ 추가":"+ 업무 추가"}</button>}
-            <button onClick={loadData} style={{...btn("#2A2A4A","#A78BFA"),padding:"8px 12px"}}>↻</button>
-            <div style={{display:"flex",alignItems:"center",gap:6,background:"#1E1E3A",borderRadius:10,padding:isMobile?"5px 8px":"6px 12px"}}>
+            <button onClick={loadData} style={{...btn("#CBD5E0","#6C63FF"),padding:"8px 12px"}}>↻</button>
+            <div style={{display:"flex",alignItems:"center",gap:6,background:"#F7FAFC",border:"1px solid #E2E8F0",borderRadius:10,padding:isMobile?"5px 8px":"6px 12px"}}>
               <div style={{width:24,height:24,borderRadius:"50%",background:getAvatarColor(myName),display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:"#fff",flexShrink:0}}>{myName[0]}</div>
               {!isMobile&&<span style={{fontSize:13,fontWeight:600}}>{myName}</span>}
-              <span title="이름 변경" onClick={()=>{try{sessionStorage.removeItem("ts-name");}catch{}setMyName("");setNameInput("");}} style={{fontSize:14,color:"#6B7280",cursor:"pointer"}}>⏏</span>
+              <span title="이름 변경" onClick={()=>{try{sessionStorage.removeItem("ts-name");}catch{}setMyName("");setNameInput("");}} style={{fontSize:14,color:"#718096",cursor:"pointer"}}>⏏</span>
             </div>
           </div>
         </div>
-        <div style={{flex:1,overflow:"auto",padding:isMobile?"10px 8px 72px 8px":isTablet?"16px 16px":"24px 28px"}}>
+        <div style={{flex:1,overflowX:"auto",overflowY:"auto",padding:isMobile?"10px 8px 72px 8px":isTablet?"16px 16px":"24px 28px"}}>
           {activeMenu==="대시보드"&&<Dashboard schedules={schedules} trips={trips} tasks={tasks} todaySchedules={todaySchedules} weekSchedules={weekSchedules} weekTrips={weekTrips} urgentSchedules={urgentSchedules} inProgressTasks={inProgressTasks} overdueTasks={overdueTasks} setActiveMenu={setActiveMenu} todayStr={todayStr} weekEndStr={weekEndStr} isMobile={isMobile} onSchedClick={s=>{setCurrentMonth(new Date(s.start_date+"T00:00:00"));setSelectedSched(s);setActiveMenu("캘린더(주요일정)");}} onTripClick={s=>{setCurrentMonth2(new Date(s.start_date+"T00:00:00"));setSelectedSched2(s);setActiveMenu("캘린더(출장일정)");}}/>}
           {activeMenu==="일정 관리"&&<ScheduleBoard schedules={schedules} onEdit={s=>{setEditingSched(s);setShowSchedModal(true);}} onDelete={deleteSched} isMobile={isMobile}/>}
           {activeMenu==="업무 관리"&&<TaskBoard tasks={tasks} onEdit={t=>{setEditingTask(t);setShowTaskModal(true);}} onDelete={deleteTask} onStatusChange={updateTaskStatus} isMobile={isMobile}/>}
           {activeMenu==="캘린더(주요일정)"&&<CalendarView schedules={schedules} currentMonth={currentMonth} setCurrentMonth={setCurrentMonth} todayStr={todayStr} selectedSched={selectedSched} setSelectedSched={setSelectedSched} onDateClick={d=>{setEditingSched(null);setShowSchedModal({prefillDate:d});}} onEditSched={s=>{setEditingSched(s);setShowSchedModal(true);}} onDeleteSched={deleteSched} isMobile={isMobile}/>}
           {activeMenu==="캘린더(출장일정)"&&<CalendarView schedules={trips} currentMonth={currentMonth2} setCurrentMonth={setCurrentMonth2} todayStr={todayStr} selectedSched={selectedSched2} setSelectedSched={setSelectedSched2} onDateClick={d=>{setEditingTrip(null);setShowTripModal({prefillDate:d});}} onEditSched={s=>{setEditingTrip(s);setShowTripModal(true);}} onDeleteSched={deleteTrip} showOwner={true} isMobile={isMobile}/>}
+          {activeMenu==="캘린더(연차일정)"&&<CalendarView schedules={leaves} currentMonth={currentMonth3} setCurrentMonth={setCurrentMonth3} todayStr={todayStr} selectedSched={selectedSched3} setSelectedSched={setSelectedSched3} onDateClick={d=>{setEditingLeave(null);setShowLeaveModal({prefillDate:d});}} onEditSched={s=>{setEditingLeave(s);setShowLeaveModal(true);}} onDeleteSched={deleteLeave} showOwner={true} isMobile={isMobile}/>}
+          {activeMenu==="현장별PM"&&<SitePMBoard/>}
           {activeMenu==="리포트"&&<Reports schedules={schedules} tasks={tasks}/>}
         </div>
       </div>
@@ -432,25 +461,26 @@ function App(){
       {/* 모달들 */}
       {showSchedModal&&<SchedModal initial={editingSched||(showSchedModal?.prefillDate?{...newSchedDef,start_date:showSchedModal.prefillDate,end_date:showSchedModal.prefillDate}:newSchedDef)} onSave={saveSched} onClose={()=>{setShowSchedModal(false);setEditingSched(null);}} isEdit={!!editingSched}/>}
       {showTripModal&&<SchedModal initial={editingTrip||(showTripModal?.prefillDate?{...newTripDef,start_date:showTripModal.prefillDate,end_date:showTripModal.prefillDate}:newTripDef)} onSave={saveTrip} onClose={()=>{setShowTripModal(false);setEditingTrip(null);}} isEdit={!!editingTrip} modalTitle="출장일정"/>}
+      {showLeaveModal&&<SchedModal initial={editingLeave||(showLeaveModal?.prefillDate?{...newLeaveDef,start_date:showLeaveModal.prefillDate,end_date:showLeaveModal.prefillDate}:newLeaveDef)} onSave={saveLeave} onClose={()=>{setShowLeaveModal(false);setEditingLeave(null);}} isEdit={!!editingLeave} modalTitle="연차일정"/>}
       {showTaskModal&&<TaskModal_ initial={editingTask||newTaskDef} onSave={saveTask} onClose={()=>{setShowTaskModal(false);setEditingTask(null);}} isEdit={!!editingTask}/>}
       {confirmDlg&&(
-        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200}}>
-          <div style={{background:"#161628",border:"1px solid #F8717144",borderRadius:16,padding:"28px 32px",maxWidth:380,width:"90%",textAlign:"center"}}>
+        <div style={{position:"fixed",inset:0,background:"rgba(30,30,60,0.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200}}>
+          <div style={{background:"#FFFFFF",border:"1px solid #FEB2B2",borderRadius:16,padding:"28px 32px",maxWidth:380,width:"90%",textAlign:"center"}}>
             <div style={{fontSize:36,marginBottom:12}}>🗑️</div>
-            <p style={{color:"#E8E8F0",fontSize:15,fontWeight:600,marginBottom:20}}>{confirmDlg.message}</p>
+            <p style={{color:"#2D3748",fontSize:15,fontWeight:600,marginBottom:20}}>{confirmDlg.message}</p>
             <div style={{display:"flex",gap:10,justifyContent:"center"}}>
-              <button onClick={()=>setConfirmDlg(null)} style={{...btn("#2A2A4A","#8B8BAD"),padding:"10px 24px"}}>취소</button>
+              <button onClick={()=>setConfirmDlg(null)} style={{...btn("#CBD5E0","#4A5568"),padding:"10px 24px"}}>취소</button>
               <button onClick={()=>{confirmDlg.onConfirm();setConfirmDlg(null);}} style={{...btn("#F87171"),padding:"10px 24px"}}>삭제</button>
             </div>
           </div>
         </div>
       )}
     {/* 모바일 하단 내비 */}
-      <div className="mobile-nav" style={{display:isMobile?"flex":"none",position:"fixed",bottom:0,left:0,right:0,background:"#161628",borderTop:"1px solid #2A2A4A",zIndex:50,padding:"6px 0",justifyContent:"space-around",alignItems:"center"}}>
+      <div className="mobile-nav" style={{display:isMobile?"flex":"none",position:"fixed",bottom:0,left:0,right:0,background:"#FFFFFF",borderTop:"1px solid #CBD5E0",zIndex:50,padding:"6px 0",justifyContent:"space-around",alignItems:"center"}}>
         {menus.map(m=>(
-          <div key={m} onClick={()=>setActiveMenu(m)} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2,padding:"4px 8px",cursor:"pointer",color:activeMenu===m?"#A78BFA":"#6B7280",flex:1}}>
+          <div key={m} onClick={()=>setActiveMenu(m)} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2,padding:"4px 8px",cursor:"pointer",color:activeMenu===m?"#6C63FF":"#718096",flex:1}}>
             <span style={{fontSize:18}}>{menuIcons[m]}</span>
-            <span style={{fontSize:9,fontWeight:activeMenu===m?700:400,textAlign:"center",lineHeight:1.2}}>{m.replace("캘린더(","").replace(")","").replace("일정 관리","일정").replace("업무 관리","업무").replace("리포트","리포트")}</span>
+            <span style={{fontSize:9,fontWeight:activeMenu===m?700:400,textAlign:"center",lineHeight:1.2}}>{m.replace("캘린더(","").replace(")","").replace("일정 관리","일정").replace("업무 관리","업무")}</span>
           </div>
         ))}
       </div>
@@ -477,7 +507,7 @@ function Dashboard({schedules,trips,tasks,todaySchedules,weekSchedules,weekTrips
             onMouseEnter={e=>s.onClick&&(e.currentTarget.style.transform="translateY(-2px)")} onMouseLeave={e=>(e.currentTarget.style.transform="none")}>
             {s.alert&&<div style={{position:"absolute",top:0,left:0,right:0,height:2,background:"linear-gradient(90deg,#F87171,#FF4D6D)"}}/>}
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-              <div><p style={{margin:"0 0 8px",fontSize:12,color:s.alert?"#FCA5A5":"#6B7280"}}>{s.label}</p><p style={{margin:0,fontSize:28,fontWeight:800,color:s.color}}>{s.value}</p></div>
+              <div><p style={{margin:"0 0 8px",fontSize:12,color:s.alert?"#FCA5A5":"#718096"}}>{s.label}</p><p style={{margin:0,fontSize:28,fontWeight:800,color:s.color}}>{s.value}</p></div>
               <div style={{width:42,height:42,borderRadius:12,background:`${s.color}22`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20}}>{s.icon}</div>
             </div>
           </div>
@@ -486,7 +516,7 @@ function Dashboard({schedules,trips,tasks,todaySchedules,weekSchedules,weekTrips
 
       {/* 기한 초과 배너 */}
       {overdueTasks.length>0&&(
-        <div style={{background:"linear-gradient(90deg,rgba(248,113,113,0.12),rgba(255,77,109,0.08))",border:"1px solid #F8717144",borderRadius:14,padding:"14px 20px",marginBottom:20}}>
+        <div style={{background:"linear-gradient(90deg,rgba(248,113,113,0.08),rgba(255,77,109,0.05))",border:"1px solid #FEB2B2",borderRadius:14,padding:"14px 20px",marginBottom:20}}>
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
             <span style={{fontSize:18}}>🚨</span>
             <h3 style={{margin:0,fontSize:14,fontWeight:800,color:"#F87171"}}>기한 초과 업무 {overdueTasks.length}건 — 즉시 확인이 필요합니다</h3>
@@ -497,14 +527,14 @@ function Dashboard({schedules,trips,tasks,todaySchedules,weekSchedules,weekTrips
               const pc=PART_COLORS[t.part];
               const sc=STATUS_COLORS[t.status]||STATUS_COLORS["할 일"];
               const daysOver=Math.floor((new Date()-new Date(t.due_date+"T00:00:00"))/(1000*60*60*24));
-              return <div key={t.id} style={{display:"grid",gridTemplateColumns:"120px 1fr 110px 130px 80px",gap:10,alignItems:"center",background:"rgba(0,0,0,0.2)",borderRadius:8,padding:"8px 14px",borderLeft:"3px solid #F87171"}}>
-                {t.part?<span style={{fontSize:10,padding:"2px 8px",borderRadius:10,background:pc?.bg||"#2A2A4A",color:pc?.text||"#8B8BAD",border:`1px solid ${pc?.border||"#3A3A5A"}`,fontWeight:700}}>{t.part}</span>:<span style={{fontSize:10,color:"#4B4B6B"}}>—</span>}
+              return <div key={t.id} style={{display:"grid",gridTemplateColumns:"120px 1fr 110px 130px 80px",gap:10,alignItems:"center",background:"rgba(0,0,0,0.05)",borderRadius:8,padding:"8px 14px",borderLeft:"3px solid #F87171"}}>
+                {t.part?<span style={{fontSize:10,padding:"2px 8px",borderRadius:10,background:pc?.bg||"#CBD5E0",color:pc?.text||"#4A5568",border:`1px solid ${pc?.border||"#A0AEC0"}`,fontWeight:700}}>{t.part}</span>:<span style={{fontSize:10,color:"#A0AEC0"}}>—</span>}
                 <p style={{margin:0,fontSize:13,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.title}</p>
                 <div style={{display:"flex",alignItems:"center",gap:5}}>
                   <div style={{width:18,height:18,borderRadius:"50%",background:getAvatarColor(t.owner_name),display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:"#fff",flexShrink:0}}>{(t.owner_name||"?")[0]}</div>
-                  <span style={{fontSize:12,color:"#A78BFA",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.owner_name}</span>
+                  <span style={{fontSize:12,color:"#6C63FF",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.owner_name}</span>
                 </div>
-                <span style={{fontSize:11,color:"#F87171",fontWeight:700}}>{t.due_date}<span style={{fontSize:10,color:"#FCA5A5",marginLeft:3}}>({getDayOfWeek(t.due_date)}) {daysOver}일 초과</span></span>
+                <span style={{fontSize:11,color:"#F87171",fontWeight:700}}>{t.due_date}<span style={{fontSize:10,color:"#FC8181",marginLeft:3}}>({getDayOfWeek(t.due_date)}) {daysOver}일 초과</span></span>
                 <span style={{fontSize:10,padding:"2px 7px",borderRadius:6,background:sc.bg,color:sc.text,fontWeight:700,border:`1px solid ${sc.border}`}}>{t.status}</span>
               </div>;
             })}
@@ -521,16 +551,16 @@ function Dashboard({schedules,trips,tasks,todaySchedules,weekSchedules,weekTrips
         <SecCard title="할 일 (1주일 이내)" accent="#818CF8">{sortTasks(tasks.filter(t=>t.status==="할 일"&&(!t.due_date||(t.due_date>=todayStr&&t.due_date<=weekEndStr)))).length===0?<Empty text="1주일 이내 할 일 없음"/>:sortTasks(tasks.filter(t=>t.status==="할 일"&&(!t.due_date||(t.due_date>=todayStr&&t.due_date<=weekEndStr)))).map(t=><TaskRow key={t.id} t={t}/>)}</SecCard>
         <SecCard title="진행 중 업무 (1주일 이내)" accent="#2EC4B6">{inProgressTasks.filter(t=>!t.due_date||(t.due_date>=todayStr&&t.due_date<=weekEndStr)).length===0?<Empty text="1주일 이내 진행 중 업무 없음"/>:inProgressTasks.filter(t=>!t.due_date||(t.due_date>=todayStr&&t.due_date<=weekEndStr)).map(t=><TaskRow key={t.id} t={t}/>)}</SecCard>
         <SecCard title="업무 현황" accent="#F9A8D4">
-          {TASK_STATUSES.map(st=>{const count=tasks.filter(t=>t.status===st).length;const pct=tasks.length?Math.round(count/tasks.length*100):0;const c=STATUS_COLORS[st];return <div key={st} style={{marginBottom:10}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:12,color:c.text}}>{st}</span><span style={{fontSize:12,color:"#6B7280"}}>{count}개 ({pct}%)</span></div><div style={{height:6,background:"#2A2A4A",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${pct}%`,background:c.border,borderRadius:3,transition:"width 0.5s"}}/></div></div>;})}
+          {TASK_STATUSES.map(st=>{const count=tasks.filter(t=>t.status===st).length;const pct=tasks.length?Math.round(count/tasks.length*100):0;const c=STATUS_COLORS[st];return <div key={st} style={{marginBottom:10}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:12,color:c.text}}>{st}</span><span style={{fontSize:12,color:"#718096"}}>{count}개 ({pct}%)</span></div><div style={{height:6,background:"#CBD5E0",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${pct}%`,background:c.border,borderRadius:3,transition:"width 0.5s"}}/></div></div>;})}
         </SecCard>
       </div>
     </div>
   );
 }
-function SecCard({title,accent,children}){return <div style={{background:"#161628",border:`1px solid ${accent}33`,borderRadius:14,padding:"18px 20px"}}><h3 style={{margin:"0 0 14px",fontSize:14,fontWeight:700,color:accent}}>{title}</h3>{children}</div>;}
-function Empty({text}){return <p style={{color:"#4B4B6B",fontSize:13,textAlign:"center",padding:"12px 0"}}>{text}</p>;}
-function SchedRow({s,onClick}){const pc=PRIORITY_COLORS[s.priority]||PRIORITY_COLORS.medium;return <div onClick={()=>onClick&&onClick(s)} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 6px",borderBottom:"1px solid #2A2A4A",borderRadius:6,cursor:onClick?"pointer":"default",transition:"background 0.15s"}} onMouseEnter={e=>{if(onClick)e.currentTarget.style.background="rgba(108,99,255,0.08)";}} onMouseLeave={e=>e.currentTarget.style.background="transparent"}><div style={{width:8,height:8,borderRadius:"50%",background:pc.bg,flexShrink:0}}/><div style={{flex:1,minWidth:0}}><p style={{margin:0,fontSize:13,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.title}</p><p style={{margin:0,fontSize:11,color:"#6B7280"}}>{s.owner_name}</p><p style={{margin:"2px 0 0",fontSize:11,color:"#8B8BAD"}}>{s.start_date}<span style={{color:"#C4B5FD",marginLeft:3}}>({getDayOfWeek(s.start_date)})</span>{s.start_time&&<span style={{color:"#A78BFA"}}> {s.start_time}</span>}{" → "}{s.end_date}<span style={{color:"#C4B5FD",marginLeft:3}}>({getDayOfWeek(s.end_date)})</span>{s.end_time&&<span style={{color:"#A78BFA"}}> {s.end_time}</span>}</p></div><div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}><span style={{fontSize:10,padding:"2px 7px",borderRadius:5,background:pc.bg,color:pc.text}}>{s.priority==="high"?"높음":s.priority==="medium"?"중간":"낮음"}</span>{onClick&&<span style={{fontSize:10,color:"#6B7280"}}>→</span>}</div></div>;}
-function TaskRow({t}){const c=STATUS_COLORS[t.status]||STATUS_COLORS["할 일"];return <div style={{padding:"8px 0",borderBottom:"1px solid #2A2A4A"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}><span style={{fontSize:13,fontWeight:600,flex:1,paddingRight:8}}>{t.title}</span><span style={{fontSize:11,color:c.text,padding:"2px 7px",borderRadius:5,background:c.bg,flexShrink:0}}>{t.status}</span></div>{t.owner_name&&<div style={{display:"flex",alignItems:"center",gap:5,marginBottom:4}}><div style={{width:16,height:16,borderRadius:"50%",background:getAvatarColor(t.owner_name),display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:"#fff",flexShrink:0}}>{t.owner_name[0]}</div><span style={{fontSize:11,color:"#A78BFA",fontWeight:600}}>{t.owner_name}</span></div>}<div style={{display:"flex",gap:10,margin:"3px 0 4px",flexWrap:"wrap"}}>{t.start_date&&<p style={{margin:0,fontSize:10,color:"#8B8BAD"}}>🗓 시작: {t.start_date} ({getDayOfWeek(t.start_date)})</p>}{t.due_date&&<p style={{margin:0,fontSize:10,color:"#FB923C"}}>📅 완료예정: {t.due_date} ({getDayOfWeek(t.due_date)})</p>}</div><div style={{display:"flex",alignItems:"center",gap:8}}><div style={{flex:1,height:5,background:"#2A2A4A",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${t.progress}%`,background:c.border,borderRadius:3}}/></div><span style={{fontSize:11,color:"#6B7280",flexShrink:0}}>{t.progress}%</span></div></div>;}
+function SecCard({title,accent,children}){return <div style={{background:"#FFFFFF",boxShadow:"0 1px 4px rgba(0,0,0,0.06)",border:`2px solid ${accent}33`,borderRadius:14,padding:"18px 20px"}}><h3 style={{margin:"0 0 14px",fontSize:15,fontWeight:800,color:accent}}>{title}</h3>{children}</div>;}
+function Empty({text}){return <p style={{color:"#A0AEC0",fontSize:13,textAlign:"center",padding:"12px 0"}}>{text}</p>;}
+function SchedRow({s,onClick}){const pc=PRIORITY_COLORS[s.priority]||PRIORITY_COLORS.medium;return <div onClick={()=>onClick&&onClick(s)} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 6px",borderBottom:"1px solid #EEF2F7",borderRadius:6,cursor:onClick?"pointer":"default",transition:"background 0.15s"}} onMouseEnter={e=>{if(onClick)e.currentTarget.style.background="rgba(108,99,255,0.06)";}} onMouseLeave={e=>e.currentTarget.style.background="transparent"}><div style={{width:8,height:8,borderRadius:"50%",background:pc.bg,flexShrink:0}}/><div style={{flex:1,minWidth:0}}><p style={{margin:0,fontSize:13,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.title}</p><p style={{margin:0,fontSize:11,color:"#718096"}}>{s.owner_name}</p><p style={{margin:"2px 0 0",fontSize:11,color:"#4A5568"}}>{s.start_date}<span style={{color:"#9F7AEA",marginLeft:3}}>({getDayOfWeek(s.start_date)})</span>{s.start_time&&<span style={{color:"#6C63FF"}}> {s.start_time}</span>}{" → "}{s.end_date}<span style={{color:"#9F7AEA",marginLeft:3}}>({getDayOfWeek(s.end_date)})</span>{s.end_time&&<span style={{color:"#6C63FF"}}> {s.end_time}</span>}</p></div><div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}><span style={{fontSize:10,padding:"2px 7px",borderRadius:5,background:pc.bg,color:pc.text}}>{s.priority==="high"?"높음":s.priority==="medium"?"중간":"낮음"}</span>{onClick&&<span style={{fontSize:10,color:"#718096"}}>→</span>}</div></div>;}
+function TaskRow({t}){const c=STATUS_COLORS[t.status]||STATUS_COLORS["할 일"];return <div style={{padding:"8px 0",borderBottom:"1px solid #EEF2F7"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}><span style={{fontSize:13,fontWeight:600,flex:1,paddingRight:8}}>{t.title}</span><span style={{fontSize:11,color:c.text,padding:"2px 7px",borderRadius:5,background:c.bg,flexShrink:0}}>{t.status}</span></div>{t.owner_name&&<div style={{display:"flex",alignItems:"center",gap:5,marginBottom:4}}><div style={{width:16,height:16,borderRadius:"50%",background:getAvatarColor(t.owner_name),display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:"#fff",flexShrink:0}}>{t.owner_name[0]}</div><span style={{fontSize:11,color:"#6C63FF",fontWeight:600}}>{t.owner_name}</span></div>}<div style={{display:"flex",gap:10,margin:"3px 0 4px",flexWrap:"wrap"}}>{t.start_date&&<p style={{margin:0,fontSize:10,color:"#4A5568"}}>🗓 시작: {t.start_date} ({getDayOfWeek(t.start_date)})</p>}{t.due_date&&<p style={{margin:0,fontSize:10,color:"#FB923C"}}>📅 완료예정: {t.due_date} ({getDayOfWeek(t.due_date)})</p>}</div><div style={{display:"flex",alignItems:"center",gap:8}}><div style={{flex:1,height:5,background:"#CBD5E0",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${t.progress}%`,background:c.border,borderRadius:3}}/></div><span style={{fontSize:11,color:"#718096",flexShrink:0}}>{t.progress}%</span></div></div>;}
 
 // ── 일정 관리 (리스트형) ──────────────────────────────
 function ScheduleBoard({schedules,onEdit,onDelete,isMobile=false}){
@@ -554,29 +584,29 @@ function ScheduleBoard({schedules,onEdit,onDelete,isMobile=false}){
   return <div>
     <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:isMobile?"nowrap":"wrap",alignItems:"center",overflowX:isMobile?"auto":"visible",paddingBottom:isMobile?4:0}}>
       {["all","high","medium","low"].map(f=>(
-        <button key={f} onClick={()=>setPriority(f)} style={{padding:"6px 14px",borderRadius:20,border:"none",cursor:"pointer",fontSize:12,fontWeight:600,background:priority===f?"#6C63FF":"#1E1E3A",color:priority===f?"#fff":"#8B8BAD"}}>
+        <button key={f} onClick={()=>setPriority(f)} style={{padding:"6px 14px",borderRadius:20,border:"none",cursor:"pointer",fontSize:12,fontWeight:600,background:priority===f?"#6C63FF":"#EEF2F7",color:priority===f?"#fff":"#4A5568"}}>
           {f==="all"?"전체":f==="high"?"높음":f==="medium"?"중간":"낮음"}
         </button>
       ))}
-      <button onClick={()=>setShowFilter(v=>!v)} style={{padding:"6px 14px",borderRadius:20,border:showFilter?"1px solid #6C63FF":"1px solid #2A2A4A",cursor:"pointer",fontSize:12,fontWeight:600,background:showFilter?"rgba(108,99,255,0.2)":"#1E1E3A",color:"#A78BFA"}}>
+      <button onClick={()=>setShowFilter(v=>!v)} style={{padding:"6px 14px",borderRadius:20,border:showFilter?"1px solid #6C63FF":"1px solid #CBD5E0",cursor:"pointer",fontSize:12,fontWeight:600,background:showFilter?"rgba(108,99,255,0.12)":"#EEF2F7",color:"#6C63FF"}}>
         🔍 필터{hasFilter?" ●":""}
       </button>
-      <span style={{marginLeft:"auto",fontSize:12,color:"#6B7280"}}>총 {filtered.length}개</span>
+      <span style={{marginLeft:"auto",fontSize:12,color:"#718096"}}>총 {filtered.length}개</span>
     </div>
     {showFilter&&(
-      <div style={{background:"#161628",border:"1px solid #2A2A4A",borderRadius:12,padding:"16px 20px",marginBottom:16,display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}}>
-        <div><label style={{display:"block",fontSize:11,color:"#8B8BAD",marginBottom:5,fontWeight:600}}>시작일 (이후)</label><input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)} style={inp}/></div>
-        <div><label style={{display:"block",fontSize:11,color:"#8B8BAD",marginBottom:5,fontWeight:600}}>시작일 (이전)</label><input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)} style={inp}/></div>
-        <div><label style={{display:"block",fontSize:11,color:"#8B8BAD",marginBottom:5,fontWeight:600}}>담당자 이름</label><input value={nameFilter} onChange={e=>setNameFilter(e.target.value)} placeholder="이름 검색..." style={inp}/></div>
-        {hasFilter&&<div style={{gridColumn:"1/-1",textAlign:"right"}}><button onClick={()=>{setPriority("all");setDateFrom("");setDateTo("");setNameFilter("");}} style={{...btn("#2A2A4A","#F87171"),fontSize:11,padding:"4px 12px"}}>초기화</button></div>}
+      <div style={{background:"#FFFFFF",border:"1px solid #CBD5E0",borderRadius:12,padding:"16px 20px",marginBottom:16,display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}}>
+        <div><label style={{display:"block",fontSize:11,color:"#4A5568",marginBottom:5,fontWeight:600}}>시작일 (이후)</label><input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)} style={inp}/></div>
+        <div><label style={{display:"block",fontSize:11,color:"#4A5568",marginBottom:5,fontWeight:600}}>시작일 (이전)</label><input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)} style={inp}/></div>
+        <div><label style={{display:"block",fontSize:11,color:"#4A5568",marginBottom:5,fontWeight:600}}>담당자 이름</label><input value={nameFilter} onChange={e=>setNameFilter(e.target.value)} placeholder="이름 검색..." style={inp}/></div>
+        {hasFilter&&<div style={{gridColumn:"1/-1",textAlign:"right"}}><button onClick={()=>{setPriority("all");setDateFrom("");setDateTo("");setNameFilter("");}} style={{...btn("#CBD5E0","#F87171"),fontSize:11,padding:"4px 12px"}}>초기화</button></div>}
       </div>
     )}
-    {!isMobile&&<div style={{background:"#1E1E3A",borderRadius:"10px 10px 0 0",padding:"10px 20px",display:"grid",gridTemplateColumns:"1fr 120px 150px 150px 80px 90px",gap:12,alignItems:"center",borderBottom:"1px solid #2A2A4A"}}>
+    {!isMobile&&<div style={{background:"#F7FAFC",borderRadius:"10px 10px 0 0",padding:"10px 20px",display:"grid",gridTemplateColumns:"1fr 120px 150px 150px 80px 90px",gap:12,alignItems:"center",borderBottom:"1px solid #EEF2F7"}}>
       {["제목","담당자","시작","종료","중요도",""].map((h,i)=>(
-        <span key={i} style={{fontSize:11,fontWeight:700,color:"#6B7280",textAlign:i===5?"right":"left"}}>{h}</span>
+        <span key={i} style={{fontSize:11,fontWeight:700,color:"#718096",textAlign:i===5?"right":"left"}}>{h}</span>
       ))}
     </div>}
-    <div style={{background:"#161628",border:"1px solid #2A2A4A",borderTop:isMobile?"1px solid #2A2A4A":"none",borderRadius:isMobile?"10px":"0 0 10px 10px",overflow:"hidden"}}>
+    <div style={{background:"#FFFFFF",border:"1px solid #CBD5E0",borderTop:isMobile?"1px solid #CBD5E0":"none",borderRadius:isMobile?"10px":"0 0 10px 10px",overflow:"hidden"}}>
       {filtered.length===0&&<Empty text="조건에 맞는 일정이 없습니다."/>}
       {groupedDates.map((date,di)=>{
         const dayItems=grouped[date];
@@ -584,56 +614,56 @@ function ScheduleBoard({schedules,onEdit,onDelete,isMobile=false}){
         const dayName=DAY_NAMES[d.getDay()];
         const isWeekend=d.getDay()===0||d.getDay()===6;
         return <div key={date}>
-          <div style={{padding:"8px 20px",background:"rgba(108,99,255,0.07)",borderBottom:"1px solid #2A2A4A",display:"flex",alignItems:"center",gap:10}}>
-            <span style={{fontSize:13,fontWeight:800,color:isWeekend?"#F87171":"#A78BFA"}}>{date}</span>
-            <span style={{fontSize:12,color:isWeekend?"#F87171":"#6B7280",fontWeight:600}}>({dayName})</span>
-            <span style={{fontSize:11,color:"#4B4B6B"}}>{dayItems.length}건</span>
+          <div style={{padding:"8px 20px",background:"rgba(108,99,255,0.05)",borderBottom:"1px solid #EEF2F7",display:"flex",alignItems:"center",gap:10}}>
+            <span style={{fontSize:13,fontWeight:800,color:isWeekend?"#F87171":"#6C63FF"}}>{date}</span>
+            <span style={{fontSize:12,color:isWeekend?"#F87171":"#718096",fontWeight:600}}>({dayName})</span>
+            <span style={{fontSize:11,color:"#A0AEC0"}}>{dayItems.length}건</span>
           </div>
           {dayItems.map((s,si)=>{
             const pc=PRIORITY_COLORS[s.priority]||PRIORITY_COLORS.medium;
             const isLast=di===groupedDates.length-1&&si===dayItems.length-1;
-            if(isMobile) return <div key={s.id} style={{padding:"12px 14px",borderBottom:isLast?"none":"1px solid #2A2A4A22",position:"relative",background:"transparent"}}>
+            if(isMobile) return <div key={s.id} style={{padding:"12px 14px",borderBottom:isLast?"none":"1px solid #EEF2F7",position:"relative",background:"transparent"}}>
               <div style={{position:"absolute",left:0,top:0,bottom:0,width:3,background:pc.bg,borderRadius:2}}/>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4,paddingLeft:8}}>
                 <p style={{margin:0,fontSize:14,fontWeight:700,flex:1,paddingRight:8}}>{s.title}</p>
                 <span style={{fontSize:10,padding:"2px 7px",borderRadius:5,background:pc.bg,color:pc.text,fontWeight:700,flexShrink:0}}>{s.priority==="high"?"높음":s.priority==="medium"?"중간":"낮음"}</span>
               </div>
-              {s.description&&<p style={{margin:"0 0 5px 8px",fontSize:11,color:"#6B7280"}}>{s.description}</p>}
+              {s.description&&<p style={{margin:"0 0 5px 8px",fontSize:11,color:"#718096"}}>{s.description}</p>}
               <div style={{display:"flex",alignItems:"center",gap:8,paddingLeft:8,marginBottom:5}}>
                 <div style={{width:18,height:18,borderRadius:"50%",background:getAvatarColor(s.owner_name),display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:"#fff",flexShrink:0}}>{(s.owner_name||"?")[0]}</div>
-                <span style={{fontSize:12,color:"#A78BFA",fontWeight:600}}>{s.owner_name}</span>
+                <span style={{fontSize:12,color:"#6C63FF",fontWeight:600}}>{s.owner_name}</span>
               </div>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",paddingLeft:8}}>
-                <div style={{fontSize:11,color:"#8B8BAD"}}>
+                <div style={{fontSize:11,color:"#4A5568"}}>
                   <span>{s.start_date}{s.start_time&&" "+s.start_time}</span>
-                  <span style={{margin:"0 5px",color:"#4B4B6B"}}>→</span>
+                  <span style={{margin:"0 5px",color:"#A0AEC0"}}>→</span>
                   <span>{s.end_date}{s.end_time&&" "+s.end_time}</span>
                 </div>
                 <div style={{display:"flex",gap:4}}>
-                  <button onClick={()=>onEdit(s)} style={{...btn("#2A2A4A","#A78BFA"),fontSize:11,padding:"4px 10px"}}>수정</button>
-                  <button onClick={()=>onDelete(s.id)} style={{...btn("#2A2A4A","#F87171"),fontSize:11,padding:"4px 10px"}}>삭제</button>
+                  <button onClick={()=>onEdit(s)} style={{...btn("#CBD5E0","#6C63FF"),fontSize:11,padding:"4px 10px"}}>수정</button>
+                  <button onClick={()=>onDelete(s.id)} style={{...btn("#CBD5E0","#F87171"),fontSize:11,padding:"4px 10px"}}>삭제</button>
                 </div>
               </div>
             </div>;
             return <div key={s.id}
-              style={{display:"grid",gridTemplateColumns:"1fr 120px 150px 150px 80px 90px",gap:12,alignItems:"center",padding:"11px 20px",borderBottom:isLast?"none":"1px solid #2A2A4A22",position:"relative",transition:"background 0.15s"}}
-              onMouseEnter={e=>e.currentTarget.style.background="rgba(108,99,255,0.05)"}
+              style={{display:"grid",gridTemplateColumns:"1fr 120px 150px 150px 80px 90px",gap:12,alignItems:"center",padding:"11px 20px",borderBottom:isLast?"none":"1px solid #EEF2F7",position:"relative",transition:"background 0.15s"}}
+              onMouseEnter={e=>e.currentTarget.style.background="rgba(108,99,255,0.04)"}
               onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
               <div style={{position:"absolute",left:0,top:0,bottom:0,width:3,background:pc.bg,borderRadius:2}}/>
               <div style={{minWidth:0,paddingLeft:8}}>
                 <p style={{margin:0,fontSize:13,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.title}</p>
-                {s.description&&<p style={{margin:"2px 0 0",fontSize:11,color:"#6B7280",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.description}</p>}
+                {s.description&&<p style={{margin:"2px 0 0",fontSize:11,color:"#718096",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.description}</p>}
               </div>
               <div style={{display:"flex",alignItems:"center",gap:6,minWidth:0}}>
                 <div style={{width:20,height:20,borderRadius:"50%",background:getAvatarColor(s.owner_name),display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:"#fff",flexShrink:0}}>{(s.owner_name||"?")[0]}</div>
-                <span style={{fontSize:12,color:"#A78BFA",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.owner_name}</span>
+                <span style={{fontSize:12,color:"#6C63FF",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.owner_name}</span>
               </div>
-              <span style={{fontSize:12,color:"#E8E8F0"}}>{s.start_date}{s.start_time&&<span style={{color:"#A78BFA",marginLeft:4,fontSize:11}}>{s.start_time}</span>}</span>
-              <span style={{fontSize:12,color:"#E8E8F0"}}>{s.end_date}{s.end_time&&<span style={{color:"#A78BFA",marginLeft:4,fontSize:11}}>{s.end_time}</span>}</span>
+              <span style={{fontSize:12,color:"#2D3748"}}>{s.start_date}{s.start_time&&<span style={{color:"#6C63FF",marginLeft:4,fontSize:11}}>{s.start_time}</span>}</span>
+              <span style={{fontSize:12,color:"#2D3748"}}>{s.end_date}{s.end_time&&<span style={{color:"#6C63FF",marginLeft:4,fontSize:11}}>{s.end_time}</span>}</span>
               <span style={{fontSize:10,padding:"3px 8px",borderRadius:6,background:pc.bg,color:pc.text,fontWeight:700,textAlign:"center"}}>{s.priority==="high"?"높음":s.priority==="medium"?"중간":"낮음"}</span>
               <div style={{display:"flex",gap:4,justifyContent:"flex-end"}}>
-                <button onClick={()=>onEdit(s)} style={{...btn("#2A2A4A","#A78BFA"),fontSize:11,padding:"4px 8px"}}>수정</button>
-                <button onClick={()=>onDelete(s.id)} style={{...btn("#2A2A4A","#F87171"),fontSize:11,padding:"4px 8px"}}>삭제</button>
+                <button onClick={()=>onEdit(s)} style={{...btn("#CBD5E0","#6C63FF"),fontSize:11,padding:"4px 8px"}}>수정</button>
+                <button onClick={()=>onDelete(s.id)} style={{...btn("#CBD5E0","#F87171"),fontSize:11,padding:"4px 8px"}}>삭제</button>
               </div>
             </div>;
           })}
@@ -664,57 +694,57 @@ function TaskBoard({tasks,onEdit,onDelete,onStatusChange,isMobile=false}){
       {["전체",...PARTS].map(p=>{
         const pc=PART_COLORS[p];
         const count=p==="전체"?tasks.length:tasks.filter(t=>t.part===p).length;
-        return <button key={p} onClick={()=>setActivePart(p)} style={{padding:"6px 14px",borderRadius:20,cursor:"pointer",fontSize:12,fontWeight:600,border:`1px solid ${activePart===p?(pc?.border||"#6C63FF"):"#2A2A4A"}`,background:activePart===p?(pc?.bg||"rgba(108,99,255,0.3)"):"#1E1E3A",color:activePart===p?(pc?.text||"#fff"):"#8B8BAD",display:"flex",alignItems:"center",gap:5}}>{p}<span style={{fontSize:10,opacity:0.7}}>({count})</span></button>;
+        return <button key={p} onClick={()=>setActivePart(p)} style={{padding:"6px 14px",borderRadius:20,cursor:"pointer",fontSize:12,fontWeight:600,border:`1px solid ${activePart===p?(pc?.border||"#6C63FF"):"#CBD5E0"}`,background:activePart===p?(pc?.bg||"rgba(108,99,255,0.3)"):"#EEF2F7",color:activePart===p?(pc?.text||"#fff"):"#4A5568",display:"flex",alignItems:"center",gap:5}}>{p}<span style={{fontSize:10,opacity:0.7}}>({count})</span></button>;
       })}
     </div>
     <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
       {["전체",...TASK_STATUSES].map(s=>{
         const c=STATUS_COLORS[s];
-        return <button key={s} onClick={()=>setStatusFilter(s)} style={{padding:"5px 12px",borderRadius:20,cursor:"pointer",fontSize:11,fontWeight:600,border:"none",background:statusFilter===s?(c?.border||"#6C63FF"):"#1E1E3A",color:statusFilter===s?"#fff":"#8B8BAD"}}>{s}</button>;
+        return <button key={s} onClick={()=>setStatusFilter(s)} style={{padding:"5px 12px",borderRadius:20,cursor:"pointer",fontSize:11,fontWeight:600,border:"none",background:statusFilter===s?(c?.border||"#6C63FF"):"#EEF2F7",color:statusFilter===s?"#fff":"#4A5568"}}>{s}</button>;
       })}
       <input value={nameFilter} onChange={e=>setNameFilter(e.target.value)} placeholder="🔍 담당자 검색" style={{...inp,width:160,fontSize:12,padding:"5px 12px",marginLeft:"auto"}}/>
-      <span style={{fontSize:12,color:"#6B7280"}}>총 {visibleTasks.length}건</span>
+      <span style={{fontSize:12,color:"#718096"}}>총 {visibleTasks.length}건</span>
     </div>
-    {!isMobile&&<div style={{background:"#1E1E3A",borderRadius:"10px 10px 0 0",padding:"10px 20px",display:"grid",gridTemplateColumns:"130px 1fr 110px 110px 110px 90px 160px 90px",gap:10,alignItems:"center",borderBottom:"1px solid #2A2A4A"}}>
+    {!isMobile&&<div style={{background:"#F7FAFC",borderRadius:"10px 10px 0 0",padding:"10px 20px",display:"grid",gridTemplateColumns:"130px 1fr 110px 110px 110px 90px 160px 90px",gap:10,alignItems:"center",borderBottom:"1px solid #EEF2F7"}}>
       {["파트","제목","담당자","시작일","완료예정일","진행률","상태",""].map((h,i)=>(
-        <span key={i} style={{fontSize:11,fontWeight:700,color:"#6B7280",textAlign:i===7?"right":"left"}}>{h}</span>
+        <span key={i} style={{fontSize:11,fontWeight:700,color:"#718096",textAlign:i===7?"right":"left"}}>{h}</span>
       ))}
     </div>}
-    <div style={{background:"#161628",border:"1px solid #2A2A4A",borderTop:isMobile?"1px solid #2A2A4A":"none",borderRadius:isMobile?"10px":"0 0 10px 10px",overflow:"hidden"}}>
+    <div style={{background:"#FFFFFF",border:"1px solid #CBD5E0",borderTop:isMobile?"1px solid #CBD5E0":"none",borderRadius:isMobile?"10px":"0 0 10px 10px",overflow:"hidden"}}>
       {visibleTasks.length===0&&<Empty text="조건에 맞는 업무가 없습니다."/>}
       {groupOrder.map((part,gi)=>{
         const partTasks=grouped[part]||[];
         const pc=PART_COLORS[part];
         return <div key={part}>
-          <div style={{padding:"8px 20px",background:pc?`${pc.bg}99`:"rgba(42,42,74,0.6)",borderBottom:"1px solid #2A2A4A",display:"flex",alignItems:"center",gap:10}}>
-            <span style={{fontSize:12,fontWeight:800,color:pc?.text||"#A78BFA"}}>{part}</span>
-            <span style={{fontSize:11,color:pc?.border||"#6B7280"}}>{partTasks.length}건</span>
+          <div style={{padding:"8px 20px",background:pc?`${pc.bg}99`:"rgba(203,213,224,0.5)",borderBottom:"1px solid #EEF2F7",display:"flex",alignItems:"center",gap:10}}>
+            <span style={{fontSize:12,fontWeight:800,color:pc?.text||"#6C63FF"}}>{part}</span>
+            <span style={{fontSize:11,color:pc?.border||"#718096"}}>{partTasks.length}건</span>
           </div>
           {partTasks.map((task,ti)=>{
             const tpc=PART_COLORS[task.part];
             const sc=STATUS_COLORS[task.status]||STATUS_COLORS["할 일"];
             const isLast=gi===groupOrder.length-1&&ti===partTasks.length-1;
             const isOverdue=task.due_date&&task.due_date<today&&task.status!=="완료";
-            if(isMobile) return <div key={task.id} style={{padding:"12px 14px",borderBottom:isLast?"none":"1px solid #2A2A4A22",position:"relative"}}>
-              <div style={{position:"absolute",left:0,top:0,bottom:0,width:3,background:tpc?.border||"#3A3A5A",borderRadius:2}}/>
+            if(isMobile) return <div key={task.id} style={{padding:"12px 14px",borderBottom:isLast?"none":"1px solid #EEF2F7",position:"relative"}}>
+              <div style={{position:"absolute",left:0,top:0,bottom:0,width:3,background:tpc?.border||"#A0AEC0",borderRadius:2}}/>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",paddingLeft:8,marginBottom:5}}>
                 <div style={{flex:1,paddingRight:8}}>
-                  {task.part&&<span style={{fontSize:9,padding:"2px 7px",borderRadius:8,background:tpc?.bg||"#2A2A4A",color:tpc?.text||"#8B8BAD",border:`1px solid ${tpc?.border||"#3A3A5A"}`,fontWeight:700,marginRight:6}}>{task.part}</span>}
+                  {task.part&&<span style={{fontSize:9,padding:"2px 7px",borderRadius:8,background:tpc?.bg||"#CBD5E0",color:tpc?.text||"#4A5568",border:`1px solid ${tpc?.border||"#A0AEC0"}`,fontWeight:700,marginRight:6}}>{task.part}</span>}
                   <p style={{margin:"4px 0 0",fontSize:14,fontWeight:700,lineHeight:1.3}}>{task.title}</p>
                 </div>
                 <div style={{display:"flex",gap:4,flexShrink:0}}>
-                  <button onClick={()=>onEdit(task)} style={{...btn("#2A2A4A","#A78BFA"),fontSize:10,padding:"3px 8px"}}>수정</button>
-                  <button onClick={()=>onDelete(task.id)} style={{...btn("#2A2A4A","#F87171"),fontSize:10,padding:"3px 8px"}}>삭제</button>
+                  <button onClick={()=>onEdit(task)} style={{...btn("#CBD5E0","#6C63FF"),fontSize:10,padding:"3px 8px"}}>수정</button>
+                  <button onClick={()=>onDelete(task.id)} style={{...btn("#CBD5E0","#F87171"),fontSize:10,padding:"3px 8px"}}>삭제</button>
                 </div>
               </div>
               <div style={{display:"flex",alignItems:"center",gap:8,paddingLeft:8,marginBottom:5}}>
                 <div style={{width:18,height:18,borderRadius:"50%",background:getAvatarColor(task.owner_name),display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:"#fff",flexShrink:0}}>{(task.owner_name||"?")[0]}</div>
-                <span style={{fontSize:12,color:"#A78BFA",fontWeight:600}}>{task.owner_name}</span>
-                {task.start_date&&<span style={{fontSize:10,color:"#8B8BAD",marginLeft:4}}>시작 {task.start_date}</span>}
+                <span style={{fontSize:12,color:"#6C63FF",fontWeight:600}}>{task.owner_name}</span>
+                {task.start_date&&<span style={{fontSize:10,color:"#4A5568",marginLeft:4}}>시작 {task.start_date}</span>}
                 {isOverdue&&<span style={{fontSize:10,color:"#F87171",fontWeight:700}}>⚠ 기한초과</span>}
               </div>
               <div style={{display:"flex",alignItems:"center",gap:8,paddingLeft:8}}>
-                <div style={{flex:1,height:6,background:"#2A2A4A",borderRadius:3,overflow:"hidden"}}>
+                <div style={{flex:1,height:6,background:"#CBD5E0",borderRadius:3,overflow:"hidden"}}>
                   <div style={{height:"100%",width:`${task.progress}%`,background:sc.border,borderRadius:3}}/>
                 </div>
                 <span style={{fontSize:10,color:sc.border,fontWeight:700,flexShrink:0,minWidth:28}}>{task.progress}%</span>
@@ -725,20 +755,20 @@ function TaskBoard({tasks,onEdit,onDelete,onStatusChange,isMobile=false}){
               </div>
             </div>;
             return <div key={task.id}
-              style={{display:"grid",gridTemplateColumns:"130px 1fr 110px 110px 110px 90px 160px 90px",gap:10,alignItems:"center",padding:"11px 20px",borderBottom:isLast?"none":"1px solid #2A2A4A22",position:"relative",transition:"background 0.15s"}}
-              onMouseEnter={e=>e.currentTarget.style.background="rgba(108,99,255,0.05)"}
+              style={{display:"grid",gridTemplateColumns:"130px 1fr 110px 110px 110px 90px 160px 90px",gap:10,alignItems:"center",padding:"11px 20px",borderBottom:isLast?"none":"1px solid #EEF2F7",position:"relative",transition:"background 0.15s"}}
+              onMouseEnter={e=>e.currentTarget.style.background="rgba(108,99,255,0.04)"}
               onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-              <div style={{position:"absolute",left:0,top:0,bottom:0,width:3,background:tpc?.border||"#3A3A5A",borderRadius:2}}/>
-              <div style={{paddingLeft:8}}>{task.part?<span style={{fontSize:10,padding:"3px 9px",borderRadius:10,background:tpc?.bg||"#2A2A4A",color:tpc?.text||"#8B8BAD",border:`1px solid ${tpc?.border||"#3A3A5A"}`,fontWeight:700}}>{task.part}</span>:<span style={{fontSize:10,color:"#4B4B6B"}}>—</span>}</div>
-              <p style={{margin:0,fontSize:13,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{task.title}</p>
+              <div style={{position:"absolute",left:0,top:0,bottom:0,width:3,background:tpc?.border||"#A0AEC0",borderRadius:2}}/>
+              <div style={{paddingLeft:8}}>{task.part?<span style={{fontSize:10,padding:"3px 9px",borderRadius:10,background:tpc?.bg||"#CBD5E0",color:tpc?.text||"#4A5568",border:`1px solid ${tpc?.border||"#A0AEC0"}`,fontWeight:700}}>{task.part}</span>:<span style={{fontSize:10,color:"#A0AEC0"}}>—</span>}</div>
+              <p title={task.title} onClick={e=>{e.currentTarget.style.whiteSpace=e.currentTarget.style.whiteSpace==="normal"?"nowrap":"normal";e.currentTarget.style.overflow=e.currentTarget.style.overflow==="visible"?"hidden":"visible";}} style={{margin:0,fontSize:13,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",cursor:"pointer",userSelect:"none"}}>{task.title}</p>
               <div style={{display:"flex",alignItems:"center",gap:5,minWidth:0}}>
                 <div style={{width:20,height:20,borderRadius:"50%",background:getAvatarColor(task.owner_name),display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:"#fff",flexShrink:0}}>{(task.owner_name||"?")[0]}</div>
-                <span style={{fontSize:12,color:"#A78BFA",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{task.owner_name}</span>
+                <span style={{fontSize:12,color:"#6C63FF",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{task.owner_name}</span>
               </div>
-              <span style={{fontSize:12,color:task.start_date?"#E8E8F0":"#4B4B6B"}}>{task.start_date?<span>{task.start_date} <span style={{color:"#C4B5FD"}}>({getDayOfWeek(task.start_date)})</span></span>:"—"}</span>
-              <span style={{fontSize:12,color:isOverdue?"#F87171":task.due_date?"#FB923C":"#4B4B6B",fontWeight:isOverdue?700:400}}>{task.due_date?<span>{task.due_date} <span style={{color:"#C4B5FD"}}>({getDayOfWeek(task.due_date)})</span></span>:"—"}{isOverdue&&<span style={{marginLeft:3}}>⚠</span>}</span>
+              <span style={{fontSize:12,color:task.start_date?"#2D3748":"#A0AEC0"}}>{task.start_date?<span>{task.start_date} <span style={{color:"#9F7AEA"}}>({getDayOfWeek(task.start_date)})</span></span>:"—"}</span>
+              <span style={{fontSize:12,color:isOverdue?"#F87171":task.due_date?"#FB923C":"#A0AEC0",fontWeight:isOverdue?700:400}}>{task.due_date?<span>{task.due_date} <span style={{color:"#9F7AEA"}}>({getDayOfWeek(task.due_date)})</span></span>:"—"}{isOverdue&&<span style={{marginLeft:3}}>⚠</span>}</span>
               <div style={{display:"flex",alignItems:"center",gap:6}}>
-                <div style={{flex:1,height:5,background:"#2A2A4A",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${task.progress}%`,background:sc.border,borderRadius:3,transition:"width 0.4s"}}/></div>
+                <div style={{flex:1,height:5,background:"#CBD5E0",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${task.progress}%`,background:sc.border,borderRadius:3,transition:"width 0.4s"}}/></div>
                 <span style={{fontSize:10,color:sc.border,fontWeight:700,flexShrink:0}}>{task.progress}%</span>
               </div>
               <select value={task.status} onChange={e=>onStatusChange(task.id,e.target.value)}
@@ -746,8 +776,8 @@ function TaskBoard({tasks,onEdit,onDelete,onStatusChange,isMobile=false}){
                 {TASK_STATUSES.map(s=><option key={s} value={s}>{s}</option>)}
               </select>
               <div style={{display:"flex",gap:4,justifyContent:"flex-end"}}>
-                <button onClick={()=>onEdit(task)} style={{...btn("#2A2A4A","#A78BFA"),fontSize:11,padding:"4px 8px"}}>수정</button>
-                <button onClick={()=>onDelete(task.id)} style={{...btn("#2A2A4A","#F87171"),fontSize:11,padding:"4px 8px"}}>삭제</button>
+                <button onClick={()=>onEdit(task)} style={{...btn("#CBD5E0","#6C63FF"),fontSize:11,padding:"4px 8px"}}>수정</button>
+                <button onClick={()=>onDelete(task.id)} style={{...btn("#CBD5E0","#F87171"),fontSize:11,padding:"4px 8px"}}>삭제</button>
               </div>
             </div>;
           })}
@@ -771,26 +801,26 @@ function CalendarView({schedules,currentMonth,setCurrentMonth,todayStr,selectedS
   const [expandedDay,setExpandedDay]=useState(null); // +N 클릭 시 날짜 문자열 저장
   return <div>
     <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:20}}>
-      <button onClick={()=>setCurrentMonth(new Date(year,month-1,1))} style={btn("#1E1E3A","#A78BFA")}>◀</button>
+      <button onClick={()=>setCurrentMonth(new Date(year,month-1,1))} style={btn("#EEF2F7","#6C63FF")}>◀</button>
       <h2 style={{margin:0,fontSize:18,fontWeight:800}}>{year}년 {month+1}월</h2>
-      <button onClick={()=>setCurrentMonth(new Date(year,month+1,1))} style={btn("#1E1E3A","#A78BFA")}>▶</button>
+      <button onClick={()=>setCurrentMonth(new Date(year,month+1,1))} style={btn("#EEF2F7","#6C63FF")}>▶</button>
       <button onClick={()=>setCurrentMonth(new Date())} style={{...btn("#6C63FF"),marginLeft:8}}>오늘</button>
     </div>
-    <div style={{background:"#161628",borderRadius:14,overflow:"hidden",border:"1px solid #2A2A4A"}}>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",borderBottom:"1px solid #2A2A4A"}}>
-        {["일","월","화","수","목","금","토"].map((d,i)=><div key={d} className="cal-header-label" style={{padding:isMobile?"6px 0":"12px 0",textAlign:"center",fontSize:isMobile?11:12,fontWeight:700,color:i===0?"#F87171":i===6?"#60A5FA":"#8B8BAD"}}>{d}</div>)}
+    <div style={{background:"#FFFFFF",borderRadius:14,border:"1px solid #CBD5E0",overflowX:"auto"}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,minmax(80px,1fr))",borderBottom:"1px solid #EEF2F7",minWidth:isMobile?336:560}}>
+        {["일","월","화","수","목","금","토"].map((d,i)=><div key={d} className="cal-header-label" style={{padding:isMobile?"6px 0":"12px 0",textAlign:"center",fontSize:isMobile?11:12,fontWeight:700,color:i===0?"#F87171":i===6?"#60A5FA":"#4A5568"}}>{d}</div>)}
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)"}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,minmax(80px,1fr))",minWidth:isMobile?336:560}}>
         {cells.map((day,idx)=>{
-          if(!day)return <div key={`e${idx}`} style={{minHeight:isMobile?50:90,borderRight:"1px solid #2A2A4A",borderBottom:"1px solid #2A2A4A"}}/>;
+          if(!day)return <div key={`e${idx}`} style={{minHeight:isMobile?50:90,borderRight:"1px solid #CBD5E0",borderBottom:"1px solid #EEF2F7"}}/>;
           const ds=`${year}-${pad(month+1)}-${pad(day)}`;
           const daySch=getDay(ds);
           const isToday=ds===todayFull;
           const holiday=getHoliday(ds);
           const isSun=idx%7===0; const isSat=idx%7===6;
-          const col=(isSun||holiday)?"#F87171":isSat?"#60A5FA":"#E8E8F0";
+          const col=(isSun||holiday)?"#F87171":isSat?"#60A5FA":"#2D3748";
           return <div key={day} className="cal-day" onClick={()=>onDateClick(ds)}
-            style={{minHeight:isMobile?50:90,padding:isMobile?"3px 2px":"8px 6px",borderRight:"1px solid #2A2A4A",borderBottom:"1px solid #2A2A4A",background:isToday?"rgba(108,99,255,0.08)":holiday?"rgba(248,113,113,0.04)":"transparent",cursor:"pointer",transition:"background 0.15s",position:"relative",overflow:"visible",zIndex:expandedDay===ds?10:1}}>
+            style={{minHeight:isMobile?60:90,minWidth:isMobile?48:undefined,padding:isMobile?"3px 2px":"8px 6px",borderRight:"1px solid #CBD5E0",borderBottom:"1px solid #EEF2F7",background:isToday?"#EDE9FE":holiday?"#FFF5F5":"transparent",cursor:"pointer",transition:"background 0.15s",position:"relative",overflow:"visible",zIndex:expandedDay===ds?10:1}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:1}}>
               <span style={{width:isMobile?20:26,height:isMobile?20:26,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:"50%",background:isToday?"#6C63FF":"transparent",fontSize:isMobile?11:13,fontWeight:isToday?800:400,color:isToday?"#fff":col,flexShrink:0}}>{day}</span>
               {!isMobile&&<span className="add-btn" style={{fontSize:16,color:"#6C63FF",fontWeight:700,lineHeight:1,paddingRight:2}}>+</span>}
@@ -803,7 +833,7 @@ function CalendarView({schedules,currentMonth,setCurrentMonth,todayStr,selectedS
                 const visible=isExp?daySch:daySch.slice(0,limit);
                 return <>
                   {visible.map(s=>{const pc=PRIORITY_COLORS[s.priority]||PRIORITY_COLORS.medium;return <div key={s.id} onClick={e=>{e.stopPropagation();setSelectedSched(selectedSched?.id===s.id?null:s);}} style={{fontSize:isMobile?9:11,fontWeight:600,padding:isMobile?"1px 3px":"3px 7px",borderRadius:isMobile?3:5,background:pc.bg,color:pc.text,cursor:"pointer",lineHeight:"1.4",marginBottom:1}}><div style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.title}</div>{!isMobile&&showOwner&&s.owner_name&&<div style={{fontSize:10,opacity:0.85,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>👤 {s.owner_name}</div>}</div>;})}
-                  {daySch.length>limit&&<div onClick={e=>{e.stopPropagation();setExpandedDay(isExp?null:ds);}} style={{fontSize:isMobile?8:11,color:"#A78BFA",paddingLeft:2,cursor:"pointer",fontWeight:700,userSelect:"none",marginTop:1}}>{isExp?"▲ 접기":`+${daySch.length-limit} 더보기`}</div>}
+                  {daySch.length>limit&&<div onClick={e=>{e.stopPropagation();setExpandedDay(isExp?null:ds);}} style={{fontSize:isMobile?8:11,color:"#6C63FF",paddingLeft:2,cursor:"pointer",fontWeight:700,userSelect:"none",marginTop:1}}>{isExp?"▲ 접기":`+${daySch.length-limit} 더보기`}</div>}
                 </>;
               })()}
             </div>
@@ -812,26 +842,113 @@ function CalendarView({schedules,currentMonth,setCurrentMonth,todayStr,selectedS
       </div>
     </div>
     {selectedSched&&(
-      <div style={{marginTop:16,background:"#161628",border:"1px solid #6C63FF44",borderRadius:14,padding:"18px 20px"}}>
+      <div style={{marginTop:16,background:"#FFFFFF",border:"1px solid #6C63FF44",borderRadius:14,padding:"18px 20px"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-          <h3 style={{margin:0,fontSize:16,fontWeight:700,color:"#A78BFA"}}>{selectedSched.title}</h3>
+          <h3 style={{margin:0,fontSize:16,fontWeight:700,color:"#6C63FF"}}>{selectedSched.title}</h3>
           <div style={{display:"flex",gap:8,alignItems:"center"}}>
             <button onClick={()=>{onEditSched(selectedSched);setSelectedSched(null);}} style={{...btn("#6C63FF"),fontSize:12,padding:"5px 12px"}}>✏️ 수정</button>
-            <button onClick={()=>{onDeleteSched(selectedSched.id);setSelectedSched(null);}} style={{...btn("#2A2A4A","#F87171"),fontSize:12,padding:"5px 12px"}}>삭제</button>
-            <button onClick={()=>setSelectedSched(null)} style={{background:"none",border:"none",color:"#6B7280",cursor:"pointer",fontSize:20,lineHeight:1}}>×</button>
+            <button onClick={()=>{onDeleteSched(selectedSched.id);setSelectedSched(null);}} style={{...btn("#CBD5E0","#F87171"),fontSize:12,padding:"5px 12px"}}>삭제</button>
+            <button onClick={()=>setSelectedSched(null)} style={{background:"none",border:"none",color:"#718096",cursor:"pointer",fontSize:20,lineHeight:1}}>×</button>
           </div>
         </div>
-        <p style={{color:"#8B8BAD",margin:"8px 0",fontSize:13}}>{selectedSched.description}</p>
+        <p style={{color:"#4A5568",margin:"8px 0",fontSize:13}}>{selectedSched.description}</p>
         <div style={{display:"flex",gap:20,flexWrap:"wrap",marginTop:8}}>
-          <div><p style={{margin:0,fontSize:10,color:"#6B7280"}}>담당자</p><p style={{margin:"2px 0 0",fontSize:13,color:"#A78BFA",fontWeight:600}}>{selectedSched.owner_name}</p></div>
-          <div><p style={{margin:0,fontSize:10,color:"#6B7280"}}>시작</p><p style={{margin:"2px 0 0",fontSize:13}}>{selectedSched.start_date}{selectedSched.start_time&&" "+selectedSched.start_time}</p></div>
-          <div><p style={{margin:0,fontSize:10,color:"#6B7280"}}>종료</p><p style={{margin:"2px 0 0",fontSize:13}}>{selectedSched.end_date}{selectedSched.end_time&&" "+selectedSched.end_time}</p></div>
-          <div><p style={{margin:0,fontSize:10,color:"#6B7280"}}>중요도</p><p style={{margin:"2px 0 0",fontSize:13}}>{selectedSched.priority==="high"?"높음":selectedSched.priority==="medium"?"중간":"낮음"}</p></div>
+          <div><p style={{margin:0,fontSize:10,color:"#718096"}}>담당자</p><p style={{margin:"2px 0 0",fontSize:13,color:"#6C63FF",fontWeight:600}}>{selectedSched.owner_name}</p></div>
+          <div><p style={{margin:0,fontSize:10,color:"#718096"}}>시작</p><p style={{margin:"2px 0 0",fontSize:13}}>{selectedSched.start_date}{selectedSched.start_time&&" "+selectedSched.start_time}</p></div>
+          <div><p style={{margin:0,fontSize:10,color:"#718096"}}>종료</p><p style={{margin:"2px 0 0",fontSize:13}}>{selectedSched.end_date}{selectedSched.end_time&&" "+selectedSched.end_time}</p></div>
+          <div><p style={{margin:0,fontSize:10,color:"#718096"}}>중요도</p><p style={{margin:"2px 0 0",fontSize:13}}>{selectedSched.priority==="high"?"높음":selectedSched.priority==="medium"?"중간":"낮음"}</p></div>
         </div>
       </div>
     )}
   </div>;
 }
+
+// ── 현장별 PM 현황 ─────────────────────────────────────
+function SitePMBoard(){
+  const STORAGE_KEY="teamsync-site-pm-v1";
+  function loadSites(){try{const d=localStorage.getItem(STORAGE_KEY);return d?JSON.parse(d):[
+    {id:"s1",name:"○○ 신축공사",pm:"홍길동",completion:"2025-12-31",memo:""},
+    {id:"s2",name:"□□ 리모델링",pm:"이순신",completion:"2026-06-30",memo:""},
+  ];}catch{return[];}}
+  const [sites,setSites]=useState(loadSites);
+  const [showModal,setShowModal]=useState(false);
+  const [editing,setEditing]=useState(null);
+  const [form,setForm]=useState({name:"",pm:"",completion:"",memo:""});
+  function save(d){
+    const list=editing?sites.map(s=>s.id===editing.id?{...s,...d}:s):[...sites,{...d,id:`pm${Date.now()}`}];
+    setSites(list);
+    try{localStorage.setItem(STORAGE_KEY,JSON.stringify(list));}catch{}
+    setShowModal(false);setEditing(null);
+  }
+  function del(id){if(!window.confirm("삭제하시겠습니까?"))return;const list=sites.filter(s=>s.id!==id);setSites(list);try{localStorage.setItem(STORAGE_KEY,JSON.stringify(list));}catch{};}
+  function openNew(){setEditing(null);setForm({name:"",pm:"",completion:"",memo:""});setShowModal(true);}
+  function openEdit(s){setEditing(s);setForm({name:s.name,pm:s.pm,completion:s.completion,memo:s.memo||""});setShowModal(true);}
+  const today=getLocalDateStr(new Date());
+  const daysLeft=d=>{if(!d)return null;const diff=Math.ceil((new Date(d+"T00:00:00")-new Date())/(1000*60*60*24));return diff;};
+  return <div>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+      <p style={{margin:0,fontSize:13,color:"#718096"}}>현장별 PM 담당자 현황입니다. 수정 버튼으로 변경 가능합니다.</p>
+      <button onClick={openNew} style={{...btn("#6C63FF"),fontSize:13,padding:"8px 18px"}}>+ 현장 추가</button>
+    </div>
+    {sites.length===0&&<div style={{textAlign:"center",padding:"48px 0",color:"#A0AEC0",fontSize:14}}>등록된 현장이 없습니다. 현장을 추가해주세요.</div>}
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:16}}>
+      {sites.map(s=>{
+        const days=daysLeft(s.completion);
+        const urgent=days!==null&&days<=30;
+        const done=days!==null&&days<0;
+        return <div key={s.id} style={{background:"#fff",border:`2px solid ${done?"#CBD5E0":urgent?"#FBBF24":"#6C63FF33"}`,borderRadius:16,padding:"20px 22px",boxShadow:"0 2px 8px rgba(0,0,0,0.07)",position:"relative",overflow:"hidden"}}>
+          <div style={{position:"absolute",top:0,left:0,right:0,height:4,background:done?"#CBD5E0":urgent?"linear-gradient(90deg,#FBBF24,#F87171)":"linear-gradient(90deg,#6C63FF,#9F7AEA)"}}/>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
+            <div style={{flex:1,paddingRight:10}}>
+              <p style={{margin:"0 0 2px",fontSize:11,color:"#A0AEC0",fontWeight:600,textTransform:"uppercase",letterSpacing:1}}>현장명</p>
+              <h3 style={{margin:0,fontSize:16,fontWeight:800,color:"#2D3748",lineHeight:1.3}}>{s.name}</h3>
+            </div>
+            {done?<span style={{fontSize:10,padding:"3px 9px",borderRadius:12,background:"#F7FAFC",color:"#A0AEC0",fontWeight:700,border:"1px solid #CBD5E0",flexShrink:0}}>준공완료</span>
+            :urgent?<span style={{fontSize:10,padding:"3px 9px",borderRadius:12,background:"#FFFBEB",color:"#D97706",fontWeight:700,border:"1px solid #FBBF24",flexShrink:0}}>D-{days}</span>
+            :<span style={{fontSize:10,padding:"3px 9px",borderRadius:12,background:"#EDE9FE",color:"#6C63FF",fontWeight:700,border:"1px solid #C4B5FD",flexShrink:0}}>D-{days??"-"}</span>}
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",background:"#F8FAFC",borderRadius:10,marginBottom:12}}>
+            <div style={{width:40,height:40,borderRadius:"50%",background:getAvatarColor(s.pm),display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:800,color:"#fff",flexShrink:0}}>{(s.pm||"?")[0]}</div>
+            <div>
+              <p style={{margin:0,fontSize:11,color:"#A0AEC0",fontWeight:600}}>담당 PM</p>
+              <p style={{margin:0,fontSize:15,fontWeight:800,color:"#2D3748"}}>{s.pm||"미지정"}</p>
+            </div>
+          </div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:s.memo?10:0}}>
+            <div>
+              <p style={{margin:0,fontSize:11,color:"#A0AEC0",fontWeight:600}}>준공일자</p>
+              <p style={{margin:0,fontSize:13,fontWeight:700,color:done?"#A0AEC0":urgent?"#D97706":"#2D3748"}}>{s.completion?`${s.completion} (${getDayOfWeek(s.completion)})`:"-"}</p>
+            </div>
+            <div style={{display:"flex",gap:6}}>
+              <button onClick={()=>openEdit(s)} style={{...btn("#EEF2F7","#6C63FF"),fontSize:11,padding:"5px 12px"}}>✏ 수정</button>
+              <button onClick={()=>del(s.id)} style={{...btn("#FFF5F5","#F87171"),fontSize:11,padding:"5px 12px"}}>삭제</button>
+            </div>
+          </div>
+          {s.memo&&<p style={{margin:0,fontSize:12,color:"#718096",background:"#F8FAFC",borderRadius:8,padding:"8px 10px",marginTop:10,lineHeight:1.5}}>{s.memo}</p>}
+        </div>;
+      })}
+    </div>
+    {showModal&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200,padding:16}}>
+      <div style={{background:"#fff",borderRadius:18,padding:"28px 30px",width:"100%",maxWidth:440,boxShadow:"0 8px 40px rgba(0,0,0,0.18)"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:22}}>
+          <h2 style={{margin:0,fontSize:17,fontWeight:800,color:"#6C63FF"}}>{editing?"현장 정보 수정":"새 현장 추가"}</h2>
+          <button onClick={()=>{setShowModal(false);setEditing(null);}} style={{background:"none",border:"none",fontSize:22,color:"#A0AEC0",cursor:"pointer",lineHeight:1}}>×</button>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:14}}>
+          <div><label style={{display:"block",fontSize:12,fontWeight:700,color:"#4A5568",marginBottom:5}}>현장명 *</label><input value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} placeholder="○○ 신축공사" style={{width:"100%",border:"1px solid #CBD5E0",borderRadius:8,padding:"10px 12px",fontSize:14,color:"#2D3748",outline:"none",boxSizing:"border-box"}}/></div>
+          <div><label style={{display:"block",fontSize:12,fontWeight:700,color:"#4A5568",marginBottom:5}}>담당 PM *</label><input value={form.pm} onChange={e=>setForm(f=>({...f,pm:e.target.value}))} placeholder="홍길동" style={{width:"100%",border:"1px solid #CBD5E0",borderRadius:8,padding:"10px 12px",fontSize:14,color:"#2D3748",outline:"none",boxSizing:"border-box"}}/></div>
+          <div><label style={{display:"block",fontSize:12,fontWeight:700,color:"#4A5568",marginBottom:5}}>준공일자</label><input type="date" value={form.completion} onChange={e=>setForm(f=>({...f,completion:e.target.value}))} style={{width:"100%",border:"1px solid #CBD5E0",borderRadius:8,padding:"10px 12px",fontSize:14,color:"#2D3748",outline:"none",boxSizing:"border-box"}}/></div>
+          <div><label style={{display:"block",fontSize:12,fontWeight:700,color:"#4A5568",marginBottom:5}}>비고</label><textarea value={form.memo} onChange={e=>setForm(f=>({...f,memo:e.target.value}))} rows={2} placeholder="메모 (선택)" style={{width:"100%",border:"1px solid #CBD5E0",borderRadius:8,padding:"10px 12px",fontSize:14,color:"#2D3748",outline:"none",boxSizing:"border-box",resize:"vertical"}}/></div>
+        </div>
+        <div style={{display:"flex",gap:10,marginTop:22,justifyContent:"flex-end"}}>
+          <button onClick={()=>{setShowModal(false);setEditing(null);}} style={{...btn("#F7FAFC","#718096"),border:"1px solid #CBD5E0"}}>취소</button>
+          <button onClick={()=>{if(!form.name.trim()||!form.pm.trim()){alert("현장명과 담당PM을 입력하세요.");return;}save(form);}} style={btn("#6C63FF")}>저장</button>
+        </div>
+      </div>
+    </div>}
+  </div>;
+}
+
 
 // ── 리포트 ────────────────────────────────────────────
 function Reports({schedules,tasks}){
@@ -841,39 +958,39 @@ function Reports({schedules,tasks}){
   const pc={high:0,medium:0,low:0};
   schedules.forEach(s=>{if(pc[s.priority]!==undefined)pc[s.priority]++;});
   return <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20}}>
-    <SecCard title="일정 우선순위 분포" accent="#6C63FF">{Object.entries(pc).map(([p,c])=>{const col=PRIORITY_COLORS[p];const pct=schedules.length?Math.round(c/schedules.length*100):0;return <div key={p} style={{marginBottom:14}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}><span style={{fontSize:13,color:col.bg,fontWeight:600}}>{p==="high"?"높음":p==="medium"?"중간":"낮음"}</span><span style={{fontSize:12,color:"#6B7280"}}>{c}개 ({pct}%)</span></div><div style={{height:8,background:"#2A2A4A",borderRadius:4,overflow:"hidden"}}><div style={{height:"100%",width:`${pct}%`,background:col.bg,borderRadius:4}}/></div></div>;})}</SecCard>
+    <SecCard title="일정 우선순위 분포" accent="#6C63FF">{Object.entries(pc).map(([p,c])=>{const col=PRIORITY_COLORS[p];const pct=schedules.length?Math.round(c/schedules.length*100):0;return <div key={p} style={{marginBottom:14}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}><span style={{fontSize:13,color:col.bg,fontWeight:600}}>{p==="high"?"높음":p==="medium"?"중간":"낮음"}</span><span style={{fontSize:12,color:"#718096"}}>{c}개 ({pct}%)</span></div><div style={{height:8,background:"#CBD5E0",borderRadius:4,overflow:"hidden"}}><div style={{height:"100%",width:`${pct}%`,background:col.bg,borderRadius:4}}/></div></div>;})}</SecCard>
     <SecCard title="업무 완료율" accent="#4ADE80">
       <div style={{display:"flex",justifyContent:"center",alignItems:"center",height:140}}>
         <div style={{position:"relative",width:130,height:130}}>
-          <svg width="130" height="130" viewBox="0 0 130 130"><circle cx="65" cy="65" r="55" fill="none" stroke="#2A2A4A" strokeWidth="12"/><circle cx="65" cy="65" r="55" fill="none" stroke="#4ADE80" strokeWidth="12" strokeDasharray={`${2*Math.PI*55*donePct/100} ${2*Math.PI*55}`} strokeLinecap="round" transform="rotate(-90 65 65)"/></svg>
-          <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:26,fontWeight:800,color:"#4ADE80"}}>{donePct}%</span><span style={{fontSize:11,color:"#6B7280"}}>완료</span></div>
+          <svg width="130" height="130" viewBox="0 0 130 130"><circle cx="65" cy="65" r="55" fill="none" stroke="#CBD5E0" strokeWidth="12"/><circle cx="65" cy="65" r="55" fill="none" stroke="#4ADE80" strokeWidth="12" strokeDasharray={`${2*Math.PI*55*donePct/100} ${2*Math.PI*55}`} strokeLinecap="round" transform="rotate(-90 65 65)"/></svg>
+          <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:26,fontWeight:800,color:"#4ADE80"}}>{donePct}%</span><span style={{fontSize:11,color:"#718096"}}>완료</span></div>
         </div>
       </div>
-      <p style={{textAlign:"center",color:"#8B8BAD",fontSize:13,margin:0}}>평균 진행률: <strong style={{color:"#E8E8F0"}}>{avgProg}%</strong></p>
+      <p style={{textAlign:"center",color:"#4A5568",fontSize:13,margin:0}}>평균 진행률: <strong style={{color:"#2D3748"}}>{avgProg}%</strong></p>
     </SecCard>
-    <SecCard title="업무 현황 요약" accent="#F9A8D4">{TASK_STATUSES.map(st=>{const count=tasks.filter(t=>t.status===st).length;const c=STATUS_COLORS[st];return <div key={st} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #2A2A4A"}}><span style={{fontSize:13,color:c.text}}>{st}</span><span style={{fontSize:13,fontWeight:700}}>{count}개</span></div>;})}</SecCard>
-    <SecCard title="전체 통계" accent="#FB923C">{[["총 일정",schedules.length,"#6C63FF"],["총 업무",tasks.length,"#2EC4B6"],["완료된 업무",tasks.filter(t=>t.status==="완료").length,"#4ADE80"],["고우선 일정",pc.high,"#FF4D6D"]].map(([l,v,c])=><div key={l} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #2A2A4A"}}><span style={{fontSize:13,color:"#8B8BAD"}}>{l}</span><span style={{fontSize:16,fontWeight:800,color:c}}>{v}</span></div>)}</SecCard>
+    <SecCard title="업무 현황 요약" accent="#F9A8D4">{TASK_STATUSES.map(st=>{const count=tasks.filter(t=>t.status===st).length;const c=STATUS_COLORS[st];return <div key={st} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #EEF2F7"}}><span style={{fontSize:13,color:c.text}}>{st}</span><span style={{fontSize:13,fontWeight:700}}>{count}개</span></div>;})}</SecCard>
+    <SecCard title="전체 통계" accent="#FB923C">{[["총 일정",schedules.length,"#6C63FF"],["총 업무",tasks.length,"#2EC4B6"],["완료된 업무",tasks.filter(t=>t.status==="완료").length,"#4ADE80"],["고우선 일정",pc.high,"#FF4D6D"]].map(([l,v,c])=><div key={l} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #EEF2F7"}}><span style={{fontSize:13,color:"#4A5568"}}>{l}</span><span style={{fontSize:16,fontWeight:800,color:c}}>{v}</span></div>)}</SecCard>
   </div>;
 }
 
 // ── 모달 공통 ─────────────────────────────────────────
 function ModalWrap({title,children,onClose,onSave}){
   const mobileModal=window.innerWidth<=767;
-  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",display:"flex",alignItems:mobileModal?"flex-end":"center",justifyContent:"center",zIndex:100,padding:mobileModal?0:20}} onClick={e=>e.target===e.currentTarget&&onClose()}>
-    <div style={{background:"#161628",border:"1px solid #2A2A4A",borderRadius:mobileModal?"20px 20px 0 0":16,width:"100%",maxWidth:mobileModal?"100%":480,padding:mobileModal?"20px 16px 32px":"24px 28px",maxHeight:mobileModal?"92vh":"90vh",overflow:"auto"}}>
+  return <div style={{position:"fixed",inset:0,background:"rgba(30,30,60,0.45)",display:"flex",alignItems:mobileModal?"flex-end":"center",justifyContent:"center",zIndex:100,padding:mobileModal?0:20}} onClick={e=>e.target===e.currentTarget&&onClose()}>
+    <div style={{background:"#FFFFFF",border:"1px solid #CBD5E0",borderRadius:mobileModal?"20px 20px 0 0":16,width:"100%",maxWidth:mobileModal?"100%":480,padding:mobileModal?"20px 16px 32px":"24px 28px",maxHeight:mobileModal?"92vh":"90vh",overflow:"auto"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
-        <h2 style={{margin:0,fontSize:18,fontWeight:800,color:"#A78BFA"}}>{title}</h2>
-        <button onClick={onClose} style={{background:"none",border:"none",color:"#6B7280",cursor:"pointer",fontSize:22}}>×</button>
+        <h2 style={{margin:0,fontSize:18,fontWeight:800,color:"#6C63FF"}}>{title}</h2>
+        <button onClick={onClose} style={{background:"none",border:"none",color:"#718096",cursor:"pointer",fontSize:22}}>×</button>
       </div>
       <div style={{display:"flex",flexDirection:"column",gap:14}}>{children}</div>
       <div style={{display:"flex",gap:10,marginTop:20,justifyContent:"flex-end"}}>
-        <button onClick={onClose} style={btn("#2A2A4A","#8B8BAD")}>취소</button>
+        <button onClick={onClose} style={btn("#CBD5E0","#4A5568")}>취소</button>
         <button onClick={onSave} style={btn("#6C63FF")}>저장</button>
       </div>
     </div>
   </div>;
 }
-function Fld({label,children}){return <div><label style={{display:"block",fontSize:12,fontWeight:600,color:"#8B8BAD",marginBottom:6}}>{label}</label>{children}</div>;}
+function Fld({label,children}){return <div><label style={{display:"block",fontSize:12,fontWeight:600,color:"#4A5568",marginBottom:6}}>{label}</label>{children}</div>;}
 
 function SchedModal({initial,onSave,onClose,isEdit,modalTitle}){
   const [f,setF]=useState({...initial});

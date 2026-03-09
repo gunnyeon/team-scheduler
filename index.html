@@ -50,11 +50,12 @@
 const {useState,useEffect,useRef,useCallback}=React;
 
 // ── API 설정 ───────────────────────────────────────────
-const API_URL = "https://script.google.com/macros/s/AKfycbx1NCMAD_PyppWDyVc_9TPCcfJ_0BV__7s8ie3AuXWUAtLDiT88CH9DNie59xM3XkEUBA/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbwOnh0TyT4_IYHU6eP36jYCQ8CwfvDxvCeFmi7-wJ9L3_mWeHs55a01axQNA74ifj9eXw/exec";
 const SCHED_HEADERS = ["id","title","description","owner_name","owner_email","start_date","start_time","end_date","end_time","priority"];
 const TASK_HEADERS  = ["id","title","owner_name","part","start_date","due_date","progress","status"];
 const TRIP_HEADERS  = ["id","title","description","owner_name","owner_email","start_date","start_time","end_date","end_time","priority"];
 const LEAVE_HEADERS = ["id","title","description","owner_name","owner_email","start_date","start_time","end_date","end_time","priority"];
+const SITE_HEADERS  = ["id","name","pm","completion","location","scale","client","memo"];
 
 async function apiGet(sheet){
   const r=await fetch(`${API_URL}?sheet=${sheet}`);
@@ -172,6 +173,7 @@ function App(){
   const [currentMonth2,setCurrentMonth2]=useState(new Date());
   const [selectedSched2,setSelectedSched2]=useState(null);
   const [leaves,setLeaves]=useState([]);
+  const [sites,setSites]=useState([]);
   const [currentMonth3,setCurrentMonth3]=useState(new Date());
   const [selectedSched3,setSelectedSched3]=useState(null);
   const [showLeaveModal,setShowLeaveModal]=useState(false);
@@ -189,7 +191,7 @@ function App(){
     try{
       setSyncStatus("연결 중");
       // apiInit은 백그라운드 (시트 생성은 오래 걸릴 수 있음)
-      Promise.all([apiInit("schedules",SCHED_HEADERS),apiInit("trips",TRIP_HEADERS),apiInit("tasks",TASK_HEADERS),apiInit("leaves",LEAVE_HEADERS)]).catch(()=>{});
+      Promise.all([apiInit("schedules",SCHED_HEADERS),apiInit("trips",TRIP_HEADERS),apiInit("tasks",TASK_HEADERS),apiInit("leaves",LEAVE_HEADERS),apiInit("sites",SITE_HEADERS)]).catch(()=>{});
       await loadData();
       initialized.current=true;
     }catch(e){
@@ -202,7 +204,7 @@ function App(){
   async function loadData(){
     const reqAt=Date.now();
     try{
-      const [s,tr,t,lv]=await Promise.all([apiGet("schedules"),apiGet("trips"),apiGet("tasks"),apiGet("leaves")]);
+      const [s,tr,t,lv,sv]=await Promise.all([apiGet("schedules"),apiGet("trips"),apiGet("tasks"),apiGet("leaves"),apiGet("sites")]);
       // 요청 시작 후 로컬 변경이 있으면 무시 (내가 방금 저장한 데이터를 서버가 덮어쓰지 않도록)
       if(lastLocalChange.current>reqAt)return;
       // JSON 문자열 비교로 실제 변경 시에만 setState → 불필요한 리렌더 방지
@@ -210,6 +212,7 @@ function App(){
       setTrips(prev=>{const next=JSON.stringify(tr);return JSON.stringify(prev)===next?prev:tr;});
       setTasks(prev=>{const next=JSON.stringify(t);return JSON.stringify(prev)===next?prev:t;});
       setLeaves(prev=>{const next=JSON.stringify(lv);return JSON.stringify(prev)===next?prev:lv;});
+      setSites(prev=>{const next=JSON.stringify(sv);return JSON.stringify(prev)===next?prev:sv;});
       setLastSync(new Date()); setSyncStatus("동기화됨");
     }catch(e){setSyncStatus("오류");}
   }
@@ -303,6 +306,19 @@ function App(){
       bumpLocal();
       apiDelete("leaves",id).then(()=>afterSave()).catch(()=>{setSyncStatus("오류");});
     }});
+  }
+  function saveSite(data){
+    const isEdit=!!data.id;
+    const row={...data,id:data.id||`site${Date.now()}`};
+    const updated=isEdit?sites.map(s=>s.id===row.id?row:s):[...sites,row];
+    setSites(updated);
+    bumpLocal();
+    apiUpsert("sites",row).then(()=>afterSave()).catch(()=>setSyncStatus("오류"));
+  }
+  function deleteSite(id){
+    setSites(prev=>prev.filter(s=>s.id!==id));
+    bumpLocal();
+    apiDelete("sites",id).then(()=>afterSave()).catch(()=>setSyncStatus("오류"));
   }
   async function deleteSched(id){
     const target=schedules.find(s=>s.id===id);
@@ -476,13 +492,13 @@ function App(){
           </div>
         </div>
         <div style={{flex:1,overflowX:"auto",overflowY:"auto",padding:isMobile?"10px 8px 72px 8px":isTablet?"16px 16px":"24px 28px"}}>
-          {activeMenu==="대시보드"&&<Dashboard schedules={schedules} trips={trips} tasks={tasks} todaySchedules={todaySchedules} weekSchedules={weekSchedules} weekTrips={weekTrips} urgentSchedules={urgentSchedules} inProgressTasks={inProgressTasks} overdueTasks={overdueTasks} setActiveMenu={setActiveMenu} todayStr={todayStr} weekEndStr={weekEndStr} isMobile={isMobile} onSchedClick={s=>{setCurrentMonth(new Date(s.start_date+"T00:00:00"));setSelectedSched(s);setActiveMenu("캘린더(주요일정)");}} onTripClick={s=>{setCurrentMonth2(new Date(s.start_date+"T00:00:00"));setSelectedSched2(s);setActiveMenu("캘린더(출장일정)");}}/>}
+          {activeMenu==="대시보드"&&<Dashboard schedules={schedules} trips={trips} tasks={tasks} sites={sites} todaySchedules={todaySchedules} weekSchedules={weekSchedules} weekTrips={weekTrips} urgentSchedules={urgentSchedules} inProgressTasks={inProgressTasks} overdueTasks={overdueTasks} setActiveMenu={setActiveMenu} todayStr={todayStr} weekEndStr={weekEndStr} isMobile={isMobile} onSchedClick={s=>{setCurrentMonth(new Date(s.start_date+"T00:00:00"));setSelectedSched(s);setActiveMenu("캘린더(주요일정)");}} onTripClick={s=>{setCurrentMonth2(new Date(s.start_date+"T00:00:00"));setSelectedSched2(s);setActiveMenu("캘린더(출장일정)");}}/>}
           {activeMenu==="일정 관리"&&<ScheduleBoard schedules={schedules} onEdit={s=>{setEditingSched(s);setShowSchedModal(true);}} onDelete={deleteSched} isMobile={isMobile}/>}
           {activeMenu==="업무 관리"&&<TaskBoard tasks={tasks} onEdit={t=>{setEditingTask(t);setShowTaskModal(true);}} onDelete={deleteTask} onStatusChange={updateTaskStatus} isMobile={isMobile}/>}
           {activeMenu==="캘린더(주요일정)"&&<CalendarView schedules={schedules} currentMonth={currentMonth} setCurrentMonth={setCurrentMonth} todayStr={todayStr} selectedSched={selectedSched} setSelectedSched={setSelectedSched} onDateClick={d=>{setEditingSched(null);setShowSchedModal({prefillDate:d});}} onEditSched={s=>{setEditingSched(s);setShowSchedModal(true);}} onDeleteSched={deleteSched} isMobile={isMobile}/>}
           {activeMenu==="캘린더(출장일정)"&&<CalendarView schedules={trips} currentMonth={currentMonth2} setCurrentMonth={setCurrentMonth2} todayStr={todayStr} selectedSched={selectedSched2} setSelectedSched={setSelectedSched2} onDateClick={d=>{setEditingTrip(null);setShowTripModal({prefillDate:d});}} onEditSched={s=>{setEditingTrip(s);setShowTripModal(true);}} onDeleteSched={deleteTrip} showOwner={true} isMobile={isMobile}/>}
           {activeMenu==="캘린더(연차일정)"&&<CalendarView schedules={leaves} currentMonth={currentMonth3} setCurrentMonth={setCurrentMonth3} todayStr={todayStr} selectedSched={selectedSched3} setSelectedSched={setSelectedSched3} onDateClick={d=>{setEditingLeave(null);setShowLeaveModal({prefillDate:d});}} onEditSched={s=>{setEditingLeave(s);setShowLeaveModal(true);}} onDeleteSched={deleteLeave} showOwner={true} isMobile={isMobile}/>}
-          {activeMenu==="현장별PM"&&<SitePMBoard/>}
+          {activeMenu==="현장별PM"&&<SitePMBoard sites={sites} onSave={saveSite} onDelete={deleteSite}/>}
           {activeMenu==="리포트"&&<Reports schedules={schedules} tasks={tasks}/>}
         </div>
       </div>
@@ -518,7 +534,7 @@ function App(){
 }
 
 // ── 대시보드 ──────────────────────────────────────────
-function Dashboard({schedules,trips,tasks,todaySchedules,weekSchedules,weekTrips,urgentSchedules,inProgressTasks,overdueTasks,setActiveMenu,todayStr,weekEndStr,onSchedClick,onTripClick,isMobile=false}){
+function Dashboard({schedules,trips,tasks,sites=[],todaySchedules,weekSchedules,weekTrips,urgentSchedules,inProgressTasks,overdueTasks,setActiveMenu,todayStr,weekEndStr,onSchedClick,onTripClick,isMobile=false}){
   return (
     <div>
       {/* 통계 카드 */}
@@ -578,11 +594,8 @@ function Dashboard({schedules,trips,tasks,todaySchedules,weekSchedules,weekTrips
 
       {/* 준공 임박 현장 배너 */}
       {(()=>{
-        const STORAGE_KEY="teamsync-site-pm-v2";
-        let sites=[];
-        try{const d=localStorage.getItem(STORAGE_KEY);if(d)sites=JSON.parse(d);}catch{}
         const today=new Date();
-        const urgent=sites.filter(s=>{
+        const urgent=(sites||[]).filter(s=>{
           if(!s.completion)return false;
           const diff=Math.ceil((new Date(s.completion+"T00:00:00")-today)/(1000*60*60*24));
           return diff>=0&&diff<=30;
@@ -934,14 +947,7 @@ function CalendarView({schedules,currentMonth,setCurrentMonth,todayStr,selectedS
 }
 
 // ── 현장별 PM 현황 ─────────────────────────────────────
-function SitePMBoard(){
-  const STORAGE_KEY="teamsync-site-pm-v2";
-  const defaultSites=[
-    {id:"s1",name:"○○ 신축공사",pm:"홍길동",completion:"2025-12-31",location:"서울 강남구",scale:"지상5층",client:"○○건설",memo:""},
-    {id:"s2",name:"□□ 리모델링",pm:"이순신",completion:"2026-06-30",location:"경기 수원시",scale:"지상3층",client:"□□주택",memo:""},
-  ];
-  function loadSites(){try{const d=localStorage.getItem(STORAGE_KEY);return d?JSON.parse(d):defaultSites;}catch{return defaultSites;}}
-  const [sites,setSites]=useState(loadSites);
+function SitePMBoard({sites=[],onSave,onDelete}){
   const [showModal,setShowModal]=useState(false);
   const [editing,setEditing]=useState(null);
   const [searchQ,setSearchQ]=useState("");
@@ -950,16 +956,12 @@ function SitePMBoard(){
   const sf=k=>e=>setForm(f=>({...f,[k]:e.target.value}));
   function saveSite(){
     if(!form.name.trim()||!form.pm.trim()){alert("현장명과 담당PM을 입력하세요.");return;}
-    const list=editing?sites.map(s=>s.id===editing.id?{...s,...form}:s):[...sites,{...form,id:`pm${Date.now()}`}];
-    setSites(list);
-    try{localStorage.setItem(STORAGE_KEY,JSON.stringify(list));}catch{}
+    onSave({...form,id:editing?editing.id:undefined});
     setShowModal(false);setEditing(null);setForm(emptyForm);
   }
   function del(id){
     if(!window.confirm("이 현장을 삭제하시겠습니까?"))return;
-    const list=sites.filter(s=>s.id!==id);
-    setSites(list);
-    try{localStorage.setItem(STORAGE_KEY,JSON.stringify(list));}catch{}
+    onDelete(id);
   }
   function openNew(){setEditing(null);setForm(emptyForm);setShowModal(true);}
   function openEdit(s){setEditing(s);setForm({name:s.name,pm:s.pm,completion:s.completion||"",location:s.location||"",scale:s.scale||"",client:s.client||"",memo:s.memo||""});setShowModal(true);}

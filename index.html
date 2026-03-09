@@ -50,12 +50,12 @@
 const {useState,useEffect,useRef,useCallback}=React;
 
 // ── API 설정 ───────────────────────────────────────────
-const API_URL = "https://script.google.com/macros/s/AKfycbwOnh0TyT4_IYHU6eP36jYCQ8CwfvDxvCeFmi7-wJ9L3_mWeHs55a01axQNA74ifj9eXw/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbyTd6AAOV0Za-CdZZQXiatfNFreNbl15-jsWSC6e9qL-ceEXJzn-cTSqLh9YdGBmQgmHA/exec";
 const SCHED_HEADERS = ["id","title","description","owner_name","owner_email","start_date","start_time","end_date","end_time","priority"];
 const TASK_HEADERS  = ["id","title","owner_name","part","start_date","due_date","progress","status"];
-const TRIP_HEADERS  = ["id","title","description","owner_name","owner_email","start_date","start_time","end_date","end_time","priority"];
+const TRIP_HEADERS  = ["id","title","description","owner_name","owner_email","start_date","start_time","end_date","end_time","priority","part"];
 const LEAVE_HEADERS = ["id","title","description","owner_name","owner_email","start_date","start_time","end_date","end_time","priority"];
-const SITE_HEADERS  = ["id","name","pm","completion","location","scale","client","memo"];
+const SITE_HEADERS  = ["id","name","pm","start_date","completion","location","scale","client","memo"];
 
 async function apiGet(sheet){
   const r=await fetch(`${API_URL}?sheet=${sheet}`);
@@ -124,7 +124,16 @@ const PRIORITY_COLORS={high:{bg:"#FEE2E2",text:"#991B1B",border:"#F87171"},mediu
 const TASK_STATUSES=["할 일","진행 중","검토","완료"];
 const STATUS_COLORS={"할 일":{bg:"#EEF2FF",border:"#818CF8",text:"#4338CA"},"진행 중":{bg:"#FFF7ED",border:"#FB923C",text:"#C2410C"},"검토":{bg:"#FDF4FF",border:"#C084FC",text:"#7E22CE"},"완료":{bg:"#F0FDF4",border:"#4ADE80",text:"#15803D"}};
 const PARTS=["PM파트","기획파트","SUB파트","BS파트","공정파트","안전파트","설계파트"];
-const PART_COLORS={"PM파트":{bg:"#EDE9FE",border:"#818CF8",text:"#4338CA"},"기획파트":{bg:"#DBEAFE",border:"#60A5FA",text:"#1D4ED8"},"SUB파트":{bg:"#DCFCE7",border:"#4ADE80",text:"#15803D"},"BS파트":{bg:"#FAE8FF",border:"#C084FC",text:"#7E22CE"},"공정파트":{bg:"#FFF7ED",border:"#FB923C",text:"#C2410C"},"안전파트":{bg:"#FEF2F2",border:"#F87171",text:"#DC2626"},"설계파트":{bg:"#F3E8FF",border:"#C084FC",text:"#6D28D9"}};
+const TRIP_PARTS=["PM파트","기획파트","BS파트","안전파트","설계파트"];
+const PART_COLORS={
+  "PM파트" :{bg:"#EDE9FE",border:"#818CF8",text:"#4338CA",badge:"#6C63FF"},
+  "기획파트":{bg:"#DBEAFE",border:"#60A5FA",text:"#1D4ED8",badge:"#3B82F6"},
+  "BS파트" :{bg:"#FAE8FF",border:"#C084FC",text:"#7E22CE",badge:"#A855F7"},
+  "안전파트":{bg:"#FEF2F2",border:"#F87171",text:"#DC2626",badge:"#EF4444"},
+  "설계파트":{bg:"#DCFCE7",border:"#4ADE80",text:"#15803D",badge:"#22C55E"},
+  "SUB파트" :{bg:"#FFF7ED",border:"#FB923C",text:"#C2410C",badge:"#F97316"},
+  "공정파트" :{bg:"#F0FDF4",border:"#86EFAC",text:"#166534",badge:"#16A34A"},
+};
 const HOLIDAYS={"01-01":"신정","03-01":"삼일절","05-05":"어린이날","06-06":"현충일","08-15":"광복절","10-03":"개천절","10-09":"한글날","12-25":"성탄절","2025-01-28":"설날 연휴","2025-01-29":"설날","2025-01-30":"설날 연휴","2025-05-05":"어린이날/부처님오신날","2025-10-05":"추석 연휴","2025-10-06":"추석","2025-10-07":"추석 연휴","2026-02-16":"설날 연휴","2026-02-17":"설날","2026-02-18":"설날 연휴","2026-05-24":"부처님오신날","2026-09-24":"추석 연휴","2026-09-25":"추석","2026-09-26":"추석 연휴"};
 function getHoliday(ds){return HOLIDAYS[ds]||HOLIDAYS[ds.slice(5)]||null;}
 // 전역 정렬 함수 (Dashboard 등 여러 컴포넌트에서 사용)
@@ -255,7 +264,7 @@ function App(){
   const menus=["대시보드","캘린더(주요일정)","캘린더(출장일정)","캘린더(연차일정)","일정 관리","업무 관리","현장별PM","리포트"];
   const menuIcons={"대시보드":"▦","캘린더(주요일정)":"🗓","캘린더(출장일정)":"✈️","캘린더(연차일정)":"🌴","일정 관리":"📅","업무 관리":"✓","현장별PM":"🏗","리포트":"📊"};
   const newSchedDef={title:"",description:"",owner_name:myName||"",owner_email:"",start_date:todayStr,start_time:"09:00",end_date:todayStr,end_time:"18:00",priority:"medium"};
-  const newTripDef={title:"",description:"",owner_name:myName||"",owner_email:"",start_date:todayStr,start_time:"09:00",end_date:todayStr,end_time:"18:00",priority:"medium"};
+  const newTripDef={title:"",description:"",owner_name:myName||"",owner_email:"",start_date:todayStr,start_time:"09:00",end_date:todayStr,end_time:"18:00",priority:"medium",part:""};
   const newTaskDef={title:"",owner_name:myName||"",part:"",start_date:todayStr,due_date:"",progress:0,status:"할 일"};
   const newLeaveDef={title:"연차",description:"",owner_name:myName||"",owner_email:"",start_date:todayStr,start_time:"09:00",end_date:todayStr,end_time:"18:00",priority:"low"};
 
@@ -496,8 +505,8 @@ function App(){
           {activeMenu==="일정 관리"&&<ScheduleBoard schedules={schedules} onEdit={s=>{setEditingSched(s);setShowSchedModal(true);}} onDelete={deleteSched} isMobile={isMobile}/>}
           {activeMenu==="업무 관리"&&<TaskBoard tasks={tasks} onEdit={t=>{setEditingTask(t);setShowTaskModal(true);}} onDelete={deleteTask} onStatusChange={updateTaskStatus} isMobile={isMobile}/>}
           {activeMenu==="캘린더(주요일정)"&&<CalendarView schedules={schedules} currentMonth={currentMonth} setCurrentMonth={setCurrentMonth} todayStr={todayStr} selectedSched={selectedSched} setSelectedSched={setSelectedSched} onDateClick={d=>{setEditingSched(null);setShowSchedModal({prefillDate:d});}} onEditSched={s=>{setEditingSched(s);setShowSchedModal(true);}} onDeleteSched={deleteSched} isMobile={isMobile}/>}
-          {activeMenu==="캘린더(출장일정)"&&<CalendarView schedules={trips} currentMonth={currentMonth2} setCurrentMonth={setCurrentMonth2} todayStr={todayStr} selectedSched={selectedSched2} setSelectedSched={setSelectedSched2} onDateClick={d=>{setEditingTrip(null);setShowTripModal({prefillDate:d});}} onEditSched={s=>{setEditingTrip(s);setShowTripModal(true);}} onDeleteSched={deleteTrip} showOwner={true} isMobile={isMobile}/>}
-          {activeMenu==="캘린더(연차일정)"&&<CalendarView schedules={leaves} currentMonth={currentMonth3} setCurrentMonth={setCurrentMonth3} todayStr={todayStr} selectedSched={selectedSched3} setSelectedSched={setSelectedSched3} onDateClick={d=>{setEditingLeave(null);setShowLeaveModal({prefillDate:d});}} onEditSched={s=>{setEditingLeave(s);setShowLeaveModal(true);}} onDeleteSched={deleteLeave} showOwner={true} isMobile={isMobile}/>}
+          {activeMenu==="캘린더(출장일정)"&&<CalendarView schedules={trips} currentMonth={currentMonth2} setCurrentMonth={setCurrentMonth2} todayStr={todayStr} selectedSched={selectedSched2} setSelectedSched={setSelectedSched2} onDateClick={d=>{setEditingTrip(null);setShowTripModal({prefillDate:d});}} onEditSched={s=>{setEditingTrip(s);setShowTripModal(true);}} onDeleteSched={deleteTrip} showOwner={true} showPartColor={true} isMobile={isMobile}/>}
+          {activeMenu==="캘린더(연차일정)"&&<CalendarView schedules={leaves} currentMonth={currentMonth3} setCurrentMonth={setCurrentMonth3} todayStr={todayStr} selectedSched={selectedSched3} setSelectedSched={setSelectedSched3} onDateClick={d=>{setEditingLeave(null);setShowLeaveModal({prefillDate:d});}} onEditSched={s=>{setEditingLeave(s);setShowLeaveModal(true);}} onDeleteSched={deleteLeave} showOwnerColor={true} isMobile={isMobile}/>}
           {activeMenu==="현장별PM"&&<SitePMBoard sites={sites} onSave={saveSite} onDelete={deleteSite}/>}
           {activeMenu==="리포트"&&<Reports schedules={schedules} tasks={tasks}/>}
         </div>
@@ -871,7 +880,7 @@ function TaskBoard({tasks,onEdit,onDelete,onStatusChange,isMobile=false}){
 }
 
 // ── 캘린더 ────────────────────────────────────────────
-function CalendarView({schedules,currentMonth,setCurrentMonth,todayStr,selectedSched,setSelectedSched,onDateClick,onEditSched,onDeleteSched,showOwner=false,isMobile=false}){
+function CalendarView({schedules,currentMonth,setCurrentMonth,todayStr,selectedSched,setSelectedSched,onDateClick,onEditSched,onDeleteSched,showOwner=false,showPartColor=false,showOwnerColor=false,isMobile=false}){
   const year=currentMonth.getFullYear(),month=currentMonth.getMonth();
   const days=new Date(year,month+1,0).getDate();
   const firstDay=new Date(year,month,1).getDay();
@@ -915,7 +924,23 @@ function CalendarView({schedules,currentMonth,setCurrentMonth,todayStr,selectedS
                 const limit=isMobile?2:4;
                 const visible=isExp?daySch:daySch.slice(0,limit);
                 return <>
-                  {visible.map(s=>{const pc=PRIORITY_COLORS[s.priority]||PRIORITY_COLORS.medium;return <div key={s.id} onClick={e=>{e.stopPropagation();setSelectedSched(selectedSched?.id===s.id?null:s);}} style={{fontSize:isMobile?9:11,fontWeight:600,padding:isMobile?"1px 3px":"3px 7px",borderRadius:isMobile?3:5,background:pc.bg,color:pc.text,cursor:"pointer",lineHeight:"1.4",marginBottom:1}}><div style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.title}</div>{!isMobile&&showOwner&&s.owner_name&&<div style={{fontSize:10,opacity:0.85,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>👤 {s.owner_name}</div>}</div>;})}
+                  {visible.map(s=>{
+  // 뱃지 색 결정: 파트색 > 담당자 고유색 > 우선순위색
+  let badgeBg, badgeText;
+  if(showPartColor){
+    badgeBg=PART_COLORS[s.part]?.badge||"#94A3B8"; badgeText="#fff";
+  } else if(showOwnerColor){
+    badgeBg=getAvatarColor(s.owner_name); badgeText="#fff";
+  } else {
+    const pc=PRIORITY_COLORS[s.priority]||PRIORITY_COLORS.medium;
+    badgeBg=pc.bg; badgeText=pc.text;
+  }
+  return <div key={s.id} onClick={e=>{e.stopPropagation();setSelectedSched(selectedSched?.id===s.id?null:s);}}
+    style={{fontSize:isMobile?9:11,fontWeight:700,padding:isMobile?"1px 3px":"3px 7px",borderRadius:isMobile?3:5,background:badgeBg,color:badgeText,cursor:"pointer",lineHeight:"1.4",marginBottom:1,boxShadow:"0 1px 3px rgba(0,0,0,0.15)"}}>
+    <div style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.title}</div>
+    {!isMobile&&(showOwner||showOwnerColor)&&s.owner_name&&<div style={{fontSize:10,opacity:0.9,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>👤 {s.owner_name}</div>}
+    {!isMobile&&showPartColor&&s.part&&<div style={{fontSize:9,opacity:0.9,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>🏷 {s.part}</div>}
+  </div>;})}
                   {daySch.length>limit&&<div onClick={e=>{e.stopPropagation();setExpandedDay(isExp?null:ds);}} style={{fontSize:isMobile?8:11,color:"#6C63FF",paddingLeft:2,cursor:"pointer",fontWeight:700,userSelect:"none",marginTop:1}}>{isExp?"▲ 접기":`+${daySch.length-limit} 더보기`}</div>}
                 </>;
               })()}
@@ -951,7 +976,7 @@ function SitePMBoard({sites=[],onSave,onDelete}){
   const [showModal,setShowModal]=useState(false);
   const [editing,setEditing]=useState(null);
   const [searchQ,setSearchQ]=useState("");
-  const emptyForm={name:"",pm:"",completion:"",location:"",scale:"",client:"",memo:""};
+  const emptyForm={name:"",pm:"",start_date:"",completion:"",location:"",scale:"",client:"",memo:""};
   const [form,setForm]=useState(emptyForm);
   const sf=k=>e=>setForm(f=>({...f,[k]:e.target.value}));
   function saveSite(){
@@ -964,8 +989,18 @@ function SitePMBoard({sites=[],onSave,onDelete}){
     onDelete(id);
   }
   function openNew(){setEditing(null);setForm(emptyForm);setShowModal(true);}
-  function openEdit(s){setEditing(s);setForm({name:s.name,pm:s.pm,completion:s.completion||"",location:s.location||"",scale:s.scale||"",client:s.client||"",memo:s.memo||""});setShowModal(true);}
+  function openEdit(s){setEditing(s);setForm({name:s.name,pm:s.pm,start_date:s.start_date||"",completion:s.completion||"",location:s.location||"",scale:s.scale||"",client:s.client||"",memo:s.memo||""});setShowModal(true);}
   const daysLeft=d=>{if(!d)return null;return Math.ceil((new Date(d+"T00:00:00")-new Date())/(1000*60*60*24));};
+  // 착공일~준공일 기준 오늘 공정율 계산 (0~100%)
+  const calcProgress=(start,end)=>{
+    if(!start||!end)return null;
+    const s=new Date(start+"T00:00:00"), e=new Date(end+"T00:00:00"), t=new Date();
+    const total=e-s; if(total<=0)return null;
+    const elapsed=t-s;
+    if(elapsed<=0)return 0;
+    if(elapsed>=total)return 100;
+    return Math.round(elapsed/total*100);
+  };
   const q=searchQ.trim().toLowerCase();
   const filtered=q?sites.filter(s=>s.name.toLowerCase().includes(q)||s.pm.toLowerCase().includes(q)||(s.location||"").toLowerCase().includes(q)||(s.client||"").toLowerCase().includes(q)):sites;
   const inpSt={width:"100%",border:"1px solid #CBD5E0",borderRadius:8,padding:"10px 12px",fontSize:14,color:"#2D3748",outline:"none",boxSizing:"border-box"};
@@ -992,7 +1027,8 @@ function SitePMBoard({sites=[],onSave,onDelete}){
         const days=daysLeft(s.completion);
         const urgent=days!==null&&days>=0&&days<=30;
         const done=days!==null&&days<0;
-        const barColor=done?"#CBD5E0":urgent?"#F59E0B":"#6C63FF";
+        const progress=calcProgress(s.start_date,s.completion);
+        const progColor=done?"#94A3B8":progress>=80?"#F87171":progress>=50?"#FBBF24":"#6C63FF";
         const dTag=done
           ?<span style={{fontSize:11,padding:"3px 10px",borderRadius:12,background:"#F7FAFC",color:"#A0AEC0",fontWeight:700,border:"1px solid #CBD5E0"}}>준공완료</span>
           :urgent?<span style={{fontSize:11,padding:"3px 10px",borderRadius:12,background:"#FFFBEB",color:"#D97706",fontWeight:800,border:"1px solid #FBBF24"}}>⚠ D-{days}</span>
@@ -1012,14 +1048,32 @@ function SitePMBoard({sites=[],onSave,onDelete}){
             {/* PM 정보 */}
             <div style={{display:"flex",alignItems:"center",gap:10,background:"#F8FAFC",borderRadius:10,padding:"10px 14px",marginBottom:12}}>
               <div style={{width:38,height:38,borderRadius:"50%",background:getAvatarColor(s.pm),display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,fontWeight:800,color:"#fff",flexShrink:0}}>{(s.pm||"?")[0]}</div>
-              <div>
+              <div style={{flex:1}}>
                 <p style={{margin:0,fontSize:11,color:"#A0AEC0",fontWeight:600}}>담당 PM</p>
                 <p style={{margin:0,fontSize:15,fontWeight:800,color:"#2D3748"}}>{s.pm||"미지정"}</p>
               </div>
             </div>
+            {/* 공정율 바 */}
+            {progress!==null&&<div style={{marginBottom:14}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                <span style={{fontSize:12,fontWeight:700,color:"#4A5568"}}>📊 공정율</span>
+                <div style={{display:"flex",alignItems:"center",gap:6}}>
+                  <span style={{fontSize:15,fontWeight:800,color:progColor}}>{progress}%</span>
+                  {done&&<span style={{fontSize:10,color:"#A0AEC0",fontWeight:600}}>완료</span>}
+                </div>
+              </div>
+              <div style={{height:10,background:"#E2E8F0",borderRadius:6,overflow:"hidden",position:"relative"}}>
+                <div style={{height:"100%",width:`${progress}%`,background:done?"#CBD5E0":`linear-gradient(90deg,#6C63FF,${progColor})`,borderRadius:6,transition:"width 0.6s ease"}}/>
+              </div>
+              {s.start_date&&s.completion&&<div style={{display:"flex",justifyContent:"space-between",marginTop:4}}>
+                <span style={{fontSize:10,color:"#A0AEC0"}}>착공 {s.start_date}</span>
+                <span style={{fontSize:10,color:"#A0AEC0"}}>준공 {s.completion}</span>
+              </div>}
+            </div>}
             {/* 현장 상세 정보 */}
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
               {[
+                {label:"착공일자",value:s.start_date?`${s.start_date} (${getDayOfWeek(s.start_date)})`:"-",color:"#4A5568"},
                 {label:"준공일자",value:s.completion?`${s.completion} (${getDayOfWeek(s.completion)})`:"-",color:done?"#A0AEC0":urgent?"#D97706":"#2D3748"},
                 {label:"현장 위치",value:s.location||"-",color:"#4A5568"},
                 {label:"규모",value:s.scale||"-",color:"#4A5568"},
@@ -1050,6 +1104,7 @@ function SitePMBoard({sites=[],onSave,onDelete}){
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
             <div style={{gridColumn:"1/-1"}}>{lbl("현장명",true)}<input value={form.name} onChange={sf("name")} placeholder="○○ 신축공사" style={inpSt}/></div>
             <div>{lbl("담당 PM",true)}<input value={form.pm} onChange={sf("pm")} placeholder="홍길동" style={inpSt}/></div>
+            <div>{lbl("착공일자")}<input type="date" value={form.start_date} onChange={sf("start_date")} style={inpSt}/></div>
             <div>{lbl("준공일자")}<input type="date" value={form.completion} onChange={sf("completion")} style={inpSt}/></div>
             <div>{lbl("현장 위치")}<input value={form.location} onChange={sf("location")} placeholder="서울 강남구" style={inpSt}/></div>
             <div>{lbl("규모")}<input value={form.scale} onChange={sf("scale")} placeholder="지상 5층" style={inpSt}/></div>
@@ -1113,6 +1168,8 @@ function SchedModal({initial,onSave,onClose,isEdit,modalTitle}){
   const [f,setF]=useState({...initial});
   const s=(k,v)=>setF(p=>({...p,[k]:v}));
   const typeLabel=modalTitle||"일정";
+  const isTrip=modalTitle==="출장일정";
+  const selPc=PART_COLORS[f.part];
   return <ModalWrap title={isEdit?`${typeLabel} 수정`:`새 ${typeLabel} 추가`} onClose={onClose} onSave={()=>{if(!f.title?.trim()||!f.owner_name?.trim()){alert("제목과 담당자를 입력하세요.");return;}onSave(f);}}>
     <Fld label="일정 제목 *"><input value={f.title||""} onChange={e=>s("title",e.target.value)} placeholder="일정 제목을 입력하세요" style={inp}/></Fld>
     <Fld label="설명"><textarea value={f.description||""} onChange={e=>s("description",e.target.value)} rows={3} placeholder="일정 설명 (선택)" style={{...inp,resize:"vertical"}}/></Fld>
@@ -1120,6 +1177,16 @@ function SchedModal({initial,onSave,onClose,isEdit,modalTitle}){
       <Fld label="담당자 이름 *"><input value={f.owner_name||""} onChange={e=>s("owner_name",e.target.value)} placeholder="담당자 이름" style={inp}/></Fld>
       <Fld label="이메일 (알림 수신용)"><input type="email" value={f.owner_email||""} onChange={e=>s("owner_email",e.target.value)} placeholder="example@email.com" style={inp}/></Fld>
     </div>
+    {isTrip&&<Fld label="파트">
+      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+        {TRIP_PARTS.map(p=>{const pc=PART_COLORS[p];const sel=f.part===p;return <button key={p} type="button" onClick={()=>s("part",sel?"":p)}
+          style={{padding:"6px 14px",borderRadius:20,border:`2px solid ${sel?pc.badge:pc.border}`,background:sel?pc.badge:pc.bg,color:sel?"#fff":pc.text,fontWeight:700,fontSize:12,cursor:"pointer",transition:"all 0.15s"}}>{p}</button>;})}
+      </div>
+      {f.part&&selPc&&<div style={{marginTop:8,display:"inline-flex",alignItems:"center",gap:6,background:selPc.bg,border:`1px solid ${selPc.border}`,borderRadius:8,padding:"4px 12px"}}>
+        <span style={{width:8,height:8,borderRadius:"50%",background:selPc.badge,display:"inline-block"}}/>
+        <span style={{fontSize:12,color:selPc.text,fontWeight:700}}>{f.part} 선택됨</span>
+      </div>}
+    </Fld>}
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
       <Fld label="시작일"><input type="date" value={f.start_date||""} onChange={e=>{const v=e.target.value;setF(p=>({...p,start_date:v,end_date:(!p.end_date||v>p.end_date)?v:p.end_date}));}} style={inp}/></Fld>
       <Fld label="시작 시간"><input type="time" value={f.start_time||""} onChange={e=>s("start_time",e.target.value)} style={inp}/></Fld>

@@ -926,20 +926,30 @@ function CalendarView({schedules,currentMonth,setCurrentMonth,todayStr,selectedS
                 return <>
                   {visible.map(s=>{
   // 뱃지 색 결정: 파트색 > 담당자 고유색 > 우선순위색
-  let badgeBg, badgeText;
+  // 파트 연한색 팔레트 (주요일정 톤과 동일: 연한배경+진한글씨)
+  const PART_LIGHT=[
+    {bg:"#EDE9FE",text:"#4338CA"},{bg:"#DBEAFE",text:"#1D4ED8"},
+    {bg:"#FAE8FF",text:"#7E22CE"},{bg:"#FEF2F2",text:"#DC2626"},
+    {bg:"#DCFCE7",text:"#15803D"},{bg:"#FFF7ED",text:"#C2410C"},
+    {bg:"#FEF3C7",text:"#92400E"},{bg:"#F0FDF4",text:"#166534"},
+  ];
+  function getOwnerLight(name){let h=0;for(let c of(name||"?"))h=(h*31+c.charCodeAt(0))%PART_LIGHT.length;return PART_LIGHT[h];}
+  let badgeBg, badgeText, badgeBorder;
   if(showPartColor){
-    badgeBg=PART_COLORS[s.part]?.badge||"#94A3B8"; badgeText="#fff";
+    const pc=PART_COLORS[s.part]||{bg:"#F1F5F9",text:"#475569",border:"#CBD5E0"};
+    badgeBg=pc.bg; badgeText=pc.text; badgeBorder=pc.border;
   } else if(showOwnerColor){
-    badgeBg=getAvatarColor(s.owner_name); badgeText="#fff";
+    const oc=getOwnerLight(s.owner_name);
+    badgeBg=oc.bg; badgeText=oc.text; badgeBorder="transparent";
   } else {
     const pc=PRIORITY_COLORS[s.priority]||PRIORITY_COLORS.medium;
-    badgeBg=pc.bg; badgeText=pc.text;
+    badgeBg=pc.bg; badgeText=pc.text; badgeBorder=pc.border;
   }
   return <div key={s.id} onClick={e=>{e.stopPropagation();setSelectedSched(selectedSched?.id===s.id?null:s);}}
-    style={{fontSize:isMobile?9:11,fontWeight:700,padding:isMobile?"1px 3px":"3px 7px",borderRadius:isMobile?3:5,background:badgeBg,color:badgeText,cursor:"pointer",lineHeight:"1.4",marginBottom:1,boxShadow:"0 1px 3px rgba(0,0,0,0.15)"}}>
+    style={{fontSize:isMobile?9:11,fontWeight:700,padding:isMobile?"1px 3px":"3px 7px",borderRadius:isMobile?3:5,background:badgeBg,color:badgeText,border:`1px solid ${badgeBorder||"transparent"}`,cursor:"pointer",lineHeight:"1.4",marginBottom:1}}>
     <div style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.title}</div>
-    {!isMobile&&(showOwner||showOwnerColor)&&s.owner_name&&<div style={{fontSize:10,opacity:0.9,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>👤 {s.owner_name}</div>}
-    {!isMobile&&showPartColor&&s.part&&<div style={{fontSize:9,opacity:0.9,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>🏷 {s.part}</div>}
+    {!isMobile&&(showOwner||showOwnerColor)&&s.owner_name&&<div style={{fontSize:10,opacity:0.85,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>👤 {s.owner_name}</div>}
+    {!isMobile&&showPartColor&&s.part&&<div style={{fontSize:9,opacity:0.85,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>🏷 {s.part}</div>}
   </div>;})}
                   {daySch.length>limit&&<div onClick={e=>{e.stopPropagation();setExpandedDay(isExp?null:ds);}} style={{fontSize:isMobile?8:11,color:"#6C63FF",paddingLeft:2,cursor:"pointer",fontWeight:700,userSelect:"none",marginTop:1}}>{isExp?"▲ 접기":`+${daySch.length-limit} 더보기`}</div>}
                 </>;

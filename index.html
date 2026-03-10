@@ -1104,9 +1104,9 @@ function SitePMBoard({sites=[],onSave,onDelete}){
                 {label:"준공일자",value:s.completion?`${s.completion} (${getDayOfWeek(s.completion)})`:"-",color:done?"#A0AEC0":urgent?"#D97706":"#2D3748"},
                 {label:"현장 위치",value:s.location||"-",color:"#4A5568"},
                 {label:"규모",value:s.scale||"-",color:"#4A5568"},
-                {label:"발주처",value:s.client||"-",color:"#4A5568"},
                 {label:"도급액",value:s.contract_amount||"-",color:"#2D3748"},
                 {label:"원가율",value:s.cost_rate?`${s.cost_rate}%`:"-",color:s.cost_rate&&Number(s.cost_rate)>=100?"#DC2626":s.cost_rate&&Number(s.cost_rate)>=90?"#D97706":"#2D3748"},
+                {label:"발주처",value:s.client||"-",color:"#4A5568"},
                 {label:"발주방식",value:s.order_type||"-",color:"#4A5568"},
                 {label:"지분율",value:s.equity_rate||"-",color:"#4A5568"},
               ].map(({label,value,color})=><div key={label} style={{background:"#F8FAFC",borderRadius:8,padding:"8px 10px"}}>

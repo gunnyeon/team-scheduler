@@ -1104,7 +1104,7 @@ function SitePMBoard({sites=[],onSave,onDelete}){
                 {label:"준공일자",value:s.completion?`${s.completion} (${getDayOfWeek(s.completion)})`:"-",color:done?"#A0AEC0":urgent?"#D97706":"#2D3748"},
                 {label:"현장 위치",value:s.location||"-",color:"#4A5568"},
                 {label:"규모",value:s.scale||"-",color:"#4A5568"},
-                {label:"도급액",value:s.contract_amount||"-",color:"#2D3748"},
+                {label:"도급액(당사분)",value:s.contract_amount||"-",color:"#2D3748"},
                 {label:"원가율",value:s.cost_rate?`${s.cost_rate}%`:"-",color:s.cost_rate&&Number(s.cost_rate)>=100?"#DC2626":s.cost_rate&&Number(s.cost_rate)>=90?"#D97706":"#2D3748"},
                 {label:"발주처",value:s.client||"-",color:"#4A5568"},
                 {label:"발주방식",value:s.order_type||"-",color:"#4A5568"},
@@ -1140,7 +1140,7 @@ function SitePMBoard({sites=[],onSave,onDelete}){
             <div>{lbl("현장 위치")}<input value={form.location} onChange={sf("location")} placeholder="서울 강남구" style={inpSt}/></div>
             <div>{lbl("규모")}<input value={form.scale} onChange={sf("scale")} placeholder="지상 5층" style={inpSt}/></div>
             <div style={{gridColumn:"1/-1"}}>{lbl("발주처")}<input value={form.client} onChange={sf("client")} placeholder="○○건설" style={inpSt}/></div>
-            <div>{lbl("도급액")}<input value={form.contract_amount} onChange={sf("contract_amount")} placeholder="예: 50억" style={inpSt}/></div>
+            <div>{lbl("도급액(당사분)")}<input value={form.contract_amount} onChange={sf("contract_amount")} placeholder="예: 50억" style={inpSt}/></div>
             <div>{lbl("원가율 (%)")}<input type="number" min="0" max="200" value={form.cost_rate} onChange={sf("cost_rate")} placeholder="예: 85" style={inpSt}/></div>
             <div>{lbl("발주방식")}<input value={form.order_type} onChange={sf("order_type")} placeholder="예: 일괄도급" style={inpSt}/></div>
             <div>{lbl("지분율")}<input value={form.equity_rate} onChange={sf("equity_rate")} placeholder="예: 50% (단독)" style={inpSt}/></div>

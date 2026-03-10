@@ -1003,6 +1003,9 @@ function SitePMBoard({sites=[],onSave,onDelete}){
   const [showModal,setShowModal]=useState(false);
   const [editing,setEditing]=useState(null);
   const [searchQ,setSearchQ]=useState("");
+  const [filterCompletion,setFilterCompletion]=useState("전체");
+  const [filterCostRate,setFilterCostRate]=useState("전체");
+  const [filterOrderType,setFilterOrderType]=useState("전체");
   const emptyForm={name:"",pm:"",start_date:"",completion:"",location:"",scale:"",client:"",contract_amount:"",cost_rate:"",order_type:"",equity_rate:"",memo:""};
   const [form,setForm]=useState(emptyForm);
   const sf=k=>e=>setForm(f=>({...f,[k]:e.target.value}));
@@ -1029,24 +1032,78 @@ function SitePMBoard({sites=[],onSave,onDelete}){
     return Math.round(elapsed/total*100);
   };
   const q=searchQ.trim().toLowerCase();
-  const filtered=q?sites.filter(s=>s.name.toLowerCase().includes(q)||s.pm.toLowerCase().includes(q)||(s.location||"").toLowerCase().includes(q)||(s.client||"").toLowerCase().includes(q)):sites;
+  // 발주방식 고유값 목록 (동적)
+  const orderTypes=["전체",...Array.from(new Set(sites.map(s=>s.order_type||"").filter(Boolean)))];
+  // 필터 적용 + 준공일자 오름차순 정렬
+  const filtered=[...sites]
+    .filter(s=>{
+      if(q&&!(s.name.toLowerCase().includes(q)||s.pm.toLowerCase().includes(q)||(s.location||"").toLowerCase().includes(q)||(s.client||"").toLowerCase().includes(q)))return false;
+      // 준공일자 필터
+      if(filterCompletion!=="전체"){
+        const days=s.completion?Math.ceil((new Date(s.completion+"T00:00:00")-new Date())/(1000*60*60*24)):null;
+        if(filterCompletion==="임박(D-30)"&&!(days!==null&&days>=0&&days<=30))return false;
+        if(filterCompletion==="진행중"&&!(days!==null&&days>30))return false;
+        if(filterCompletion==="준공완료"&&!(days!==null&&days<0))return false;
+      }
+      // 원가율 필터
+      if(filterCostRate!=="전체"){
+        const cr=Number(s.cost_rate||0);
+        if(filterCostRate==="100% 이상"&&cr<100)return false;
+        if(filterCostRate==="90~99%"&&!(cr>=90&&cr<100))return false;
+        if(filterCostRate==="90% 미만"&&cr>=90)return false;
+      }
+      // 발주방식 필터
+      if(filterOrderType!=="전체"&&(s.order_type||"")!==filterOrderType)return false;
+      return true;
+    })
+    .sort((a,b)=>{
+      if(!a.completion&&!b.completion)return 0;
+      if(!a.completion)return 1;
+      if(!b.completion)return -1;
+      return a.completion.localeCompare(b.completion);
+    });
+  const activeFilterCount=[filterCompletion,filterCostRate,filterOrderType].filter(v=>v!=="전체").length;
+  const resetFilters=()=>{setFilterCompletion("전체");setFilterCostRate("전체");setFilterOrderType("전체");setSearchQ("");};
   const inpSt={width:"100%",border:"1px solid #CBD5E0",borderRadius:8,padding:"10px 12px",fontSize:14,color:"#2D3748",outline:"none",boxSizing:"border-box"};
   const lbl=(t,req)=><label style={{display:"block",fontSize:12,fontWeight:700,color:"#4A5568",marginBottom:5}}>{t}{req&&<span style={{color:"#F87171"}}> *</span>}</label>;
+  const selSt=(active)=>({border:`1.5px solid ${active?"#6C63FF":"#CBD5E0"}`,borderRadius:8,padding:"7px 10px",fontSize:12,color:active?"#6C63FF":"#4A5568",background:active?"#EDE9FE":"#fff",fontWeight:active?700:400,cursor:"pointer",outline:"none"});
   return <div>
     {/* 검색 + 추가 버튼 */}
-    <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:20,flexWrap:"wrap"}}>
+    <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:12,flexWrap:"wrap"}}>
       <div style={{flex:1,minWidth:200,position:"relative"}}>
         <span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",color:"#A0AEC0",fontSize:16,pointerEvents:"none"}}>🔍</span>
-        <input value={searchQ} onChange={e=>setSearchQ(e.target.value)} placeholder="현장명 또는 PM 이름으로 검색..."
+        <input value={searchQ} onChange={e=>setSearchQ(e.target.value)} placeholder="현장명, PM, 위치, 발주처 검색..."
           style={{width:"100%",border:"1px solid #CBD5E0",borderRadius:10,padding:"10px 12px 10px 38px",fontSize:14,color:"#2D3748",outline:"none",boxSizing:"border-box",background:"#fff"}}/>
         {searchQ&&<button onClick={()=>setSearchQ("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#A0AEC0",cursor:"pointer",fontSize:18,lineHeight:1}}>×</button>}
       </div>
       <span style={{fontSize:13,color:"#718096",whiteSpace:"nowrap"}}>{filtered.length}개 현장</span>
       <button onClick={openNew} style={{...btn("#6C63FF"),fontSize:13,padding:"10px 20px",whiteSpace:"nowrap"}}>+ 현장 추가</button>
     </div>
-    {/* 검색 결과 없음 */}
+    {/* 필터 행 */}
+    <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
+      <span style={{fontSize:12,color:"#718096",fontWeight:600,whiteSpace:"nowrap"}}>🔧 필터</span>
+      {/* 준공일자 */}
+      <div style={{display:"flex",gap:4,alignItems:"center",flexWrap:"wrap"}}>
+        <span style={{fontSize:11,color:"#A0AEC0",whiteSpace:"nowrap"}}>준공</span>
+        {["전체","임박(D-30)","진행중","준공완료"].map(v=><button key={v} onClick={()=>setFilterCompletion(v)} style={selSt(filterCompletion===v)}>{v}</button>)}
+      </div>
+      <div style={{width:1,height:20,background:"#E2E8F0"}}/>
+      {/* 원가율 */}
+      <div style={{display:"flex",gap:4,alignItems:"center",flexWrap:"wrap"}}>
+        <span style={{fontSize:11,color:"#A0AEC0",whiteSpace:"nowrap"}}>원가율</span>
+        {["전체","90% 미만","90~99%","100% 이상"].map(v=><button key={v} onClick={()=>setFilterCostRate(v)} style={selSt(filterCostRate===v)}>{v}</button>)}
+      </div>
+      <div style={{width:1,height:20,background:"#E2E8F0"}}/>
+      {/* 발주방식 */}
+      <div style={{display:"flex",gap:4,alignItems:"center",flexWrap:"wrap"}}>
+        <span style={{fontSize:11,color:"#A0AEC0",whiteSpace:"nowrap"}}>발주방식</span>
+        {orderTypes.map(v=><button key={v} onClick={()=>setFilterOrderType(v)} style={selSt(filterOrderType===v)}>{v}</button>)}
+      </div>
+      {activeFilterCount>0&&<button onClick={resetFilters} style={{...btn("#FFF5F5","#F87171"),fontSize:11,padding:"5px 10px",border:"1px solid #FCA5A5",marginLeft:4}}>✕ 초기화</button>}
+    </div>
+    {/* 검색/필터 결과 없음 */}
     {filtered.length===0&&<div style={{textAlign:"center",padding:"48px 0",color:"#A0AEC0",fontSize:14}}>
-      {q?`"${searchQ}"에 해당하는 현장이 없습니다.`:"등록된 현장이 없습니다."}
+      {q||activeFilterCount>0?"조건에 맞는 현장이 없습니다.":"등록된 현장이 없습니다."}
     </div>}
     {/* 카드 그리드 */}
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))",gap:18}}>

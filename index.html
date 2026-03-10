@@ -183,6 +183,9 @@ function App(){
   const [selectedSched2,setSelectedSched2]=useState(null);
   const [leaves,setLeaves]=useState([]);
   const [sites,setSites]=useState([]);
+  const [sitePMLocked,setSitePMLocked]=useState(true);
+  const [sitepmPwInput,setSitepmPwInput]=useState("");
+  const [sitepmPwError,setSitepmPwError]=useState("");
   const [currentMonth3,setCurrentMonth3]=useState(new Date());
   const [selectedSched3,setSelectedSched3]=useState(null);
   const [showLeaveModal,setShowLeaveModal]=useState(false);
@@ -262,6 +265,10 @@ function App(){
   const overdueTasks    =tasks.filter(t=>t.due_date&&t.due_date<todayStr&&t.status!=="완료").sort((a,b)=>a.due_date.localeCompare(b.due_date));
 
   const menus=["대시보드","캘린더(주요일정)","캘린더(출장일정)","캘린더(연차일정)","일정 관리","업무 관리","현장별PM","리포트"];
+  function handleMenuChange(m){
+    if(activeMenu==="현장별PM"&&m!=="현장별PM"){setSitePMLocked(true);setSitepmPwInput("");setSitepmPwError("");}
+    setActiveMenu(m);
+  }
   const menuIcons={"대시보드":"▦","캘린더(주요일정)":"🗓","캘린더(출장일정)":"✈️","캘린더(연차일정)":"🌴","일정 관리":"📅","업무 관리":"✓","현장별PM":"🏗","리포트":"📊"};
   const newSchedDef={title:"",description:"",owner_name:myName||"",owner_email:"",start_date:todayStr,start_time:"09:00",end_date:todayStr,end_time:"18:00",priority:"medium"};
   const newTripDef={title:"",description:"",owner_name:myName||"",owner_email:"",start_date:todayStr,start_time:"09:00",end_date:todayStr,end_time:"18:00",priority:"medium",part:""};
@@ -466,7 +473,7 @@ function App(){
         </div>
         <nav style={{padding:"16px 8px",flex:1}}>
           {menus.map(m=>(
-            <div key={m} onClick={()=>setActiveMenu(m)} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 12px",borderRadius:10,marginBottom:4,cursor:"pointer",background:activeMenu===m?"linear-gradient(90deg,rgba(108,99,255,0.12),rgba(255,107,157,0.1))":"transparent",borderLeft:activeMenu===m?"3px solid #6C63FF":"3px solid transparent",color:activeMenu===m?"#6C63FF":"#4A5568"}}>
+            <div key={m} onClick={()=>handleMenuChange(m)} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 12px",borderRadius:10,marginBottom:4,cursor:"pointer",background:activeMenu===m?"linear-gradient(90deg,rgba(108,99,255,0.12),rgba(255,107,157,0.1))":"transparent",borderLeft:activeMenu===m?"3px solid #6C63FF":"3px solid transparent",color:activeMenu===m?"#6C63FF":"#4A5568"}}>
               <span style={{fontSize:16,flexShrink:0}}>{menuIcons[m]}</span>
               {(sidebarOpen&&!isTablet)&&<span style={{fontSize:14,fontWeight:activeMenu===m?700:500,whiteSpace:"nowrap"}}>{m}</span>}
             </div>
@@ -507,7 +514,29 @@ function App(){
           {activeMenu==="캘린더(주요일정)"&&<CalendarView schedules={schedules} currentMonth={currentMonth} setCurrentMonth={setCurrentMonth} todayStr={todayStr} selectedSched={selectedSched} setSelectedSched={setSelectedSched} onDateClick={d=>{setEditingSched(null);setShowSchedModal({prefillDate:d});}} onEditSched={s=>{setEditingSched(s);setShowSchedModal(true);}} onDeleteSched={deleteSched} isMobile={isMobile}/>}
           {activeMenu==="캘린더(출장일정)"&&<CalendarView schedules={trips} currentMonth={currentMonth2} setCurrentMonth={setCurrentMonth2} todayStr={todayStr} selectedSched={selectedSched2} setSelectedSched={setSelectedSched2} onDateClick={d=>{setEditingTrip(null);setShowTripModal({prefillDate:d});}} onEditSched={s=>{setEditingTrip(s);setShowTripModal(true);}} onDeleteSched={deleteTrip} showOwner={true} showPartColor={true} isMobile={isMobile}/>}
           {activeMenu==="캘린더(연차일정)"&&<CalendarView schedules={leaves} currentMonth={currentMonth3} setCurrentMonth={setCurrentMonth3} todayStr={todayStr} selectedSched={selectedSched3} setSelectedSched={setSelectedSched3} onDateClick={d=>{setEditingLeave(null);setShowLeaveModal({prefillDate:d});}} onEditSched={s=>{setEditingLeave(s);setShowLeaveModal(true);}} onDeleteSched={deleteLeave} showOwnerColor={true} isMobile={isMobile}/>}
-          {activeMenu==="현장별PM"&&<SitePMBoard sites={sites} onSave={saveSite} onDelete={deleteSite}/>}
+          {activeMenu==="현장별PM"&&(sitePMLocked
+  ?<div style={{display:"flex",alignItems:"center",justifyContent:"center",minHeight:400}}>
+    <div style={{background:"#fff",borderRadius:20,padding:"44px 48px",boxShadow:"0 4px 24px rgba(0,0,0,0.10)",width:340,textAlign:"center",border:"1px solid #E2E8F0"}}>
+      <div style={{width:60,height:60,borderRadius:18,background:"linear-gradient(135deg,#6C63FF,#9F7AEA)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,margin:"0 auto 16px"}}>🔒</div>
+      <h2 style={{margin:"0 0 6px",fontSize:18,fontWeight:800,color:"#2D3748"}}>현장별 PM</h2>
+      <p style={{color:"#718096",fontSize:13,margin:"0 0 24px"}}>보안구역입니다. 암호를 입력하세요.</p>
+      <input
+        type="password"
+        value={sitepmPwInput}
+        onChange={e=>{setSitepmPwInput(e.target.value);setSitepmPwError("");}}
+        onKeyDown={e=>{if(e.key==="Enter"){if(sitepmPwInput==="dongbu"){setSitePMLocked(false);setSitepmPwInput("");}else{setSitepmPwError("암호가 올바르지 않습니다.");}}} }
+        placeholder="암호 입력"
+        autoFocus
+        style={{width:"100%",background:"#EEF2F7",border:`1px solid ${sitepmPwError?"#F87171":"#6C63FF66"}`,borderRadius:10,padding:"11px 14px",fontSize:15,color:"#2D3748",outline:"none",boxSizing:"border-box",marginBottom:sitepmPwError?8:14,textAlign:"center",letterSpacing:4}}/>
+      {sitepmPwError&&<p style={{color:"#F87171",fontSize:12,margin:"0 0 12px"}}>{sitepmPwError}</p>}
+      <button onClick={()=>{if(sitepmPwInput==="dongbu"){setSitePMLocked(false);setSitepmPwInput("");}else{setSitepmPwError("암호가 올바르지 않습니다.");}}}
+        style={{width:"100%",background:"linear-gradient(90deg,#6C63FF,#9C5CF7)",border:"none",borderRadius:10,padding:12,fontSize:14,fontWeight:700,color:"#fff",cursor:"pointer"}}>
+        확인 →
+      </button>
+    </div>
+  </div>
+  :<SitePMBoard sites={sites} onSave={saveSite} onDelete={deleteSite}/>
+)}
           {activeMenu==="리포트"&&<Reports schedules={schedules} tasks={tasks}/>}
         </div>
       </div>
@@ -532,7 +561,7 @@ function App(){
     {/* 모바일 하단 내비 */}
       <div className="mobile-nav" style={{display:isMobile?"flex":"none",position:"fixed",bottom:0,left:0,right:0,background:"#FFFFFF",borderTop:"1px solid #CBD5E0",zIndex:50,padding:"6px 0",justifyContent:"space-around",alignItems:"center"}}>
         {menus.map(m=>(
-          <div key={m} onClick={()=>setActiveMenu(m)} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2,padding:"4px 8px",cursor:"pointer",color:activeMenu===m?"#6C63FF":"#718096",flex:1}}>
+          <div key={m} onClick={()=>handleMenuChange(m)} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2,padding:"4px 8px",cursor:"pointer",color:activeMenu===m?"#6C63FF":"#718096",flex:1}}>
             <span style={{fontSize:18}}>{menuIcons[m]}</span>
             <span style={{fontSize:9,fontWeight:activeMenu===m?700:400,textAlign:"center",lineHeight:1.2}}>{m.replace("캘린더(","").replace(")","").replace("일정 관리","일정").replace("업무 관리","업무")}</span>
           </div>

@@ -1033,7 +1033,7 @@ function SitePMBoard({sites=[],onSave,onDelete}){
   };
   const q=searchQ.trim().toLowerCase();
   // 발주방식 고유값 목록 (동적)
-  const orderTypes=["전체",...Array.from(new Set(sites.map(s=>s.order_type||"").filter(Boolean)))];
+  const orderTypes=["전체",...Array.from(new Set(sites.map(s=>s.order_type||"").filter(Boolean))).sort((a,b)=>a.localeCompare(b,"ko"))];
   // 필터 적용 + 준공일자 오름차순 정렬
   const filtered=[...sites]
     .filter(s=>{

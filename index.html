@@ -50,12 +50,13 @@
 const {useState,useEffect,useRef,useCallback}=React;
 
 // ── API 설정 ───────────────────────────────────────────
-const API_URL = "https://script.google.com/macros/s/AKfycby1o_CbWT_8689-mAQ1HWbY6yUSHnQvU-q2tFda3U9JFzluiMzj3vo7GtWzIifkXflPzw/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbxSFk6ThO2r_bvf1-JrZ35f21f7JYTtANKT89bNKIYJ1qDqYuvIuFrGrcizJwNwDP--og/exec";
 const SCHED_HEADERS = ["id","title","description","owner_name","owner_email","start_date","start_time","end_date","end_time","priority"];
 const TASK_HEADERS  = ["id","title","owner_name","part","start_date","due_date","progress","status"];
 const TRIP_HEADERS  = ["id","title","description","owner_name","owner_email","start_date","start_time","end_date","end_time","priority","part"];
 const LEAVE_HEADERS = ["id","title","description","owner_name","owner_email","start_date","start_time","end_date","end_time","priority"];
 const SITE_HEADERS  = ["id","name","pm","start_date","completion","location","scale","client","contract_amount","cost_rate","order_type","equity_rate","memo"];
+const ORG_HEADERS   = ["id","site_id","role","name","color","parentId"];
 
 async function apiGet(sheet){
   const r=await fetch(`${API_URL}?sheet=${sheet}`);
@@ -183,6 +184,7 @@ function App(){
   const [selectedSched2,setSelectedSched2]=useState(null);
   const [leaves,setLeaves]=useState([]);
   const [sites,setSites]=useState([]);
+  const [orgNodes,setOrgNodes]=useState([]);
   const [sitePMLocked,setSitePMLocked]=useState(true);
   const [sitepmPwInput,setSitepmPwInput]=useState("");
   const [sitepmPwError,setSitepmPwError]=useState("");
@@ -203,7 +205,7 @@ function App(){
     try{
       setSyncStatus("연결 중");
       // apiInit은 백그라운드 (시트 생성은 오래 걸릴 수 있음)
-      Promise.all([apiInit("schedules",SCHED_HEADERS),apiInit("trips",TRIP_HEADERS),apiInit("tasks",TASK_HEADERS),apiInit("leaves",LEAVE_HEADERS),apiInit("sites",SITE_HEADERS)]).catch(()=>{});
+      Promise.all([apiInit("schedules",SCHED_HEADERS),apiInit("trips",TRIP_HEADERS),apiInit("tasks",TASK_HEADERS),apiInit("leaves",LEAVE_HEADERS),apiInit("sites",SITE_HEADERS),apiInit("org_nodes",ORG_HEADERS)]).catch(()=>{});
       await loadData();
       initialized.current=true;
     }catch(e){
@@ -216,7 +218,7 @@ function App(){
   async function loadData(){
     const reqAt=Date.now();
     try{
-      const [s,tr,t,lv,sv]=await Promise.all([apiGet("schedules"),apiGet("trips"),apiGet("tasks"),apiGet("leaves"),apiGet("sites")]);
+      const [s,tr,t,lv,sv,on]=await Promise.all([apiGet("schedules"),apiGet("trips"),apiGet("tasks"),apiGet("leaves"),apiGet("sites"),apiGet("org_nodes")]);
       // 요청 시작 후 로컬 변경이 있으면 무시 (내가 방금 저장한 데이터를 서버가 덮어쓰지 않도록)
       if(lastLocalChange.current>reqAt)return;
       // JSON 문자열 비교로 실제 변경 시에만 setState → 불필요한 리렌더 방지
@@ -225,6 +227,7 @@ function App(){
       setTasks(prev=>{const next=JSON.stringify(t);return JSON.stringify(prev)===next?prev:t;});
       setLeaves(prev=>{const next=JSON.stringify(lv);return JSON.stringify(prev)===next?prev:lv;});
       setSites(prev=>{const next=JSON.stringify(sv);return JSON.stringify(prev)===next?prev:sv;});
+      setOrgNodes(prev=>{const next=JSON.stringify(on);return JSON.stringify(prev)===next?prev:on;});
       setLastSync(new Date()); setSyncStatus("동기화됨");
     }catch(e){setSyncStatus("오류");}
   }
@@ -535,7 +538,7 @@ function App(){
       </button>
     </div>
   </div>
-  :<SitePMBoard sites={sites} onSave={saveSite} onDelete={deleteSite}/>
+  :<SitePMBoard sites={sites} onSave={saveSite} onDelete={deleteSite} orgNodes={orgNodes} onOrgSave={(node)=>{const row={...node};apiUpsert("org_nodes",row).then(()=>afterSave()).catch(()=>setSyncStatus("오류"));}} onOrgDelete={(id)=>{apiDelete("org_nodes",id).then(()=>afterSave()).catch(()=>setSyncStatus("오류"));}} onOrgSaveBump={()=>{bumpLocal();}} />
 )}
           {activeMenu==="리포트"&&<Reports schedules={schedules} tasks={tasks}/>}
         </div>
@@ -1027,9 +1030,134 @@ function CalendarView({schedules,currentMonth,setCurrentMonth,todayStr,selectedS
   </div>;
 }
 
+// ── 현장 조직도 편집기 ────────────────────────────────
+function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSaveBump}){
+  // 이 현장 소속 노드만 필터
+  const nodes=orgNodes.filter(n=>n.site_id===site.id);
+  const [editingNode,setEditingNode]=useState(null);
+  const [form,setForm]=useState({role:"",name:"",color:"#6C63FF"});
+  const [saving,setSaving]=useState(false);
+  const COLORS=["#6C63FF","#3B82F6","#22C55E","#F59E0B","#EF4444","#A855F7","#0EA5E9","#F97316","#14B8A6","#EC4899"];
+
+  function openEdit(n){setEditingNode(n.id);setForm({role:n.role,name:n.name||"",color:n.color||"#6C63FF"});}
+  function openAdd(parentId){setEditingNode("new:"+(parentId||"null"));setForm({role:"",name:"",color:"#6C63FF"});}
+  async function saveNode(){
+    if(!form.role.trim()){alert("직책을 입력하세요.");return;}
+    setSaving(true);
+    onOrgSaveBump&&onOrgSaveBump();
+    if(editingNode.startsWith("new:")){
+      const rawParent=editingNode.split(":")[1];
+      const parentId=rawParent==="null"?null:rawParent;
+      const row={id:`org${Date.now()}`,site_id:site.id,role:form.role,name:form.name,color:form.color,parentId:parentId||""};
+      await onOrgSave(row);
+    } else {
+      const existing=nodes.find(n=>n.id===editingNode);
+      const row={...existing,role:form.role,name:form.name,color:form.color};
+      await onOrgSave(row);
+    }
+    setSaving(false);
+    setEditingNode(null);
+  }
+  async function delNode(id){
+    function collectIds(nid){
+      const children=nodes.filter(n=>n.parentId===nid).map(n=>n.id);
+      return[nid,...children.flatMap(collectIds)];
+    }
+    onOrgSaveBump&&onOrgSaveBump();
+    const ids=collectIds(id);
+    for(const nid of ids) await onOrgDelete(nid);
+  }
+
+  // 트리 렌더링 (재귀)
+  function renderTree(parentId,depth){
+    const children=nodes.filter(n=>n.parentId===(parentId||null));
+    if(children.length===0&&parentId!==null)return null;
+    return children.map(n=>{
+      const kids=nodes.filter(c=>c.parentId===n.id);
+      return <div key={n.id} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:0,position:"relative"}}>
+        {/* 연결선 위 */}
+        {depth>0&&<div style={{width:2,height:20,background:"#CBD5E0"}}/>}
+        {/* 노드 카드 */}
+        <div style={{position:"relative",display:"inline-flex",flexDirection:"column",alignItems:"center"}}>
+          <div style={{background:"#fff",border:`2px solid ${n.color||"#6C63FF"}`,borderRadius:12,padding:"10px 16px",minWidth:100,textAlign:"center",boxShadow:"0 2px 8px rgba(0,0,0,0.08)",position:"relative"}}>
+            <div style={{width:32,height:32,borderRadius:"50%",background:n.color||"#6C63FF",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800,color:"#fff",margin:"0 auto 6px"}}>{(n.name||n.role)[0]}</div>
+            <p style={{margin:"0 0 2px",fontSize:11,color:n.color||"#6C63FF",fontWeight:700}}>{n.role}</p>
+            <p style={{margin:0,fontSize:13,fontWeight:800,color:"#1A1A2E"}}>{n.name||"미지정"}</p>
+            {/* 편집/삭제/추가 버튼 */}
+            <div style={{display:"flex",gap:4,justifyContent:"center",marginTop:8}}>
+              <button onClick={()=>openEdit(n)} style={{fontSize:10,padding:"2px 7px",borderRadius:5,background:"#EEF2F7",color:"#6C63FF",border:"none",cursor:"pointer",fontWeight:700}}>✏</button>
+              {n.parentId!==null&&<button onClick={()=>delNode(n.id)} style={{fontSize:10,padding:"2px 7px",borderRadius:5,background:"#FFF5F5",color:"#F87171",border:"none",cursor:"pointer",fontWeight:700}}>✕</button>}
+              <button onClick={()=>openAdd(n.id)} style={{fontSize:10,padding:"2px 7px",borderRadius:5,background:"#F0FDF4",color:"#15803D",border:"none",cursor:"pointer",fontWeight:700}}>+부하</button>
+            </div>
+          </div>
+        </div>
+        {/* 자녀 노드 */}
+        {kids.length>0&&<>
+          <div style={{width:2,height:20,background:"#CBD5E0"}}/>
+          <div style={{display:"flex",gap:16,alignItems:"flex-start",position:"relative"}}>
+            {/* 수평선 */}
+            {kids.length>1&&<div style={{position:"absolute",top:0,left:"50%",transform:"translateX(-50%)",height:2,background:"#CBD5E0",width:`calc(100% - 60px)`}}/>}
+            {renderTree(n.id,depth+1)}
+          </div>
+        </>}
+      </div>;
+    });
+  }
+
+  return <div style={{position:"fixed",inset:0,background:"rgba(15,15,30,0.6)",zIndex:400,display:"flex",flexDirection:"column"}} onClick={onClose}>
+    <div onClick={e=>e.stopPropagation()} style={{background:"#F4F6FA",width:"100%",height:"100%",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+      {/* 헤더 */}
+      <div style={{background:"#fff",borderBottom:"1px solid #E2E8F0",padding:"16px 28px",display:"flex",alignItems:"center",gap:16,flexShrink:0}}>
+        <div style={{width:40,height:40,borderRadius:12,background:"linear-gradient(135deg,#6C63FF,#9F7AEA)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>🏢</div>
+        <div>
+          <p style={{margin:0,fontSize:11,color:"#A0AEC0",fontWeight:600}}>현장 조직도</p>
+          <h2 style={{margin:0,fontSize:18,fontWeight:800,color:"#1A1A2E"}}>{site.name}</h2>
+        </div>
+        <div style={{marginLeft:"auto",display:"flex",gap:8}}>
+          <button onClick={()=>openAdd("null")} style={{...{padding:"8px 16px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,fontSize:13},background:"#6C63FF",color:"#fff"}}>+ 최상위 노드 추가</button>
+          <button onClick={onClose} style={{background:"none",border:"none",fontSize:26,color:"#A0AEC0",cursor:"pointer",lineHeight:1}}>×</button>
+        </div>
+      </div>
+      {/* 조직도 영역 */}
+      <div style={{flex:1,overflow:"auto",padding:"32px 40px",display:"flex",justifyContent:"center"}}>
+        {nodes.length===0
+          ?<div style={{textAlign:"center",color:"#A0AEC0",marginTop:80}}>
+            <div style={{fontSize:48,marginBottom:12}}>🏢</div>
+            <p style={{fontSize:15,fontWeight:600}}>조직도가 비어있습니다.</p>
+            <p style={{fontSize:13}}>위의 "+ 최상위 노드 추가" 버튼으로 시작하세요.</p>
+          </div>
+          :<div style={{display:"flex",gap:24,alignItems:"flex-start",flexWrap:"wrap",justifyContent:"center"}}>
+            {renderTree(null,0)}
+          </div>
+        }
+      </div>
+      {/* 편집 패널 */}
+      {editingNode&&<div style={{background:"#fff",borderTop:"1px solid #E2E8F0",padding:"18px 28px",flexShrink:0,display:"flex",gap:14,alignItems:"flex-end",flexWrap:"wrap"}}>
+        <div>
+          <label style={{display:"block",fontSize:11,fontWeight:700,color:"#4A5568",marginBottom:5}}>직책 *</label>
+          <input value={form.role} onChange={e=>setForm(f=>({...f,role:e.target.value}))} placeholder="현장소장, 공무팀장..." style={{border:"1px solid #CBD5E0",borderRadius:8,padding:"8px 12px",fontSize:14,color:"#2D3748",outline:"none",width:140}}/>
+        </div>
+        <div>
+          <label style={{display:"block",fontSize:11,fontWeight:700,color:"#4A5568",marginBottom:5}}>이름</label>
+          <input value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} placeholder="홍길동" onKeyDown={e=>{if(e.key==="Enter")saveNode();}} style={{border:"1px solid #CBD5E0",borderRadius:8,padding:"8px 12px",fontSize:14,color:"#2D3748",outline:"none",width:120}}/>
+        </div>
+        <div>
+          <label style={{display:"block",fontSize:11,fontWeight:700,color:"#4A5568",marginBottom:5}}>색상</label>
+          <div style={{display:"flex",gap:5}}>
+            {COLORS.map(c=><div key={c} onClick={()=>setForm(f=>({...f,color:c}))} style={{width:22,height:22,borderRadius:"50%",background:c,cursor:"pointer",border:form.color===c?"3px solid #1A1A2E":"2px solid transparent",boxSizing:"border-box"}}/>)}
+          </div>
+        </div>
+        <button onClick={saveNode} style={{background:"#6C63FF",color:"#fff",border:"none",borderRadius:8,padding:"9px 20px",fontWeight:700,fontSize:13,cursor:"pointer"}}>저장</button>
+        <button onClick={()=>setEditingNode(null)} style={{background:"#F7FAFC",color:"#718096",border:"1px solid #CBD5E0",borderRadius:8,padding:"9px 16px",fontWeight:600,fontSize:13,cursor:"pointer"}}>취소</button>
+      </div>}
+    </div>
+  </div>;
+}
+
 // ── 현장별 PM 현황 ─────────────────────────────────────
-function SitePMBoard({sites=[],onSave,onDelete}){
+function SitePMBoard({sites=[],onSave,onDelete,orgNodes=[],onOrgSave,onOrgDelete,onOrgSaveBump}){
   const [showModal,setShowModal]=useState(false);
+  const [orgSite,setOrgSite]=useState(null);
   const [editing,setEditing]=useState(null);
   const [searchQ,setSearchQ]=useState("");
   const [filterCompletion,setFilterCompletion]=useState("전체");
@@ -1204,12 +1332,15 @@ function SitePMBoard({sites=[],onSave,onDelete}){
           </div>
           {/* 액션 버튼 */}
           <div style={{padding:"10px 20px 14px",display:"flex",gap:8,borderTop:"1px solid #F0F4F8"}}>
+            <button onClick={()=>setOrgSite(s)} style={{flex:1,...btn("#F0FDF4","#15803D"),fontSize:12,padding:"7px 0"}}>🏢 조직도</button>
             <button onClick={()=>openEdit(s)} style={{flex:1,...btn("#EEF2F7","#6C63FF"),fontSize:12,padding:"7px 0"}}>✏ 수정</button>
             <button onClick={()=>del(s.id)} style={{flex:1,...btn("#FFF5F5","#F87171"),fontSize:12,padding:"7px 0"}}>🗑 삭제</button>
           </div>
         </div>;
       })}
     </div>
+    {/* 조직도 모달 */}
+    {orgSite&&<OrgChartModal site={orgSite} onClose={()=>setOrgSite(null)} orgNodes={orgNodes} onOrgSave={onOrgSave} onOrgDelete={onOrgDelete} onOrgSaveBump={onOrgSaveBump}/>}
     {/* 추가/수정 모달 */}
     {showModal&&<div style={{position:"fixed",inset:0,background:"rgba(30,30,60,0.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200,padding:16,overflowY:"auto"}}>
       <div style={{background:"#fff",borderRadius:18,padding:"28px 30px",width:"100%",maxWidth:520,boxShadow:"0 8px 40px rgba(0,0,0,0.18)",margin:"auto"}}>

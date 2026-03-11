@@ -50,13 +50,13 @@
 const {useState,useEffect,useRef,useCallback}=React;
 
 // ── API 설정 ───────────────────────────────────────────
-const API_URL = "https://script.google.com/macros/s/AKfycbxSFk6ThO2r_bvf1-JrZ35f21f7JYTtANKT89bNKIYJ1qDqYuvIuFrGrcizJwNwDP--og/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbwBlRmYnyniFQh5xuRapItNbRxVI57iyV9fDim6MX_gaQM4-61WmJs3v1aMIerC79dLjg/exec";
 const SCHED_HEADERS = ["id","title","description","owner_name","owner_email","start_date","start_time","end_date","end_time","priority"];
 const TASK_HEADERS  = ["id","title","owner_name","part","start_date","due_date","progress","status"];
 const TRIP_HEADERS  = ["id","title","description","owner_name","owner_email","start_date","start_time","end_date","end_time","priority","part"];
 const LEAVE_HEADERS = ["id","title","description","owner_name","owner_email","start_date","start_time","end_date","end_time","priority"];
 const SITE_HEADERS  = ["id","name","pm","start_date","completion","location","scale","client","contract_amount","cost_rate","order_type","equity_rate","memo"];
-const ORG_HEADERS   = ["id","site_id","role","name","color","parentId"];
+const ORG_HEADERS   = ["id","site_id","group","role","grade","name","age","phone","color","parentId"];
 
 async function apiGet(sheet){
   const r=await fetch(`${API_URL}?sheet=${sheet}`);
@@ -1031,126 +1031,162 @@ function CalendarView({schedules,currentMonth,setCurrentMonth,todayStr,selectedS
 }
 
 // ── 현장 조직도 편집기 ────────────────────────────────
-function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSaveBump}){
-  // 이 현장 소속 노드만 필터
-  const nodes=orgNodes.filter(n=>n.site_id===site.id);
-  const [editingNode,setEditingNode]=useState(null);
-  const [form,setForm]=useState({role:"",name:"",color:"#6C63FF"});
-  const [saving,setSaving]=useState(false);
-  const COLORS=["#6C63FF","#3B82F6","#22C55E","#F59E0B","#EF4444","#A855F7","#0EA5E9","#F97316","#14B8A6","#EC4899"];
+// 직군별 색상 팔레트
+const ORG_GROUPS=[
+  {label:"시공",color:"#6C63FF"},{label:"공무",color:"#3B82F6"},
+  {label:"안전",color:"#22C55E"},{label:"품질",color:"#F59E0B"},
+  {label:"설계",color:"#EC4899"},{label:"발주처",color:"#EF4444"},
+  {label:"협력사",color:"#F97316"},{label:"기타",color:"#94A3B8"},
+];
+function getGroupColor(group){return(ORG_GROUPS.find(g=>g.label===group)||{color:"#94A3B8"}).color;}
 
-  function openEdit(n){setEditingNode(n.id);setForm({role:n.role,name:n.name||"",color:n.color||"#6C63FF"});}
-  function openAdd(parentId){setEditingNode("new:"+(parentId||"null"));setForm({role:"",name:"",color:"#6C63FF"});}
+function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSaveBump}){
+  const nodes=orgNodes.filter(n=>n.site_id===site.id);
+  const emptyForm={group:"시공",role:"",grade:"",name:"",age:"",phone:"",color:"#6C63FF",parentId:null};
+  const [modalForm,setModalForm]=useState(null); // null=닫힘, {...form, isNew, nodeId}
+  const [saving,setSaving]=useState(false);
+  const mf=k=>e=>setModalForm(f=>({...f,[k]:e.target.value}));
+
+  function openAdd(parentId){
+    setModalForm({...emptyForm,parentId:parentId||null,isNew:true,nodeId:null});
+  }
+  function openEdit(n){
+    setModalForm({group:n.group||"시공",role:n.role||"",grade:n.grade||"",name:n.name||"",age:n.age||"",phone:n.phone||"",color:n.color||getGroupColor(n.group||"시공"),parentId:n.parentId||null,isNew:false,nodeId:n.id});
+  }
   async function saveNode(){
-    if(!form.role.trim()){alert("직책을 입력하세요.");return;}
+    if(!modalForm.role.trim()){alert("직책을 입력하세요.");return;}
     setSaving(true);
     onOrgSaveBump&&onOrgSaveBump();
-    if(editingNode.startsWith("new:")){
-      const rawParent=editingNode.split(":")[1];
-      const parentId=rawParent==="null"?null:rawParent;
-      const row={id:`org${Date.now()}`,site_id:site.id,role:form.role,name:form.name,color:form.color,parentId:parentId||""};
+    const color=getGroupColor(modalForm.group);
+    if(modalForm.isNew){
+      const row={id:`org${Date.now()}`,site_id:site.id,group:modalForm.group,role:modalForm.role,grade:modalForm.grade,name:modalForm.name,age:modalForm.age,phone:modalForm.phone,color,parentId:modalForm.parentId||""};
       await onOrgSave(row);
     } else {
-      const existing=nodes.find(n=>n.id===editingNode);
-      const row={...existing,role:form.role,name:form.name,color:form.color};
+      const existing=nodes.find(n=>n.id===modalForm.nodeId);
+      const row={...existing,group:modalForm.group,role:modalForm.role,grade:modalForm.grade,name:modalForm.name,age:modalForm.age,phone:modalForm.phone,color};
       await onOrgSave(row);
     }
     setSaving(false);
-    setEditingNode(null);
+    setModalForm(null);
   }
   async function delNode(id){
+    if(!window.confirm("이 노드와 하위 노드를 모두 삭제하시겠습니까?"))return;
     function collectIds(nid){
-      const children=nodes.filter(n=>n.parentId===nid).map(n=>n.id);
-      return[nid,...children.flatMap(collectIds)];
+      const ch=nodes.filter(n=>n.parentId===nid).map(n=>n.id);
+      return[nid,...ch.flatMap(collectIds)];
     }
     onOrgSaveBump&&onOrgSaveBump();
-    const ids=collectIds(id);
-    for(const nid of ids) await onOrgDelete(nid);
+    for(const nid of collectIds(id)) await onOrgDelete(nid);
   }
 
-  // 트리 렌더링 (재귀)
-  function renderTree(parentId,depth){
-    const children=nodes.filter(n=>n.parentId===(parentId||null));
-    if(children.length===0&&parentId!==null)return null;
-    return children.map(n=>{
-      const kids=nodes.filter(c=>c.parentId===n.id);
-      return <div key={n.id} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:0,position:"relative"}}>
-        {/* 연결선 위 */}
-        {depth>0&&<div style={{width:2,height:20,background:"#CBD5E0"}}/>}
-        {/* 노드 카드 */}
-        <div style={{position:"relative",display:"inline-flex",flexDirection:"column",alignItems:"center"}}>
-          <div style={{background:"#fff",border:`2px solid ${n.color||"#6C63FF"}`,borderRadius:12,padding:"10px 16px",minWidth:100,textAlign:"center",boxShadow:"0 2px 8px rgba(0,0,0,0.08)",position:"relative"}}>
-            <div style={{width:32,height:32,borderRadius:"50%",background:n.color||"#6C63FF",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800,color:"#fff",margin:"0 auto 6px"}}>{(n.name||n.role)[0]}</div>
-            <p style={{margin:"0 0 2px",fontSize:11,color:n.color||"#6C63FF",fontWeight:700}}>{n.role}</p>
-            <p style={{margin:0,fontSize:13,fontWeight:800,color:"#1A1A2E"}}>{n.name||"미지정"}</p>
-            {/* 편집/삭제/추가 버튼 */}
-            <div style={{display:"flex",gap:4,justifyContent:"center",marginTop:8}}>
-              <button onClick={()=>openEdit(n)} style={{fontSize:10,padding:"2px 7px",borderRadius:5,background:"#EEF2F7",color:"#6C63FF",border:"none",cursor:"pointer",fontWeight:700}}>✏</button>
-              {n.parentId!==null&&<button onClick={()=>delNode(n.id)} style={{fontSize:10,padding:"2px 7px",borderRadius:5,background:"#FFF5F5",color:"#F87171",border:"none",cursor:"pointer",fontWeight:700}}>✕</button>}
-              <button onClick={()=>openAdd(n.id)} style={{fontSize:10,padding:"2px 7px",borderRadius:5,background:"#F0FDF4",color:"#15803D",border:"none",cursor:"pointer",fontWeight:700}}>+부하</button>
-            </div>
-          </div>
+  // 트리 노드 카드
+  function NodeCard({n,depth}){
+    const gc=getGroupColor(n.group);
+    const kids=nodes.filter(c=>c.parentId===n.id);
+    return <div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
+      {depth>0&&<div style={{width:2,height:22,background:"#CBD5E0"}}/>}
+      <div style={{background:"#fff",border:`2px solid ${gc}`,borderRadius:14,padding:"12px 16px",minWidth:130,textAlign:"center",boxShadow:"0 2px 12px rgba(0,0,0,0.09)",position:"relative"}}>
+        {/* 직군 뱃지 */}
+        <div style={{position:"absolute",top:-10,left:"50%",transform:"translateX(-50%)",background:gc,color:"#fff",fontSize:9,fontWeight:800,padding:"2px 8px",borderRadius:6,whiteSpace:"nowrap"}}>{n.group||"기타"}</div>
+        {/* 아바타 */}
+        <div style={{width:36,height:36,borderRadius:"50%",background:gc,display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,fontWeight:800,color:"#fff",margin:"6px auto 8px"}}>{(n.name||n.role||"?")[0]}</div>
+        {/* 정보 */}
+        <p style={{margin:"0 0 1px",fontSize:10,color:gc,fontWeight:800,letterSpacing:0.3}}>{n.role||"-"}</p>
+        {n.grade&&<p style={{margin:"0 0 2px",fontSize:9,color:"#A0AEC0",fontWeight:600}}>{n.grade}</p>}
+        <p style={{margin:"0 0 2px",fontSize:13,fontWeight:800,color:"#1A1A2E"}}>{n.name||"미지정"}</p>
+        {n.age&&<p style={{margin:"0 0 1px",fontSize:10,color:"#718096"}}>만 {n.age}세</p>}
+        {n.phone&&<p style={{margin:"0 0 2px",fontSize:10,color:"#718096"}}>📞 {n.phone}</p>}
+        {/* 액션 */}
+        <div style={{display:"flex",gap:3,justifyContent:"center",marginTop:8,flexWrap:"wrap"}}>
+          <button onClick={()=>openEdit(n)} style={{fontSize:9,padding:"2px 6px",borderRadius:5,background:"#EEF2F7",color:"#6C63FF",border:"none",cursor:"pointer",fontWeight:700}}>✏ 수정</button>
+          <button onClick={()=>openAdd(n.id)} style={{fontSize:9,padding:"2px 6px",borderRadius:5,background:"#F0FDF4",color:"#15803D",border:"none",cursor:"pointer",fontWeight:700}}>+ 부하</button>
+          {(!n.parentId||n.parentId==="")&&<button onClick={()=>delNode(n.id)} style={{fontSize:9,padding:"2px 6px",borderRadius:5,background:"#FFF5F5",color:"#F87171",border:"none",cursor:"pointer",fontWeight:700}}>✕</button>}
+          {n.parentId&&n.parentId!==""&&<button onClick={()=>delNode(n.id)} style={{fontSize:9,padding:"2px 6px",borderRadius:5,background:"#FFF5F5",color:"#F87171",border:"none",cursor:"pointer",fontWeight:700}}>✕</button>}
         </div>
-        {/* 자녀 노드 */}
-        {kids.length>0&&<>
-          <div style={{width:2,height:20,background:"#CBD5E0"}}/>
-          <div style={{display:"flex",gap:16,alignItems:"flex-start",position:"relative"}}>
-            {/* 수평선 */}
-            {kids.length>1&&<div style={{position:"absolute",top:0,left:"50%",transform:"translateX(-50%)",height:2,background:"#CBD5E0",width:`calc(100% - 60px)`}}/>}
-            {renderTree(n.id,depth+1)}
-          </div>
-        </>}
-      </div>;
-    });
+      </div>
+      {/* 자녀 */}
+      {kids.length>0&&<>
+        <div style={{width:2,height:22,background:"#CBD5E0"}}/>
+        <div style={{display:"flex",gap:20,alignItems:"flex-start",position:"relative"}}>
+          {kids.length>1&&<div style={{position:"absolute",top:0,left:"calc(50% - 1px)",width:`calc(100% - 130px)`,height:2,background:"#CBD5E0",transform:"translateX(-50%)"}}/>}
+          {kids.map(k=><NodeCard key={k.id} n={k} depth={depth+1}/>)}
+        </div>
+      </>}
+    </div>;
   }
 
-  return <div style={{position:"fixed",inset:0,background:"rgba(15,15,30,0.6)",zIndex:400,display:"flex",flexDirection:"column"}} onClick={onClose}>
-    <div onClick={e=>e.stopPropagation()} style={{background:"#F4F6FA",width:"100%",height:"100%",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+  // 직군 범례
+  const usedGroups=[...new Set(nodes.map(n=>n.group||"기타"))];
+
+  return <div style={{position:"fixed",inset:0,background:"rgba(15,15,30,0.65)",zIndex:400,display:"flex",flexDirection:"column"}}>
+    <div style={{background:"#F4F6FA",width:"100%",height:"100%",display:"flex",flexDirection:"column",overflow:"hidden"}}>
       {/* 헤더 */}
-      <div style={{background:"#fff",borderBottom:"1px solid #E2E8F0",padding:"16px 28px",display:"flex",alignItems:"center",gap:16,flexShrink:0}}>
-        <div style={{width:40,height:40,borderRadius:12,background:"linear-gradient(135deg,#6C63FF,#9F7AEA)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>🏢</div>
-        <div>
-          <p style={{margin:0,fontSize:11,color:"#A0AEC0",fontWeight:600}}>현장 조직도</p>
-          <h2 style={{margin:0,fontSize:18,fontWeight:800,color:"#1A1A2E"}}>{site.name}</h2>
+      <div style={{background:"#fff",borderBottom:"1px solid #E2E8F0",padding:"14px 24px",display:"flex",alignItems:"center",gap:14,flexShrink:0,flexWrap:"wrap"}}>
+        <div style={{width:38,height:38,borderRadius:10,background:"linear-gradient(135deg,#6C63FF,#9F7AEA)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>🏢</div>
+        <div style={{flex:1,minWidth:120}}>
+          <p style={{margin:0,fontSize:10,color:"#A0AEC0",fontWeight:600}}>현장 조직도</p>
+          <h2 style={{margin:0,fontSize:17,fontWeight:800,color:"#1A1A2E"}}>{site.name}</h2>
         </div>
-        <div style={{marginLeft:"auto",display:"flex",gap:8}}>
-          <button onClick={()=>openAdd("null")} style={{...{padding:"8px 16px",borderRadius:10,border:"none",cursor:"pointer",fontWeight:700,fontSize:13},background:"#6C63FF",color:"#fff"}}>+ 최상위 노드 추가</button>
+        {/* 직군 범례 */}
+        <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+          {ORG_GROUPS.map(g=><span key={g.label} style={{fontSize:10,padding:"2px 8px",borderRadius:6,background:usedGroups.includes(g.label)?g.color:"#F1F5F9",color:usedGroups.includes(g.label)?"#fff":"#A0AEC0",fontWeight:700,border:`1px solid ${usedGroups.includes(g.label)?g.color:"#E2E8F0"}`}}>{g.label}</span>)}
+        </div>
+        <div style={{display:"flex",gap:8,flexShrink:0}}>
+          <button onClick={()=>openAdd(null)} style={{background:"#6C63FF",color:"#fff",border:"none",borderRadius:9,padding:"8px 16px",fontWeight:700,fontSize:13,cursor:"pointer"}}>+ 최상위 추가</button>
           <button onClick={onClose} style={{background:"none",border:"none",fontSize:26,color:"#A0AEC0",cursor:"pointer",lineHeight:1}}>×</button>
         </div>
       </div>
-      {/* 조직도 영역 */}
-      <div style={{flex:1,overflow:"auto",padding:"32px 40px",display:"flex",justifyContent:"center"}}>
+      {/* 조직도 캔버스 */}
+      <div style={{flex:1,overflow:"auto",padding:"36px 40px",display:"flex",justifyContent:"center",alignItems:"flex-start"}}>
         {nodes.length===0
           ?<div style={{textAlign:"center",color:"#A0AEC0",marginTop:80}}>
             <div style={{fontSize:48,marginBottom:12}}>🏢</div>
             <p style={{fontSize:15,fontWeight:600}}>조직도가 비어있습니다.</p>
-            <p style={{fontSize:13}}>위의 "+ 최상위 노드 추가" 버튼으로 시작하세요.</p>
+            <p style={{fontSize:13}}>상단 "+ 최상위 추가" 버튼으로 시작하세요.</p>
           </div>
-          :<div style={{display:"flex",gap:24,alignItems:"flex-start",flexWrap:"wrap",justifyContent:"center"}}>
-            {renderTree(null,0)}
+          :<div style={{display:"flex",gap:32,alignItems:"flex-start",flexWrap:"wrap",justifyContent:"center"}}>
+            {nodes.filter(n=>!n.parentId||n.parentId==="").map(n=><NodeCard key={n.id} n={n} depth={0}/>)}
           </div>
         }
       </div>
-      {/* 편집 패널 */}
-      {editingNode&&<div style={{background:"#fff",borderTop:"1px solid #E2E8F0",padding:"18px 28px",flexShrink:0,display:"flex",gap:14,alignItems:"flex-end",flexWrap:"wrap"}}>
-        <div>
-          <label style={{display:"block",fontSize:11,fontWeight:700,color:"#4A5568",marginBottom:5}}>직책 *</label>
-          <input value={form.role} onChange={e=>setForm(f=>({...f,role:e.target.value}))} placeholder="현장소장, 공무팀장..." style={{border:"1px solid #CBD5E0",borderRadius:8,padding:"8px 12px",fontSize:14,color:"#2D3748",outline:"none",width:140}}/>
-        </div>
-        <div>
-          <label style={{display:"block",fontSize:11,fontWeight:700,color:"#4A5568",marginBottom:5}}>이름</label>
-          <input value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} placeholder="홍길동" onKeyDown={e=>{if(e.key==="Enter")saveNode();}} style={{border:"1px solid #CBD5E0",borderRadius:8,padding:"8px 12px",fontSize:14,color:"#2D3748",outline:"none",width:120}}/>
-        </div>
-        <div>
-          <label style={{display:"block",fontSize:11,fontWeight:700,color:"#4A5568",marginBottom:5}}>색상</label>
-          <div style={{display:"flex",gap:5}}>
-            {COLORS.map(c=><div key={c} onClick={()=>setForm(f=>({...f,color:c}))} style={{width:22,height:22,borderRadius:"50%",background:c,cursor:"pointer",border:form.color===c?"3px solid #1A1A2E":"2px solid transparent",boxSizing:"border-box"}}/>)}
+    </div>
+    {/* 노드 편집 모달 */}
+    {modalForm&&<div style={{position:"fixed",inset:0,background:"rgba(30,30,60,0.5)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={()=>setModalForm(null)}>
+      <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:18,width:"100%",maxWidth:460,boxShadow:"0 8px 40px rgba(0,0,0,0.2)",overflow:"hidden"}}>
+        <div style={{height:5,background:`linear-gradient(90deg,${getGroupColor(modalForm.group)},#C4B5FD)`}}/>
+        <div style={{padding:"22px 24px"}}>
+          <h3 style={{margin:"0 0 18px",fontSize:16,fontWeight:800,color:"#1A1A2E"}}>{modalForm.isNew?"노드 추가":"노드 수정"}</h3>
+          {/* 직군 선택 */}
+          <div style={{marginBottom:14}}>
+            <label style={{display:"block",fontSize:11,fontWeight:700,color:"#4A5568",marginBottom:6}}>직군 *</label>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+              {ORG_GROUPS.map(g=><button key={g.label} onClick={()=>setModalForm(f=>({...f,group:g.label}))}
+                style={{fontSize:11,padding:"4px 10px",borderRadius:7,background:modalForm.group===g.label?g.color:"#F1F5F9",color:modalForm.group===g.label?"#fff":"#4A5568",border:`1px solid ${modalForm.group===g.label?g.color:"#E2E8F0"}`,cursor:"pointer",fontWeight:700}}>{g.label}</button>)}
+            </div>
+          </div>
+          {/* 입력 그리드 */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:18}}>
+            {[
+              {key:"role",label:"직책 *",placeholder:"현장소장, 공무팀장..."},
+              {key:"grade",label:"직급",placeholder:"부장, 과장, 대리..."},
+              {key:"name",label:"이름",placeholder:"홍길동"},
+              {key:"age",label:"나이",placeholder:"45"},
+              {key:"phone",label:"전화번호",placeholder:"010-0000-0000",full:true},
+            ].map(({key,label,placeholder,full})=><div key={key} style={full?{gridColumn:"1/-1"}:{}}>
+              <label style={{display:"block",fontSize:11,fontWeight:700,color:"#4A5568",marginBottom:4}}>{label}</label>
+              <input value={modalForm[key]} onChange={mf(key)}
+                placeholder={placeholder}
+                onKeyDown={e=>{if(e.key==="Enter"&&!full)saveNode();}}
+                style={{width:"100%",border:"1px solid #CBD5E0",borderRadius:8,padding:"9px 11px",fontSize:13,color:"#2D3748",outline:"none",boxSizing:"border-box"}}/>
+            </div>)}
+          </div>
+          <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+            <button onClick={()=>setModalForm(null)} style={{background:"#F7FAFC",color:"#718096",border:"1px solid #CBD5E0",borderRadius:8,padding:"9px 16px",fontWeight:600,fontSize:13,cursor:"pointer"}}>취소</button>
+            <button onClick={saveNode} disabled={saving} style={{background:"#6C63FF",color:"#fff",border:"none",borderRadius:8,padding:"9px 22px",fontWeight:700,fontSize:13,cursor:"pointer",opacity:saving?0.7:1}}>{saving?"저장 중...":"저장"}</button>
           </div>
         </div>
-        <button onClick={saveNode} style={{background:"#6C63FF",color:"#fff",border:"none",borderRadius:8,padding:"9px 20px",fontWeight:700,fontSize:13,cursor:"pointer"}}>저장</button>
-        <button onClick={()=>setEditingNode(null)} style={{background:"#F7FAFC",color:"#718096",border:"1px solid #CBD5E0",borderRadius:8,padding:"9px 16px",fontWeight:600,fontSize:13,cursor:"pointer"}}>취소</button>
-      </div>}
-    </div>
+      </div>
+    </div>}
   </div>;
 }
 

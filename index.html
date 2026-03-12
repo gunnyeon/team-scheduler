@@ -50,14 +50,14 @@
 const {useState,useEffect,useRef,useCallback}=React;
 
 // ── API 설정 ───────────────────────────────────────────
-const API_URL = "https://script.google.com/macros/s/AKfycbxDW8nsDoYxvHhTvNMxmaAtAUsgUP13Ru7dr2oUDQf-QtyWK-DGWM9WdM-5Zj_dzsPUHg/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbyom-Cy46SnbM3met4UuPmekIhUWbl8_Ga8lHUZet97Roae0BcivKDk9xG7_Rehd7bJXw/exec";
 const SCHED_HEADERS = ["id","title","description","owner_name","owner_email","start_date","start_time","end_date","end_time","priority"];
 const TASK_HEADERS  = ["id","title","owner_name","part","start_date","due_date","progress","status"];
 const TRIP_HEADERS  = ["id","title","description","owner_name","owner_email","start_date","start_time","end_date","end_time","priority","part"];
 const LEAVE_HEADERS = ["id","title","description","owner_name","owner_email","start_date","start_time","end_date","end_time","priority"];
 const SITE_HEADERS  = ["id","name","pm","start_date","completion","location","scale","client","contract_amount","cost_rate","order_type","equity_rate","memo"];
-const ORG_HEADERS       = ["id","site_id","group","role","grade","name","age","phone","color","parentId"];
-const PERSONNEL_HEADERS = ["id","group","role","grade","name","age","phone"];
+const ORG_HEADERS       = ["id","site_id","group","role","grade","position","emp_type","name","age","phone","color","parentId"];
+const PERSONNEL_HEADERS = ["id","group","role","grade","position","emp_type","name","age","phone"];
 
 async function apiGet(sheet){
   const r=await fetch(`${API_URL}?sheet=${sheet}`);
@@ -1069,11 +1069,11 @@ function getGroupColor(g){return(ORG_GROUPS.find(x=>x.label===g)||{color:"#94A3B
 
 // 인원 로우데이터 관리 모달
 function PersonnelMgrModal({personnel,onSave,onDelete,onClose}){
-  const emp={id:"",group:"현장소장",role:"",grade:"",name:"",age:"",phone:""};
+  const emp={id:"",group:"현장소장",role:"",grade:"",position:"",emp_type:"정규직",name:"",age:"",phone:""};
   const [form,setForm]=useState(emp);
   const [editing,setEditing]=useState(null);
   const sf=k=>e=>setForm(f=>({...f,[k]:e.target.value}));
-  function startEdit(p){setEditing(p.id);setForm({group:p.group||"현장소장",role:p.role||"",grade:p.grade||"",name:p.name||"",age:p.age||"",phone:p.phone||""});}
+  function startEdit(p){setEditing(p.id);setForm({group:p.group||"현장소장",role:p.role||"",grade:p.grade||"",position:p.position||"",emp_type:p.emp_type||"정규직",name:p.name||"",age:p.age||"",phone:p.phone||""});}
   function reset(){setEditing(null);setForm(emp);}
   function save(){
     if(!form.name.trim()){alert("이름을 입력하세요.");return;}
@@ -1081,8 +1081,9 @@ function PersonnelMgrModal({personnel,onSave,onDelete,onClose}){
     onSave(row); reset();
   }
   const inp={width:"100%",border:"1px solid #CBD5E0",borderRadius:7,padding:"7px 10px",fontSize:13,color:"#2D3748",outline:"none",boxSizing:"border-box"};
+  const EMP_TYPES=["정규직","비정규직"];
   return <div style={{position:"fixed",inset:0,background:"rgba(30,30,60,0.55)",zIndex:600,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={onClose}>
-    <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:18,width:"100%",maxWidth:640,maxHeight:"85vh",display:"flex",flexDirection:"column",boxShadow:"0 8px 40px rgba(0,0,0,0.2)",overflow:"hidden"}}>
+    <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:18,width:"100%",maxWidth:700,maxHeight:"88vh",display:"flex",flexDirection:"column",boxShadow:"0 8px 40px rgba(0,0,0,0.2)",overflow:"hidden"}}>
       <div style={{padding:"18px 22px",borderBottom:"1px solid #E2E8F0",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
         <h3 style={{margin:0,fontSize:16,fontWeight:800,color:"#1A1A2E"}}>👤 인원 로우데이터 관리</h3>
         <button onClick={onClose} style={{background:"none",border:"none",fontSize:22,color:"#A0AEC0",cursor:"pointer"}}>×</button>
@@ -1090,7 +1091,7 @@ function PersonnelMgrModal({personnel,onSave,onDelete,onClose}){
       {/* 입력 폼 */}
       <div style={{padding:"16px 22px",borderBottom:"1px solid #EEF2F7",flexShrink:0,background:"#F8FAFC"}}>
         <p style={{margin:"0 0 10px",fontSize:12,fontWeight:700,color:"#6C63FF"}}>{editing?"인원 수정":"새 인원 추가"}</p>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:10}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:10}}>
           <div>
             <label style={{fontSize:10,fontWeight:700,color:"#4A5568",display:"block",marginBottom:3}}>직군</label>
             <select value={form.group} onChange={sf("group")} style={{...inp,background:"#fff"}}>
@@ -1099,6 +1100,14 @@ function PersonnelMgrModal({personnel,onSave,onDelete,onClose}){
           </div>
           <div><label style={{fontSize:10,fontWeight:700,color:"#4A5568",display:"block",marginBottom:3}}>직책</label><input value={form.role} onChange={sf("role")} placeholder="현장소장" style={inp}/></div>
           <div><label style={{fontSize:10,fontWeight:700,color:"#4A5568",display:"block",marginBottom:3}}>직급</label><input value={form.grade} onChange={sf("grade")} placeholder="부장" style={inp}/></div>
+          <div><label style={{fontSize:10,fontWeight:700,color:"#4A5568",display:"block",marginBottom:3}}>직위</label><input value={form.position} onChange={sf("position")} placeholder="팀장, 담당" style={inp}/></div>
+          <div>
+            <label style={{fontSize:10,fontWeight:700,color:"#4A5568",display:"block",marginBottom:3}}>사원구분</label>
+            <div style={{display:"flex",gap:4}}>
+              {EMP_TYPES.map(t=><button key={t} onClick={()=>setForm(f=>({...f,emp_type:t}))}
+                style={{flex:1,padding:"7px 4px",borderRadius:7,border:`1px solid ${form.emp_type===t?"#6C63FF":"#CBD5E0"}`,background:form.emp_type===t?"#6C63FF":"#fff",color:form.emp_type===t?"#fff":"#4A5568",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t}</button>)}
+            </div>
+          </div>
           <div><label style={{fontSize:10,fontWeight:700,color:"#4A5568",display:"block",marginBottom:3}}>이름 *</label><input value={form.name} onChange={sf("name")} placeholder="홍길동" style={inp}/></div>
           <div><label style={{fontSize:10,fontWeight:700,color:"#4A5568",display:"block",marginBottom:3}}>나이</label><input value={form.age} onChange={sf("age")} placeholder="45" style={inp}/></div>
           <div><label style={{fontSize:10,fontWeight:700,color:"#4A5568",display:"block",marginBottom:3}}>전화번호</label><input value={form.phone} onChange={sf("phone")} placeholder="010-0000-0000" style={inp}/></div>
@@ -1111,14 +1120,16 @@ function PersonnelMgrModal({personnel,onSave,onDelete,onClose}){
       {/* 목록 */}
       <div style={{flex:1,overflow:"auto",padding:"12px 22px"}}>
         {personnel.length===0&&<p style={{textAlign:"center",color:"#A0AEC0",fontSize:13,marginTop:24}}>등록된 인원이 없습니다.</p>}
-        <div style={{display:"flex",flexDirection:"column",gap:6}}>
+        <div style={{display:"flex",flexDirection:"column",gap:5}}>
           {personnel.map(p=>{
             const gc=getGroupColor(p.group);
-            return <div key={p.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderRadius:10,border:"1px solid #E2E8F0",background:"#fff"}}>
+            const isRegular=p.emp_type==="정규직";
+            return <div key={p.id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",borderRadius:10,border:"1px solid #E2E8F0",background:"#fff",flexWrap:"wrap"}}>
               <div style={{width:8,height:8,borderRadius:"50%",background:gc,flexShrink:0}}/>
               <span style={{fontSize:10,padding:"2px 7px",borderRadius:5,background:gc+"22",color:gc,fontWeight:700,flexShrink:0}}>{p.group||"-"}</span>
-              <span style={{fontSize:12,fontWeight:700,color:"#1A1A2E",minWidth:60}}>{p.name}</span>
-              <span style={{fontSize:11,color:"#718096",flex:1}}>{[p.role,p.grade,p.age?"만 "+p.age+"세":"",p.phone].filter(Boolean).join(" · ")}</span>
+              <span style={{fontSize:10,padding:"2px 7px",borderRadius:5,background:isRegular?"#EDE9FE":"#FEF3C7",color:isRegular?"#6C63FF":"#92400E",fontWeight:700,flexShrink:0}}>{p.emp_type||"정규직"}</span>
+              <span style={{fontSize:13,fontWeight:800,color:"#1A1A2E",minWidth:52}}>{p.name}</span>
+              <span style={{fontSize:11,color:"#718096",flex:1,minWidth:100}}>{[p.role,p.grade,p.position,p.age?"만 "+p.age+"세":"",p.phone].filter(Boolean).join(" · ")}</span>
               <button onClick={()=>startEdit(p)} style={{fontSize:11,padding:"3px 9px",borderRadius:6,background:"#EEF2F7",color:"#6C63FF",border:"none",cursor:"pointer",fontWeight:700,flexShrink:0}}>수정</button>
               <button onClick={()=>onDelete(p.id)} style={{fontSize:11,padding:"3px 9px",borderRadius:6,background:"#FFF5F5",color:"#F87171",border:"none",cursor:"pointer",fontWeight:700,flexShrink:0}}>삭제</button>
             </div>;
@@ -1131,7 +1142,7 @@ function PersonnelMgrModal({personnel,onSave,onDelete,onClose}){
 
 function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSaveBump,personnel=[],onPersonnelSave,onPersonnelDelete,isAdmin=false}){
   const nodes=orgNodes.filter(n=>n.site_id===site.id);
-  const emptyForm={group:"현장소장",role:"",grade:"",name:"",age:"",phone:"",parentId:null};
+  const emptyForm={group:"현장소장",role:"",grade:"",position:"",emp_type:"정규직",name:"",age:"",phone:"",parentId:null};
   const [modalForm,setModalForm]=useState(null);
   const [showPersonnelMgr,setShowPersonnelMgr]=useState(false);
   const [showAdminPw,setShowAdminPw]=useState(false);
@@ -1142,7 +1153,7 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
   const mf=k=>e=>setModalForm(f=>({...f,[k]:e.target.value}));
 
   function openAdd(parentId){setModalForm({...emptyForm,parentId:parentId||null,isNew:true,nodeId:null});}
-  function openEdit(n){setModalForm({group:n.group||"현장소장",role:n.role||"",grade:n.grade||"",name:n.name||"",age:n.age||"",phone:n.phone||"",parentId:n.parentId||null,isNew:false,nodeId:n.id});}
+  function openEdit(n){setModalForm({group:n.group||"현장소장",role:n.role||"",grade:n.grade||"",position:n.position||"",emp_type:n.emp_type||"정규직",name:n.name||"",age:n.age||"",phone:n.phone||"",parentId:n.parentId||null,isNew:false,nodeId:n.id});}
 
   // 이름 입력 시 personnel 검색 → 자동완성
   function onNameChange(e){
@@ -1154,7 +1165,7 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
   }
   // 자동완성 선택 시 전체 필드 채우기
   function applyPersonnel(p){
-    setModalForm(f=>({...f,group:p.group||f.group,role:p.role||f.role,grade:p.grade||f.grade,name:p.name,age:p.age||f.age,phone:p.phone||f.phone}));
+    setModalForm(f=>({...f,group:p.group||f.group,role:p.role||f.role,grade:p.grade||f.grade,position:p.position||f.position,emp_type:p.emp_type||f.emp_type,name:p.name,age:p.age||f.age,phone:p.phone||f.phone}));
     setNameSuggest([]);
   }
 
@@ -1162,11 +1173,11 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
     if(!modalForm.role.trim()){alert("직책을 입력하세요.");return;}
     const color=getGroupColor(modalForm.group);
     if(modalForm.isNew){
-      const row={id:`org${Date.now()}`,site_id:site.id,group:modalForm.group,role:modalForm.role,grade:modalForm.grade,name:modalForm.name,age:modalForm.age,phone:modalForm.phone,color,parentId:modalForm.parentId||""};
+      const row={id:`org${Date.now()}`,site_id:site.id,group:modalForm.group,role:modalForm.role,grade:modalForm.grade,position:modalForm.position,emp_type:modalForm.emp_type,name:modalForm.name,age:modalForm.age,phone:modalForm.phone,color,parentId:modalForm.parentId||""};
       onOrgSave(row);
     } else {
       const existing=nodes.find(n=>n.id===modalForm.nodeId);
-      const row={...existing,group:modalForm.group,role:modalForm.role,grade:modalForm.grade,name:modalForm.name,age:modalForm.age,phone:modalForm.phone,color};
+      const row={...existing,group:modalForm.group,role:modalForm.role,grade:modalForm.grade,position:modalForm.position,emp_type:modalForm.emp_type,name:modalForm.name,age:modalForm.age,phone:modalForm.phone,color};
       onOrgSave(row);
     }
     setNameSuggest([]);
@@ -1187,8 +1198,9 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
         <div style={{position:"absolute",top:-10,left:"50%",transform:"translateX(-50%)",background:gc,color:"#fff",fontSize:9,fontWeight:800,padding:"2px 8px",borderRadius:6,whiteSpace:"nowrap"}}>{n.group||"기타"}</div>
         <div style={{width:36,height:36,borderRadius:"50%",background:gc,display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,fontWeight:800,color:"#fff",margin:"6px auto 8px"}}>{(n.name||n.role||"?")[0]}</div>
         <p style={{margin:"0 0 1px",fontSize:10,color:gc,fontWeight:800,letterSpacing:0.3}}>{n.role||"-"}</p>
-        {n.grade&&<p style={{margin:"0 0 2px",fontSize:9,color:"#A0AEC0",fontWeight:600}}>{n.grade}</p>}
+        {(n.grade||n.position)&&<p style={{margin:"0 0 2px",fontSize:9,color:"#A0AEC0",fontWeight:600}}>{[n.grade,n.position].filter(Boolean).join(" · ")}</p>}
         <p style={{margin:"0 0 2px",fontSize:13,fontWeight:800,color:"#1A1A2E"}}>{n.name||"미지정"}</p>
+        {n.emp_type&&<span style={{fontSize:8,padding:"1px 5px",borderRadius:4,background:n.emp_type==="정규직"?"#EDE9FE":"#FEF3C7",color:n.emp_type==="정규직"?"#6C63FF":"#92400E",fontWeight:700,display:"inline-block",marginBottom:2}}>{n.emp_type}</span>}
         {n.age&&<p style={{margin:"0 0 1px",fontSize:10,color:"#718096"}}>만 {n.age}세</p>}
         {n.phone&&<p style={{margin:"0 0 2px",fontSize:10,color:"#718096"}}>📞 {n.phone}</p>}
         <div style={{display:"flex",gap:3,justifyContent:"center",marginTop:8,flexWrap:"wrap"}}>
@@ -1277,6 +1289,24 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
               </div>)}
             </div>
           </div>
+          {/* 사원구분별 */}
+          {(()=>{
+            const reg=nodes.filter(n=>!n.emp_type||n.emp_type==="정규직").length;
+            const irr=nodes.filter(n=>n.emp_type==="비정규직").length;
+            return <div>
+              <p style={{margin:"0 0 10px",fontSize:12,fontWeight:800,color:"#2D3748"}}>👥 사원구분</p>
+              <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 8px",borderRadius:7,background:"#EDE9FE"}}>
+                  <span style={{fontSize:11,color:"#6C63FF",fontWeight:700}}>정규직</span>
+                  <span style={{fontSize:12,fontWeight:800,color:"#6C63FF"}}>{reg}명</span>
+                </div>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 8px",borderRadius:7,background:"#FEF3C7"}}>
+                  <span style={{fontSize:11,color:"#92400E",fontWeight:700}}>비정규직</span>
+                  <span style={{fontSize:12,fontWeight:800,color:"#92400E"}}>{irr}명</span>
+                </div>
+              </div>
+            </div>;
+          })()}
         </div>;
       })()}
       <div style={{flex:1,overflow:"auto",padding:"36px 40px",display:"flex",justifyContent:"center",alignItems:"flex-start"}}>
@@ -1345,11 +1375,20 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
               </div>;})}
             </div>}
           </div>
+          {/* 사원구분 */}
+          <div style={{marginBottom:12}}>
+            <label style={{display:"block",fontSize:11,fontWeight:700,color:"#4A5568",marginBottom:5}}>사원구분</label>
+            <div style={{display:"flex",gap:6}}>
+              {["정규직","비정규직"].map(t=><button key={t} onClick={()=>setModalForm(f=>({...f,emp_type:t}))}
+                style={{flex:1,padding:"7px",borderRadius:8,border:`1px solid ${modalForm.emp_type===t?"#6C63FF":"#CBD5E0"}`,background:modalForm.emp_type===t?"#6C63FF":"#fff",color:modalForm.emp_type===t?"#fff":"#4A5568",fontSize:12,fontWeight:700,cursor:"pointer"}}>{t}</button>)}
+            </div>
+          </div>
           {/* 나머지 필드 */}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
             {[
               {key:"role",label:"직책 *",placeholder:"현장소장..."},
               {key:"grade",label:"직급",placeholder:"부장, 과장..."},
+              {key:"position",label:"직위",placeholder:"팀장, 담당..."},
               {key:"age",label:"나이",placeholder:"45"},
               {key:"phone",label:"전화번호",placeholder:"010-0000-0000"},
             ].map(({key,label,placeholder})=><div key={key}>

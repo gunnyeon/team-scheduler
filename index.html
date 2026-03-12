@@ -286,7 +286,7 @@ function App(){
   const allMenuKeys=menuGroups.flatMap(g=>g.children?[g.key,...g.children.map(c=>c.label)]:[g.key]);
   const menuIcons=Object.fromEntries(menuGroups.flatMap(g=>g.children?[[g.key,g.icon],...g.children.map(c=>[c.label,c.icon])]:[[g.key,g.icon]]));
   // 그룹 펼침 state
-  const [expandedGroups,setExpandedGroups]=React.useState({"대시보드(건축공사팀)":true});
+  const [expandedGroups,setExpandedGroups]=useState({"대시보드(건축공사팀)":true});
   function toggleGroup(key){setExpandedGroups(v=>({...v,[key]:!v[key]}));}
   function handleMenuChange(m){
     if(activeMenu==="현장관리플랫폼"&&m!=="현장관리플랫폼"){setSitePMLocked(true);setSitepmPwInput("");setSitepmPwError("");}
@@ -1190,6 +1190,9 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
   // site_id 기준 필터 + id 중복 제거 (집계 정확도 보장)
   const nodes=orgNodes.filter((n,i,arr)=>n.site_id===site.id&&arr.findIndex(x=>x.id===n.id)===i);
   const emptyForm={group:"현장소장",role:"",grade:"",position:"",emp_type:"정규직",name:"",age:"",phone:"",parentId:null};
+  const canvasRef=useRef(null);
+  const isDragging=useRef(false);
+  const dragStart=useRef({x:0,y:0,sl:0,st:0});
   const [modalForm,setModalForm]=useState(null);
   const [showPersonnelMgr,setShowPersonnelMgr]=useState(false);
   const [showAdminPw,setShowAdminPw]=useState(false);
@@ -1368,43 +1371,23 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
           })()}
         </div>;
       })()}
-      {(()=>{
-        const canvasRef=React.useRef(null);
-        const isDragging=React.useRef(false);
-        const dragStart=React.useRef({x:0,y:0,sl:0,st:0});
-        function onMouseDown(e){
-          if(e.button!==0)return;
-          isDragging.current=true;
-          dragStart.current={x:e.clientX,y:e.clientY,sl:canvasRef.current.scrollLeft,st:canvasRef.current.scrollTop};
-          canvasRef.current.style.cursor="grabbing";
-          canvasRef.current.style.userSelect="none";
+      <div ref={canvasRef}
+        onMouseDown={e=>{if(e.button!==0)return;isDragging.current=true;dragStart.current={x:e.clientX,y:e.clientY,sl:canvasRef.current.scrollLeft,st:canvasRef.current.scrollTop};canvasRef.current.style.cursor="grabbing";canvasRef.current.style.userSelect="none";}}
+        onMouseMove={e=>{if(!isDragging.current)return;canvasRef.current.scrollLeft=dragStart.current.sl-(e.clientX-dragStart.current.x);canvasRef.current.scrollTop=dragStart.current.st-(e.clientY-dragStart.current.y);}}
+        onMouseUp={()=>{isDragging.current=false;if(canvasRef.current){canvasRef.current.style.cursor="grab";canvasRef.current.style.userSelect="";}}}
+        onMouseLeave={()=>{isDragging.current=false;if(canvasRef.current){canvasRef.current.style.cursor="grab";canvasRef.current.style.userSelect="";}}}
+        style={{flex:1,overflow:"auto",minWidth:0,cursor:"grab"}}>
+        {nodes.length===0
+          ?<div style={{textAlign:"center",color:"#A0AEC0",marginTop:80}}>
+            <div style={{fontSize:48,marginBottom:12}}>🏢</div>
+            <p style={{fontSize:15,fontWeight:600}}>조직도가 비어있습니다.</p>
+            <p style={{fontSize:13}}>상단 "+ 최상위 추가" 버튼으로 시작하세요.</p>
+          </div>
+          :<div style={{display:"flex",gap:32,alignItems:"flex-start",flexWrap:"nowrap",padding:"40px 60px",justifyContent:"center",minWidth:"max-content",minHeight:"100%"}}>
+            {nodes.filter(n=>!n.parentId||n.parentId==="").map(n=><NodeCard key={n.id} n={n} depth={0}/>)}
+          </div>
         }
-        function onMouseMove(e){
-          if(!isDragging.current)return;
-          const dx=e.clientX-dragStart.current.x;
-          const dy=e.clientY-dragStart.current.y;
-          canvasRef.current.scrollLeft=dragStart.current.sl-dx;
-          canvasRef.current.scrollTop=dragStart.current.st-dy;
-        }
-        function onMouseUp(){
-          isDragging.current=false;
-          if(canvasRef.current){canvasRef.current.style.cursor="grab";canvasRef.current.style.userSelect="";}
-        }
-        return <div ref={canvasRef}
-          onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={onMouseUp} onMouseLeave={onMouseUp}
-          style={{flex:1,overflow:"auto",minWidth:0,cursor:"grab"}}>
-          {nodes.length===0
-            ?<div style={{textAlign:"center",color:"#A0AEC0",marginTop:80}}>
-              <div style={{fontSize:48,marginBottom:12}}>🏢</div>
-              <p style={{fontSize:15,fontWeight:600}}>조직도가 비어있습니다.</p>
-              <p style={{fontSize:13}}>상단 "+ 최상위 추가" 버튼으로 시작하세요.</p>
-            </div>
-            :<div style={{display:"flex",gap:32,alignItems:"flex-start",flexWrap:"nowrap",padding:"40px 60px",justifyContent:"center",minWidth:"max-content",minHeight:"100%"}}>
-              {nodes.filter(n=>!n.parentId||n.parentId==="").map(n=><NodeCard key={n.id} n={n} depth={0}/>)}
-            </div>
-          }
-        </div>;
-      })()}
+      </div>
       </div>
     </div>
 

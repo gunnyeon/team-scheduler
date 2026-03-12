@@ -630,10 +630,16 @@ function App(){
       )}
     {/* 모바일 하단 내비 */}
       <div className="mobile-nav" style={{display:isMobile?"flex":"none",position:"fixed",bottom:0,left:0,right:0,background:"#FFFFFF",borderTop:"1px solid #CBD5E0",zIndex:50,padding:"6px 0",justifyContent:"space-around",alignItems:"center"}}>
-        {menus.map(m=>(
-          <div key={m} onClick={()=>handleMenuChange(m)} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2,padding:"4px 8px",cursor:"pointer",color:activeMenu===m?"#6C63FF":"#718096",flex:1}}>
-            <span style={{fontSize:18}}>{menuIcons[m]}</span>
-            <span style={{fontSize:9,fontWeight:activeMenu===m?700:400,textAlign:"center",lineHeight:1.2}}>{m.replace("캘린더(","").replace(")","").replace("일정 관리","일정").replace("업무 관리","업무")}</span>
+        {[
+          {key:"대시보드(건축공사팀)",icon:"▦",label:"대시보드"},
+          {key:"캘린더(주요일정)",icon:"🗓",label:"일정"},
+          {key:"업무 관리",icon:"✓",label:"업무"},
+          {key:"인원현황 대시보드",icon:"👥",label:"인원현황"},
+          {key:"현장관리플랫폼",icon:"🏗",label:"현장"},
+        ].map(m=>(
+          <div key={m.key} onClick={()=>handleMenuChange(m.key)} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2,padding:"4px 8px",cursor:"pointer",color:activeMenu===m.key?"#6C63FF":"#718096",flex:1}}>
+            <span style={{fontSize:18}}>{m.icon}</span>
+            <span style={{fontSize:9,fontWeight:activeMenu===m.key?700:400,textAlign:"center",lineHeight:1.2}}>{m.label}</span>
           </div>
         ))}
       </div>

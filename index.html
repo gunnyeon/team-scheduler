@@ -162,7 +162,7 @@ function App(){
   const isTablet=winW>767&&winW<=1024;
   const [myName,setMyName]=useState(()=>{try{return sessionStorage.getItem("ts-name")||"";}catch{return "";}});
   const [nameInput,setNameInput]=useState("");
-  const [activeMenu,setActiveMenu]=useState("대시보드");
+  const [activeMenu,setActiveMenu]=useState("대시보드(건축공사팀)");
   const [schedules,setSchedules]=useState([]);
   const [trips,setTrips]=useState([]);
   const [tasks,setTasks]=useState([]);
@@ -270,12 +270,28 @@ function App(){
   const inProgressTasks =sortTasks(tasks.filter(t=>t.status==="진행 중"));
   const overdueTasks    =tasks.filter(t=>t.due_date&&t.due_date<todayStr&&t.status!=="완료").sort((a,b)=>a.due_date.localeCompare(b.due_date));
 
-  const menus=["대시보드","캘린더(주요일정)","캘린더(출장일정)","캘린더(연차일정)","일정 관리","업무 관리","현장관리플랫폼","리포트"];
+  // 사이드바 그룹 구조
+  const menuGroups=[
+    {
+      label:"대시보드(건축공사팀)",icon:"▦",key:"대시보드(건축공사팀)",
+      children:[
+        {label:"캘린더(주요일정)",icon:"🗓"},{label:"캘린더(출장일정)",icon:"✈️"},
+        {label:"캘린더(연차일정)",icon:"🌴"},{label:"일정 관리",icon:"📅"},
+        {label:"업무 관리",icon:"✓"},
+      ]
+    },
+    {label:"인원현황 대시보드",icon:"👥",key:"인원현황 대시보드"},
+    {label:"현장관리플랫폼",icon:"🏗",key:"현장관리플랫폼"},
+  ];
+  const allMenuKeys=menuGroups.flatMap(g=>g.children?[g.key,...g.children.map(c=>c.label)]:[g.key]);
+  const menuIcons=Object.fromEntries(menuGroups.flatMap(g=>g.children?[[g.key,g.icon],...g.children.map(c=>[c.label,c.icon])]:[[g.key,g.icon]]));
+  // 그룹 펼침 state
+  const [expandedGroups,setExpandedGroups]=React.useState({"대시보드(건축공사팀)":true});
+  function toggleGroup(key){setExpandedGroups(v=>({...v,[key]:!v[key]}));}
   function handleMenuChange(m){
     if(activeMenu==="현장관리플랫폼"&&m!=="현장관리플랫폼"){setSitePMLocked(true);setSitepmPwInput("");setSitepmPwError("");}
     setActiveMenu(m);
   }
-  const menuIcons={"대시보드":"▦","캘린더(주요일정)":"🗓","캘린더(출장일정)":"✈️","캘린더(연차일정)":"🌴","일정 관리":"📅","업무 관리":"✓","현장관리플랫폼":"🏗","리포트":"📊"};
   const newSchedDef={title:"",description:"",owner_name:myName||"",owner_email:"",start_date:todayStr,start_time:"09:00",end_date:todayStr,end_time:"18:00",priority:"medium"};
   const newTripDef={title:"",description:"",owner_name:myName||"",owner_email:"",start_date:todayStr,start_time:"09:00",end_date:todayStr,end_time:"18:00",priority:"medium",part:""};
   const newTaskDef={title:"",owner_name:myName||"",part:"",start_date:todayStr,due_date:"",progress:0,status:"할 일"};
@@ -477,13 +493,36 @@ function App(){
           {(sidebarOpen&&!isTablet)&&<span style={{fontWeight:800,fontSize:15,color:"#6C63FF"}}>TeamSync</span>}
           <div style={{marginLeft:"auto",cursor:"pointer",color:"#718096",fontSize:18}} onClick={()=>setSidebarOpen(v=>!v)}>{sidebarOpen?"◀":"▶"}</div>
         </div>
-        <nav style={{padding:"16px 8px",flex:1}}>
-          {menus.map(m=>(
-            <div key={m} onClick={()=>handleMenuChange(m)} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 12px",borderRadius:10,marginBottom:4,cursor:"pointer",background:activeMenu===m?"linear-gradient(90deg,rgba(108,99,255,0.12),rgba(255,107,157,0.1))":"transparent",borderLeft:activeMenu===m?"3px solid #6C63FF":"3px solid transparent",color:activeMenu===m?"#6C63FF":"#4A5568"}}>
-              <span style={{fontSize:16,flexShrink:0}}>{menuIcons[m]}</span>
-              {(sidebarOpen&&!isTablet)&&<span style={{fontSize:14,fontWeight:activeMenu===m?700:500,whiteSpace:"nowrap"}}>{m}</span>}
-            </div>
-          ))}
+        <nav style={{padding:"12px 8px",flex:1,overflowY:"auto"}}>
+          {menuGroups.map(g=>{
+            const hasChildren=!!g.children;
+            const isGroupActive=hasChildren?g.children.some(c=>c.label===activeMenu)||activeMenu===g.key:activeMenu===g.key;
+            const isExpanded=expandedGroups[g.key];
+            return <div key={g.key}>
+              {/* 그룹 헤더 or 단독 메뉴 */}
+              <div onClick={()=>{if(hasChildren){toggleGroup(g.key);if(!isExpanded)handleMenuChange(g.key);}else handleMenuChange(g.key);}}
+                style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderRadius:10,marginBottom:2,cursor:"pointer",
+                  background:isGroupActive?"linear-gradient(90deg,rgba(108,99,255,0.12),rgba(255,107,157,0.08))":"transparent",
+                  borderLeft:isGroupActive?"3px solid #6C63FF":"3px solid transparent",color:isGroupActive?"#6C63FF":"#4A5568"}}>
+                <span style={{fontSize:15,flexShrink:0}}>{g.icon}</span>
+                {(sidebarOpen&&!isTablet)&&<>
+                  <span style={{fontSize:13,fontWeight:isGroupActive?700:600,whiteSpace:"nowrap",flex:1,lineHeight:1.2}}>{g.label}</span>
+                  {hasChildren&&<span style={{fontSize:10,color:"#A0AEC0"}}>{isExpanded?"▾":"▸"}</span>}
+                </>}
+              </div>
+              {/* 하위 메뉴 */}
+              {hasChildren&&isExpanded&&(sidebarOpen&&!isTablet)&&<div style={{marginLeft:8,marginBottom:4}}>
+                {g.children.map(c=><div key={c.label} onClick={()=>handleMenuChange(c.label)}
+                  style={{display:"flex",alignItems:"center",gap:10,padding:"7px 12px 7px 16px",borderRadius:8,marginBottom:1,cursor:"pointer",
+                    background:activeMenu===c.label?"rgba(108,99,255,0.1)":"transparent",
+                    borderLeft:activeMenu===c.label?"2px solid #9F7AEA":"2px solid transparent",
+                    color:activeMenu===c.label?"#6C63FF":"#718096"}}>
+                  <span style={{fontSize:13,flexShrink:0}}>{c.icon}</span>
+                  <span style={{fontSize:12,fontWeight:activeMenu===c.label?700:400,whiteSpace:"nowrap"}}>{c.label}</span>
+                </div>)}
+              </div>}
+            </div>;
+          })}
         </nav>
         <div style={{padding:"0 12px"}}>
           <div style={{background:"#EEF2F7",borderRadius:10,padding:"8px 12px",display:"flex",alignItems:"center",gap:8}}>
@@ -497,7 +536,7 @@ function App(){
       <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column"}}>
         <div style={{padding:isMobile?"10px 12px":"16px 28px",borderBottom:"1px solid #EEF2F7",background:"#F4F6FA",display:"flex",alignItems:"center",gap:isMobile?8:16,flexShrink:0}}>
           <div style={{flex:1,minWidth:0}}>
-            <h1 style={{margin:0,fontSize:isMobile?16:22,fontWeight:800,color:"#1A1A2E",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{activeMenu}</h1>
+            <h1 style={{margin:0,fontSize:isMobile?16:22,fontWeight:800,color:"#1A1A2E",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{activeMenu==="대시보드(건축공사팀)"?"대시보드":activeMenu}</h1>
             {!isMobile&&<p style={{margin:0,fontSize:12,color:"#718096"}}>마지막 동기화: {lastSync.toLocaleTimeString("ko-KR")}</p>}
           </div>
           <div style={{display:"flex",gap:isMobile?6:10,alignItems:"center",flexShrink:0}}>
@@ -514,7 +553,8 @@ function App(){
           </div>
         </div>
         <div style={{flex:1,overflowX:"auto",overflowY:"auto",padding:isMobile?"10px 8px 72px 8px":isTablet?"16px 16px":"24px 28px"}}>
-          {activeMenu==="대시보드"&&<Dashboard schedules={schedules} trips={trips} tasks={tasks} sites={sites} todaySchedules={todaySchedules} weekSchedules={weekSchedules} weekTrips={weekTrips} urgentSchedules={urgentSchedules} inProgressTasks={inProgressTasks} overdueTasks={overdueTasks} setActiveMenu={setActiveMenu} todayStr={todayStr} weekEndStr={weekEndStr} isMobile={isMobile} onSchedClick={s=>{setCurrentMonth(new Date(s.start_date+"T00:00:00"));setSelectedSched(s);setActiveMenu("캘린더(주요일정)");}} onTripClick={s=>{setCurrentMonth2(new Date(s.start_date+"T00:00:00"));setSelectedSched2(s);setActiveMenu("캘린더(출장일정)");}}/>}
+          {(activeMenu==="대시보드(건축공사팀)"||activeMenu==="대시보드")&&<Dashboard schedules={schedules} trips={trips} tasks={tasks} sites={sites} todaySchedules={todaySchedules} weekSchedules={weekSchedules} weekTrips={weekTrips} urgentSchedules={urgentSchedules} inProgressTasks={inProgressTasks} overdueTasks={overdueTasks} setActiveMenu={setActiveMenu} todayStr={todayStr} weekEndStr={weekEndStr} isMobile={isMobile} onSchedClick={s=>{setCurrentMonth(new Date(s.start_date+"T00:00:00"));setSelectedSched(s);setActiveMenu("캘린더(주요일정)");}} onTripClick={s=>{setCurrentMonth2(new Date(s.start_date+"T00:00:00"));setSelectedSched2(s);setActiveMenu("캘린더(출장일정)");}}/>}
+          {activeMenu==="인원현황 대시보드"&&<PersonnelDashboard personnel={personnel} orgNodes={orgNodes} sites={sites}/>}
           {activeMenu==="일정 관리"&&<ScheduleBoard schedules={schedules} onEdit={s=>{setEditingSched(s);setShowSchedModal(true);}} onDelete={deleteSched} isMobile={isMobile}/>}
           {activeMenu==="업무 관리"&&<TaskBoard tasks={tasks} onEdit={t=>{setEditingTask(t);setShowTaskModal(true);}} onDelete={deleteTask} onStatusChange={updateTaskStatus} isMobile={isMobile}/>}
           {activeMenu==="캘린더(주요일정)"&&<CalendarView schedules={schedules} currentMonth={currentMonth} setCurrentMonth={setCurrentMonth} todayStr={todayStr} selectedSched={selectedSched} setSelectedSched={setSelectedSched} onDateClick={d=>{setEditingSched(null);setShowSchedModal({prefillDate:d});}} onEditSched={s=>{setEditingSched(s);setShowSchedModal(true);}} onDeleteSched={deleteSched} isMobile={isMobile}/>}
@@ -567,7 +607,7 @@ function App(){
   }}
 />
 )}
-          {activeMenu==="리포트"&&<Reports schedules={schedules} tasks={tasks}/>}
+
         </div>
       </div>
 
@@ -1257,7 +1297,7 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
         ORG_GROUPS.forEach(g=>{byGroup[g.label]=[];});
         nodes.forEach(n=>{const g=n.group||"기타";if(!byGroup[g])byGroup[g]=[];byGroup[g].push(n);});
         // 직위별 집계 (정해진 순서)
-        const POSITION_ORDER=["부장","부장대우","차장","차장대우","과장","대리","사원","미지정"];
+        const POSITION_ORDER=["현장소장","부장","부장대우","차장","차장대우","과장","대리","사원","미지정"];
         const posMap={};
         nodes.forEach(n=>{const pos=n.position||"미지정";if(!posMap[pos])posMap[pos]=0;posMap[pos]++;});
         const positions=Object.entries(posMap).sort((a,b)=>{
@@ -1322,18 +1362,43 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
           })()}
         </div>;
       })()}
-      <div style={{flex:1,overflow:"auto",padding:"36px 40px",minWidth:0}}>
-        {nodes.length===0
-          ?<div style={{textAlign:"center",color:"#A0AEC0",marginTop:80}}>
-            <div style={{fontSize:48,marginBottom:12}}>🏢</div>
-            <p style={{fontSize:15,fontWeight:600}}>조직도가 비어있습니다.</p>
-            <p style={{fontSize:13}}>상단 "+ 최상위 추가" 버튼으로 시작하세요.</p>
-          </div>
-          :<div style={{display:"inline-flex",gap:32,alignItems:"flex-start",flexWrap:"nowrap",minWidth:"100%",paddingBottom:24}}>
-            {nodes.filter(n=>!n.parentId||n.parentId==="").map(n=><NodeCard key={n.id} n={n} depth={0}/>)}
-          </div>
+      {(()=>{
+        const canvasRef=React.useRef(null);
+        const isDragging=React.useRef(false);
+        const dragStart=React.useRef({x:0,y:0,sl:0,st:0});
+        function onMouseDown(e){
+          if(e.button!==0)return;
+          isDragging.current=true;
+          dragStart.current={x:e.clientX,y:e.clientY,sl:canvasRef.current.scrollLeft,st:canvasRef.current.scrollTop};
+          canvasRef.current.style.cursor="grabbing";
+          canvasRef.current.style.userSelect="none";
         }
-      </div>
+        function onMouseMove(e){
+          if(!isDragging.current)return;
+          const dx=e.clientX-dragStart.current.x;
+          const dy=e.clientY-dragStart.current.y;
+          canvasRef.current.scrollLeft=dragStart.current.sl-dx;
+          canvasRef.current.scrollTop=dragStart.current.st-dy;
+        }
+        function onMouseUp(){
+          isDragging.current=false;
+          if(canvasRef.current){canvasRef.current.style.cursor="grab";canvasRef.current.style.userSelect="";}
+        }
+        return <div ref={canvasRef}
+          onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={onMouseUp} onMouseLeave={onMouseUp}
+          style={{flex:1,overflow:"auto",minWidth:0,cursor:"grab"}}>
+          {nodes.length===0
+            ?<div style={{textAlign:"center",color:"#A0AEC0",marginTop:80}}>
+              <div style={{fontSize:48,marginBottom:12}}>🏢</div>
+              <p style={{fontSize:15,fontWeight:600}}>조직도가 비어있습니다.</p>
+              <p style={{fontSize:13}}>상단 "+ 최상위 추가" 버튼으로 시작하세요.</p>
+            </div>
+            :<div style={{display:"flex",gap:32,alignItems:"flex-start",flexWrap:"nowrap",padding:"40px 60px",justifyContent:"center",minWidth:"max-content",minHeight:"100%"}}>
+              {nodes.filter(n=>!n.parentId||n.parentId==="").map(n=><NodeCard key={n.id} n={n} depth={0}/>)}
+            </div>
+          }
+        </div>;
+      })()}
       </div>
     </div>
 
@@ -1645,6 +1710,155 @@ function SitePMBoard({sites=[],onSave,onDelete,orgNodes=[],onOrgSave,onOrgDelete
 
 
 // ── 리포트 ────────────────────────────────────────────
+function PersonnelDashboard({personnel=[],orgNodes=[],sites=[]}){
+  const POSITION_ORDER=["현장소장","부장","부장대우","차장","차장대우","과장","대리","사원"];
+
+  // ── 본부 전체 통계 ──
+  const total=personnel.length;
+  const regular=personnel.filter(p=>!p.emp_type||p.emp_type==="정규직").length;
+  const irregular=personnel.filter(p=>p.emp_type==="비정규직").length;
+
+  // 직군별
+  const byGroup={};
+  ORG_GROUPS.forEach(g=>{byGroup[g.label]=0;});
+  personnel.forEach(p=>{const g=p.group||"기타";byGroup[g]=(byGroup[g]||0)+1;});
+
+  // 직위별
+  const byPos={};
+  personnel.forEach(p=>{const pos=p.position||"미지정";byPos[pos]=(byPos[pos]||0)+1;});
+  const sortedPos=Object.entries(byPos).sort((a,b)=>{
+    const ia=POSITION_ORDER.indexOf(a[0]); const ib=POSITION_ORDER.indexOf(b[0]);
+    if(ia===-1&&ib===-1)return a[0].localeCompare(b[0],"ko");
+    if(ia===-1)return 1; if(ib===-1)return -1; return ia-ib;
+  });
+
+  // 사원구분별
+  const empTypes=[["정규직",regular,"#6C63FF","#EDE9FE"],["비정규직",irregular,"#F59E0B","#FEF3C7"]];
+
+  // ── 현장별 배치 인원 (orgNodes 기준) ──
+  const siteStats=sites.map(s=>{
+    const sNodes=orgNodes.filter((n,i,arr)=>n.site_id===s.id&&arr.findIndex(x=>x.id===n.id)===i);
+    const reg2=sNodes.filter(n=>!n.emp_type||n.emp_type==="정규직").length;
+    const irr2=sNodes.filter(n=>n.emp_type==="비정규직").length;
+    const byGrp={};
+    ORG_GROUPS.forEach(g=>{byGrp[g.label]=0;});
+    sNodes.forEach(n=>{const g=n.group||"기타";byGrp[g]=(byGrp[g]||0)+1;});
+    return {site:s,total:sNodes.length,regular:reg2,irregular:irr2,byGrp,nodes:sNodes};
+  }).sort((a,b)=>b.total-a.total);
+
+  const cardStyle={background:"#fff",borderRadius:14,padding:"20px 22px",boxShadow:"0 2px 12px rgba(0,0,0,0.06)",border:"1px solid #EEF2F7"};
+  const SEC=({title,accent,children})=><div style={cardStyle}>
+    <p style={{margin:"0 0 16px",fontSize:13,fontWeight:800,color:"#2D3748",display:"flex",alignItems:"center",gap:6}}>
+      <span style={{width:4,height:16,background:accent,borderRadius:2,display:"inline-block"}}/>
+      {title}
+    </p>
+    {children}
+  </div>;
+
+  return <div style={{display:"flex",flexDirection:"column",gap:20}}>
+    {/* KPI 카드 */}
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:14}}>
+      {[
+        {label:"총 등록 인원",val:total,unit:"명",color:"#6C63FF",bg:"#EDE9FE",icon:"👥"},
+        {label:"정규직",val:regular,unit:"명",color:"#22C55E",bg:"#F0FDF4",icon:"🏷"},
+        {label:"비정규직",val:irregular,unit:"명",color:"#F59E0B",bg:"#FEF3C7",icon:"📋"},
+        {label:"배치 현장 수",val:sites.length,unit:"개소",color:"#0EA5E9",bg:"#F0F9FF",icon:"🏗"},
+      ].map(k=><div key={k.label} style={{...cardStyle,background:k.bg,border:"none",display:"flex",alignItems:"center",gap:14}}>
+        <div style={{fontSize:28}}>{k.icon}</div>
+        <div>
+          <p style={{margin:0,fontSize:11,color:k.color,fontWeight:700}}>{k.label}</p>
+          <p style={{margin:"2px 0 0",fontSize:26,fontWeight:800,color:k.color}}>{k.val}<span style={{fontSize:13,fontWeight:600}}> {k.unit}</span></p>
+        </div>
+      </div>)}
+    </div>
+
+    {/* 직군별 + 직위별 */}
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+      <SEC title="직군별 인원 현황" accent="#6C63FF">
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          {ORG_GROUPS.filter(g=>byGroup[g.label]>0).map(g=>{
+            const cnt=byGroup[g.label];
+            const pct=total?Math.round(cnt/total*100):0;
+            return <div key={g.label}>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                <span style={{fontSize:12,fontWeight:700,color:g.color}}>{g.label}</span>
+                <span style={{fontSize:12,fontWeight:800,color:"#2D3748"}}>{cnt}명 <span style={{fontSize:10,color:"#A0AEC0"}}>({pct}%)</span></span>
+              </div>
+              <div style={{height:7,borderRadius:4,background:"#EEF2F7",overflow:"hidden"}}>
+                <div style={{height:"100%",width:`${pct}%`,background:g.color,borderRadius:4}}/>
+              </div>
+            </div>;
+          })}
+          {total===0&&<p style={{textAlign:"center",color:"#A0AEC0",fontSize:13}}>데이터 없음</p>}
+        </div>
+      </SEC>
+
+      <SEC title="직위별 인원 현황" accent="#0EA5E9">
+        <div style={{display:"flex",flexDirection:"column",gap:6}}>
+          {sortedPos.map(([pos,cnt])=>{
+            const pct=total?Math.round(cnt/total*100):0;
+            return <div key={pos} style={{display:"flex",alignItems:"center",gap:10}}>
+              <span style={{fontSize:12,color:"#4A5568",fontWeight:600,width:68,flexShrink:0}}>{pos}</span>
+              <div style={{flex:1,height:7,borderRadius:4,background:"#EEF2F7",overflow:"hidden"}}>
+                <div style={{height:"100%",width:`${pct}%`,background:"#6C63FF",borderRadius:4}}/>
+              </div>
+              <span style={{fontSize:12,fontWeight:800,color:"#6C63FF",minWidth:32,textAlign:"right"}}>{cnt}명</span>
+            </div>;
+          })}
+          {sortedPos.length===0&&<p style={{textAlign:"center",color:"#A0AEC0",fontSize:13}}>데이터 없음</p>}
+        </div>
+      </SEC>
+    </div>
+
+    {/* 사원구분 */}
+    <SEC title="사원구분 현황" accent="#22C55E">
+      <div style={{display:"flex",gap:12}}>
+        {empTypes.map(([label,cnt,color,bg])=><div key={label} style={{flex:1,background:bg,borderRadius:10,padding:"14px 16px",textAlign:"center"}}>
+          <p style={{margin:0,fontSize:11,fontWeight:700,color}}>{label}</p>
+          <p style={{margin:"6px 0 0",fontSize:28,fontWeight:800,color}}>{cnt}<span style={{fontSize:13}}> 명</span></p>
+          <p style={{margin:"4px 0 0",fontSize:11,color,opacity:0.8}}>{total?Math.round(cnt/total*100):0}%</p>
+        </div>)}
+      </div>
+    </SEC>
+
+    {/* 현장별 인원현황 */}
+    <SEC title="현장별 배치 인원 현황 (조직도 기준)" accent="#F59E0B">
+      {siteStats.length===0
+        ?<p style={{textAlign:"center",color:"#A0AEC0",fontSize:13}}>배치된 인원이 없습니다.</p>
+        :<div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {siteStats.filter(s=>s.total>0).map(({site,total:tot,regular:r,irregular:ir,byGrp})=><div key={site.id}
+            style={{border:"1px solid #EEF2F7",borderRadius:12,padding:"14px 16px",background:"#FAFAFA"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
+              <div>
+                <p style={{margin:0,fontSize:13,fontWeight:800,color:"#1A1A2E"}}>{site.name}</p>
+                <p style={{margin:"2px 0 0",fontSize:11,color:"#718096"}}>{site.pm&&`PM: ${site.pm}`} {site.location&&`· ${site.location}`}</p>
+              </div>
+              <div style={{textAlign:"right"}}>
+                <p style={{margin:0,fontSize:22,fontWeight:800,color:"#6C63FF"}}>{tot}<span style={{fontSize:12}}> 명</span></p>
+                <p style={{margin:0,fontSize:10,color:"#718096"}}>정규 {r} · 비정규 {ir}</p>
+              </div>
+            </div>
+            {/* 직군 바 */}
+            <div style={{display:"flex",gap:3,height:8,borderRadius:4,overflow:"hidden"}}>
+              {ORG_GROUPS.filter(g=>byGrp[g.label]>0).map(g=><div key={g.label}
+                title={`${g.label}: ${byGrp[g.label]}명`}
+                style={{flex:byGrp[g.label],background:g.color,transition:"flex 0.3s"}}/>)}
+            </div>
+            {/* 직군 범례 */}
+            <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:7}}>
+              {ORG_GROUPS.filter(g=>byGrp[g.label]>0).map(g=><span key={g.label}
+                style={{fontSize:10,padding:"1px 7px",borderRadius:4,background:g.color+"22",color:g.color,fontWeight:700}}>
+                {g.label} {byGrp[g.label]}
+              </span>)}
+            </div>
+          </div>)}
+          {siteStats.every(s=>s.total===0)&&<p style={{textAlign:"center",color:"#A0AEC0",fontSize:13}}>조직도에 배치된 인원이 없습니다.</p>}
+        </div>
+      }
+    </SEC>
+  </div>;
+}
+
 function Reports({schedules,tasks}){
   const total=tasks.length;
   const donePct=total?Math.round(tasks.filter(t=>t.status==="완료").length/total*100):0;

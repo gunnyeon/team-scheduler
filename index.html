@@ -538,7 +538,19 @@ function App(){
       </button>
     </div>
   </div>
-  :<SitePMBoard sites={sites} onSave={saveSite} onDelete={deleteSite} orgNodes={orgNodes} onOrgSave={(node)=>{const row={...node};apiUpsert("org_nodes",row).then(()=>afterSave()).catch(()=>setSyncStatus("오류"));}} onOrgDelete={(id)=>{apiDelete("org_nodes",id).then(()=>afterSave()).catch(()=>setSyncStatus("오류"));}} onOrgSaveBump={()=>{bumpLocal();}} />
+  :<SitePMBoard sites={sites} onSave={saveSite} onDelete={deleteSite} orgNodes={orgNodes} onOrgSave={(node)=>{
+    const row={...node};
+    setOrgNodes(prev=>{const exists=prev.find(n=>n.id===row.id);return exists?prev.map(n=>n.id===row.id?row:n):[...prev,row];});
+    bumpLocal();
+    apiUpsert("org_nodes",row).catch(()=>setSyncStatus("오류"));
+  }}
+  onOrgDelete={(ids)=>{
+    const idArr=Array.isArray(ids)?ids:[ids];
+    setOrgNodes(prev=>prev.filter(n=>!idArr.includes(n.id)));
+    bumpLocal();
+    Promise.all(idArr.map(id=>apiDelete("org_nodes",id))).catch(()=>setSyncStatus("오류"));
+  }}
+  onOrgSaveBump={()=>{bumpLocal();}} />
 )}
           {activeMenu==="리포트"&&<Reports schedules={schedules} tasks={tasks}/>}
         </div>
@@ -1033,10 +1045,11 @@ function CalendarView({schedules,currentMonth,setCurrentMonth,todayStr,selectedS
 // ── 현장 조직도 편집기 ────────────────────────────────
 // 직군별 색상 팔레트
 const ORG_GROUPS=[
-  {label:"시공",color:"#6C63FF"},{label:"공무",color:"#3B82F6"},
-  {label:"안전",color:"#22C55E"},{label:"품질",color:"#F59E0B"},
-  {label:"설계",color:"#EC4899"},{label:"발주처",color:"#EF4444"},
-  {label:"협력사",color:"#F97316"},{label:"기타",color:"#94A3B8"},
+  {label:"현장소장",color:"#6C63FF"},{label:"공사",color:"#3B82F6"},
+  {label:"공무",color:"#0EA5E9"},{label:"기계",color:"#F59E0B"},
+  {label:"전기",color:"#EAB308"},{label:"안전",color:"#22C55E"},
+  {label:"품질",color:"#EC4899"},{label:"관리",color:"#F97316"},
+  {label:"기타",color:"#94A3B8"},
 ];
 function getGroupColor(group){return(ORG_GROUPS.find(g=>g.label===group)||{color:"#94A3B8"}).color;}
 
@@ -1053,30 +1066,26 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
   function openEdit(n){
     setModalForm({group:n.group||"시공",role:n.role||"",grade:n.grade||"",name:n.name||"",age:n.age||"",phone:n.phone||"",color:n.color||getGroupColor(n.group||"시공"),parentId:n.parentId||null,isNew:false,nodeId:n.id});
   }
-  async function saveNode(){
+  function saveNode(){
     if(!modalForm.role.trim()){alert("직책을 입력하세요.");return;}
-    setSaving(true);
-    onOrgSaveBump&&onOrgSaveBump();
     const color=getGroupColor(modalForm.group);
     if(modalForm.isNew){
       const row={id:`org${Date.now()}`,site_id:site.id,group:modalForm.group,role:modalForm.role,grade:modalForm.grade,name:modalForm.name,age:modalForm.age,phone:modalForm.phone,color,parentId:modalForm.parentId||""};
-      await onOrgSave(row);
+      onOrgSave(row); // 낙관적: 즉시 UI 반영
     } else {
       const existing=nodes.find(n=>n.id===modalForm.nodeId);
       const row={...existing,group:modalForm.group,role:modalForm.role,grade:modalForm.grade,name:modalForm.name,age:modalForm.age,phone:modalForm.phone,color};
-      await onOrgSave(row);
+      onOrgSave(row);
     }
-    setSaving(false);
-    setModalForm(null);
+    setModalForm(null); // 즉시 닫기
   }
-  async function delNode(id){
+  function delNode(id){
     if(!window.confirm("이 노드와 하위 노드를 모두 삭제하시겠습니까?"))return;
     function collectIds(nid){
       const ch=nodes.filter(n=>n.parentId===nid).map(n=>n.id);
       return[nid,...ch.flatMap(collectIds)];
     }
-    onOrgSaveBump&&onOrgSaveBump();
-    for(const nid of collectIds(id)) await onOrgDelete(nid);
+    onOrgDelete(collectIds(id)); // 배열로 한번에 전달
   }
 
   // 트리 노드 카드

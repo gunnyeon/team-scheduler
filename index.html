@@ -270,12 +270,12 @@ function App(){
   const inProgressTasks =sortTasks(tasks.filter(t=>t.status==="진행 중"));
   const overdueTasks    =tasks.filter(t=>t.due_date&&t.due_date<todayStr&&t.status!=="완료").sort((a,b)=>a.due_date.localeCompare(b.due_date));
 
-  const menus=["대시보드","캘린더(주요일정)","캘린더(출장일정)","캘린더(연차일정)","일정 관리","업무 관리","현장별PM","리포트"];
+  const menus=["대시보드","캘린더(주요일정)","캘린더(출장일정)","캘린더(연차일정)","일정 관리","업무 관리","현장관리플랫폼","리포트"];
   function handleMenuChange(m){
-    if(activeMenu==="현장별PM"&&m!=="현장별PM"){setSitePMLocked(true);setSitepmPwInput("");setSitepmPwError("");}
+    if(activeMenu==="현장관리플랫폼"&&m!=="현장관리플랫폼"){setSitePMLocked(true);setSitepmPwInput("");setSitepmPwError("");}
     setActiveMenu(m);
   }
-  const menuIcons={"대시보드":"▦","캘린더(주요일정)":"🗓","캘린더(출장일정)":"✈️","캘린더(연차일정)":"🌴","일정 관리":"📅","업무 관리":"✓","현장별PM":"🏗","리포트":"📊"};
+  const menuIcons={"대시보드":"▦","캘린더(주요일정)":"🗓","캘린더(출장일정)":"✈️","캘린더(연차일정)":"🌴","일정 관리":"📅","업무 관리":"✓","현장관리플랫폼":"🏗","리포트":"📊"};
   const newSchedDef={title:"",description:"",owner_name:myName||"",owner_email:"",start_date:todayStr,start_time:"09:00",end_date:todayStr,end_time:"18:00",priority:"medium"};
   const newTripDef={title:"",description:"",owner_name:myName||"",owner_email:"",start_date:todayStr,start_time:"09:00",end_date:todayStr,end_time:"18:00",priority:"medium",part:""};
   const newTaskDef={title:"",owner_name:myName||"",part:"",start_date:todayStr,due_date:"",progress:0,status:"할 일"};
@@ -520,11 +520,11 @@ function App(){
           {activeMenu==="캘린더(주요일정)"&&<CalendarView schedules={schedules} currentMonth={currentMonth} setCurrentMonth={setCurrentMonth} todayStr={todayStr} selectedSched={selectedSched} setSelectedSched={setSelectedSched} onDateClick={d=>{setEditingSched(null);setShowSchedModal({prefillDate:d});}} onEditSched={s=>{setEditingSched(s);setShowSchedModal(true);}} onDeleteSched={deleteSched} isMobile={isMobile}/>}
           {activeMenu==="캘린더(출장일정)"&&<CalendarView schedules={trips} currentMonth={currentMonth2} setCurrentMonth={setCurrentMonth2} todayStr={todayStr} selectedSched={selectedSched2} setSelectedSched={setSelectedSched2} onDateClick={d=>{setEditingTrip(null);setShowTripModal({prefillDate:d});}} onEditSched={s=>{setEditingTrip(s);setShowTripModal(true);}} onDeleteSched={deleteTrip} showOwner={true} showPartColor={true} isMobile={isMobile}/>}
           {activeMenu==="캘린더(연차일정)"&&<CalendarView schedules={leaves} currentMonth={currentMonth3} setCurrentMonth={setCurrentMonth3} todayStr={todayStr} selectedSched={selectedSched3} setSelectedSched={setSelectedSched3} onDateClick={d=>{setEditingLeave(null);setShowLeaveModal({prefillDate:d});}} onEditSched={s=>{setEditingLeave(s);setShowLeaveModal(true);}} onDeleteSched={deleteLeave} showOwnerColor={true} isMobile={isMobile}/>}
-          {activeMenu==="현장별PM"&&(sitePMLocked
+          {activeMenu==="현장관리플랫폼"&&(sitePMLocked
   ?<div style={{display:"flex",alignItems:"center",justifyContent:"center",minHeight:400}}>
     <div style={{background:"#fff",borderRadius:20,padding:"44px 48px",boxShadow:"0 4px 24px rgba(0,0,0,0.10)",width:340,textAlign:"center",border:"1px solid #E2E8F0"}}>
       <div style={{width:60,height:60,borderRadius:18,background:"linear-gradient(135deg,#6C63FF,#9F7AEA)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,margin:"0 auto 16px"}}>🔒</div>
-      <h2 style={{margin:"0 0 6px",fontSize:18,fontWeight:800,color:"#2D3748"}}>현장별 PM</h2>
+      <h2 style={{margin:"0 0 6px",fontSize:18,fontWeight:800,color:"#2D3748"}}>현장관리플랫폼</h2>
       <p style={{color:"#718096",fontSize:13,margin:"0 0 24px"}}>보안구역입니다. 암호를 입력하세요.</p>
       <input
         type="password"
@@ -544,13 +544,13 @@ function App(){
   :<SitePMBoard sites={sites} onSave={saveSite} onDelete={deleteSite} orgNodes={orgNodes} onOrgSave={(node)=>{
     const row={...node};
     setOrgNodes(prev=>{const exists=prev.find(n=>n.id===row.id);return exists?prev.map(n=>n.id===row.id?row:n):[...prev,row];});
-    bumpLocal();
+    lastLocalChange.current=Date.now()+4000; // 4초간 폴링 덮어쓰기 차단
     apiUpsert("org_nodes",row).catch(()=>setSyncStatus("오류"));
   }}
   onOrgDelete={(ids)=>{
     const idArr=Array.isArray(ids)?ids:[ids];
     setOrgNodes(prev=>prev.filter(n=>!idArr.includes(n.id)));
-    bumpLocal();
+    lastLocalChange.current=Date.now()+4000;
     Promise.all(idArr.map(id=>apiDelete("org_nodes",id))).catch(()=>setSyncStatus("오류"));
   }}
   onOrgSaveBump={()=>{bumpLocal();}}
@@ -673,7 +673,7 @@ function Dashboard({schedules,trips,tasks,sites=[],todaySchedules,weekSchedules,
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
             <span style={{fontSize:18}}>🏗</span>
             <h3 style={{margin:0,fontSize:14,fontWeight:800,color:"#D97706"}}>준공 임박 현장 {urgent.length}건 — D-30일 이내</h3>
-            <button onClick={()=>setActiveMenu("현장별PM")} style={{marginLeft:"auto",...btn("#F59E0B"),fontSize:11,padding:"4px 12px"}}>현장 현황 →</button>
+            <button onClick={()=>setActiveMenu("현장관리플랫폼")} style={{marginLeft:"auto",...btn("#F59E0B"),fontSize:11,padding:"4px 12px"}}>현장 현황 →</button>
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:6}}>
             {urgent.map(s=>{
@@ -1141,7 +1141,8 @@ function PersonnelMgrModal({personnel,onSave,onDelete,onClose}){
 }
 
 function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSaveBump,personnel=[],onPersonnelSave,onPersonnelDelete,isAdmin=false}){
-  const nodes=orgNodes.filter(n=>n.site_id===site.id);
+  // site_id 기준 필터 + id 중복 제거 (집계 정확도 보장)
+  const nodes=orgNodes.filter((n,i,arr)=>n.site_id===site.id&&arr.findIndex(x=>x.id===n.id)===i);
   const emptyForm={group:"현장소장",role:"",grade:"",position:"",emp_type:"정규직",name:"",age:"",phone:"",parentId:null};
   const [modalForm,setModalForm]=useState(null);
   const [showPersonnelMgr,setShowPersonnelMgr]=useState(false);
@@ -1184,9 +1185,15 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
     setModalForm(null);
   }
   function delNode(id){
-    if(!window.confirm("이 노드와 하위 노드를 모두 삭제하시겠습니까?"))return;
-    function collectIds(nid){const ch=nodes.filter(n=>n.parentId===nid).map(n=>n.id);return[nid,...ch.flatMap(collectIds)];}
-    onOrgDelete(collectIds(id));
+    if(!window.confirm("이 노드만 삭제합니다. 하위 노드는 유지됩니다."))return;
+    // 삭제된 노드의 하위 노드들을 삭제된 노드의 부모로 재연결
+    const target=nodes.find(n=>n.id===id);
+    const newParent=target?target.parentId||"":"";
+    const children=nodes.filter(n=>n.parentId===id);
+    children.forEach(child=>{
+      onOrgSave({...child,parentId:newParent});
+    });
+    onOrgDelete([id]);
   }
 
   function NodeCard({n,depth}){
@@ -1249,10 +1256,16 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
         const byGroup={};
         ORG_GROUPS.forEach(g=>{byGroup[g.label]=[];});
         nodes.forEach(n=>{const g=n.group||"기타";if(!byGroup[g])byGroup[g]=[];byGroup[g].push(n);});
-        // 직급별 집계
-        const gradeMap={};
-        nodes.forEach(n=>{const gr=n.grade||"미지정";if(!gradeMap[gr])gradeMap[gr]=0;gradeMap[gr]++;});
-        const grades=Object.entries(gradeMap).sort((a,b)=>b[1]-a[1]);
+        // 직위별 집계 (정해진 순서)
+        const POSITION_ORDER=["부장","부장대우","차장","차장대우","과장","대리","사원","미지정"];
+        const posMap={};
+        nodes.forEach(n=>{const pos=n.position||"미지정";if(!posMap[pos])posMap[pos]=0;posMap[pos]++;});
+        const positions=Object.entries(posMap).sort((a,b)=>{
+          const ia=POSITION_ORDER.indexOf(a[0]); const ib=POSITION_ORDER.indexOf(b[0]);
+          if(ia===-1&&ib===-1)return a[0].localeCompare(b[0],"ko");
+          if(ia===-1)return 1; if(ib===-1)return -1;
+          return ia-ib;
+        });
         const total=nodes.length;
         return <div style={{width:220,flexShrink:0,background:"#fff",borderLeft:"1px solid #E2E8F0",padding:"20px 16px",overflowY:"auto",display:"flex",flexDirection:"column",gap:20}}>
           {/* 총 인원 */}
@@ -1279,12 +1292,12 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
               })}
             </div>
           </div>
-          {/* 직급별 */}
+          {/* 직위별 */}
           <div>
-            <p style={{margin:"0 0 10px",fontSize:12,fontWeight:800,color:"#2D3748"}}>🏅 직급별 인원</p>
+            <p style={{margin:"0 0 10px",fontSize:12,fontWeight:800,color:"#2D3748"}}>🏅 직위별 인원</p>
             <div style={{display:"flex",flexDirection:"column",gap:4}}>
-              {grades.map(([grade,cnt])=><div key={grade} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 8px",borderRadius:7,background:"#F8FAFC"}}>
-                <span style={{fontSize:11,color:"#4A5568",fontWeight:600}}>{grade}</span>
+              {positions.map(([pos,cnt])=><div key={pos} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 8px",borderRadius:7,background:"#F8FAFC"}}>
+                <span style={{fontSize:11,color:"#4A5568",fontWeight:600}}>{pos}</span>
                 <span style={{fontSize:12,fontWeight:800,color:"#6C63FF",minWidth:32,textAlign:"right"}}>{cnt}명</span>
               </div>)}
             </div>
@@ -1309,14 +1322,14 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
           })()}
         </div>;
       })()}
-      <div style={{flex:1,overflow:"auto",padding:"36px 40px",display:"flex",justifyContent:"center",alignItems:"flex-start"}}>
+      <div style={{flex:1,overflow:"auto",padding:"36px 40px",minWidth:0}}>
         {nodes.length===0
           ?<div style={{textAlign:"center",color:"#A0AEC0",marginTop:80}}>
             <div style={{fontSize:48,marginBottom:12}}>🏢</div>
             <p style={{fontSize:15,fontWeight:600}}>조직도가 비어있습니다.</p>
             <p style={{fontSize:13}}>상단 "+ 최상위 추가" 버튼으로 시작하세요.</p>
           </div>
-          :<div style={{display:"flex",gap:32,alignItems:"flex-start",flexWrap:"wrap",justifyContent:"center"}}>
+          :<div style={{display:"inline-flex",gap:32,alignItems:"flex-start",flexWrap:"nowrap",minWidth:"100%",paddingBottom:24}}>
             {nodes.filter(n=>!n.parentId||n.parentId==="").map(n=><NodeCard key={n.id} n={n} depth={0}/>)}
           </div>
         }

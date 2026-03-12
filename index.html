@@ -50,13 +50,14 @@
 const {useState,useEffect,useRef,useCallback}=React;
 
 // ── API 설정 ───────────────────────────────────────────
-const API_URL = "https://script.google.com/macros/s/AKfycbwBlRmYnyniFQh5xuRapItNbRxVI57iyV9fDim6MX_gaQM4-61WmJs3v1aMIerC79dLjg/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbxDW8nsDoYxvHhTvNMxmaAtAUsgUP13Ru7dr2oUDQf-QtyWK-DGWM9WdM-5Zj_dzsPUHg/exec";
 const SCHED_HEADERS = ["id","title","description","owner_name","owner_email","start_date","start_time","end_date","end_time","priority"];
 const TASK_HEADERS  = ["id","title","owner_name","part","start_date","due_date","progress","status"];
 const TRIP_HEADERS  = ["id","title","description","owner_name","owner_email","start_date","start_time","end_date","end_time","priority","part"];
 const LEAVE_HEADERS = ["id","title","description","owner_name","owner_email","start_date","start_time","end_date","end_time","priority"];
 const SITE_HEADERS  = ["id","name","pm","start_date","completion","location","scale","client","contract_amount","cost_rate","order_type","equity_rate","memo"];
-const ORG_HEADERS   = ["id","site_id","group","role","grade","name","age","phone","color","parentId"];
+const ORG_HEADERS       = ["id","site_id","group","role","grade","name","age","phone","color","parentId"];
+const PERSONNEL_HEADERS = ["id","group","role","grade","name","age","phone"];
 
 async function apiGet(sheet){
   const r=await fetch(`${API_URL}?sheet=${sheet}`);
@@ -185,6 +186,7 @@ function App(){
   const [leaves,setLeaves]=useState([]);
   const [sites,setSites]=useState([]);
   const [orgNodes,setOrgNodes]=useState([]);
+  const [personnel,setPersonnel]=useState([]);
   const [sitePMLocked,setSitePMLocked]=useState(true);
   const [sitepmPwInput,setSitepmPwInput]=useState("");
   const [sitepmPwError,setSitepmPwError]=useState("");
@@ -205,7 +207,7 @@ function App(){
     try{
       setSyncStatus("연결 중");
       // apiInit은 백그라운드 (시트 생성은 오래 걸릴 수 있음)
-      Promise.all([apiInit("schedules",SCHED_HEADERS),apiInit("trips",TRIP_HEADERS),apiInit("tasks",TASK_HEADERS),apiInit("leaves",LEAVE_HEADERS),apiInit("sites",SITE_HEADERS),apiInit("org_nodes",ORG_HEADERS)]).catch(()=>{});
+      Promise.all([apiInit("schedules",SCHED_HEADERS),apiInit("trips",TRIP_HEADERS),apiInit("tasks",TASK_HEADERS),apiInit("leaves",LEAVE_HEADERS),apiInit("sites",SITE_HEADERS),apiInit("org_nodes",ORG_HEADERS),apiInit("personnel",PERSONNEL_HEADERS)]).catch(()=>{});
       await loadData();
       initialized.current=true;
     }catch(e){
@@ -218,7 +220,7 @@ function App(){
   async function loadData(){
     const reqAt=Date.now();
     try{
-      const [s,tr,t,lv,sv,on]=await Promise.all([apiGet("schedules"),apiGet("trips"),apiGet("tasks"),apiGet("leaves"),apiGet("sites"),apiGet("org_nodes")]);
+      const [s,tr,t,lv,sv,on,pr]=await Promise.all([apiGet("schedules"),apiGet("trips"),apiGet("tasks"),apiGet("leaves"),apiGet("sites"),apiGet("org_nodes"),apiGet("personnel")]);
       // 요청 시작 후 로컬 변경이 있으면 무시 (내가 방금 저장한 데이터를 서버가 덮어쓰지 않도록)
       if(lastLocalChange.current>reqAt)return;
       // JSON 문자열 비교로 실제 변경 시에만 setState → 불필요한 리렌더 방지
@@ -228,6 +230,7 @@ function App(){
       setLeaves(prev=>{const next=JSON.stringify(lv);return JSON.stringify(prev)===next?prev:lv;});
       setSites(prev=>{const next=JSON.stringify(sv);return JSON.stringify(prev)===next?prev:sv;});
       setOrgNodes(prev=>{const next=JSON.stringify(on);return JSON.stringify(prev)===next?prev:on;});
+      setPersonnel(prev=>{const next=JSON.stringify(pr);return JSON.stringify(prev)===next?prev:pr;});
       setLastSync(new Date()); setSyncStatus("동기화됨");
     }catch(e){setSyncStatus("오류");}
   }
@@ -550,7 +553,19 @@ function App(){
     bumpLocal();
     Promise.all(idArr.map(id=>apiDelete("org_nodes",id))).catch(()=>setSyncStatus("오류"));
   }}
-  onOrgSaveBump={()=>{bumpLocal();}} />
+  onOrgSaveBump={()=>{bumpLocal();}}
+  personnel={personnel}
+  onPersonnelSave={(row)=>{
+    setPersonnel(prev=>{const exists=prev.find(p=>p.id===row.id);return exists?prev.map(p=>p.id===row.id?row:p):[...prev,row];});
+    bumpLocal();
+    apiUpsert("personnel",row).catch(()=>setSyncStatus("오류"));
+  }}
+  onPersonnelDelete={(id)=>{
+    setPersonnel(prev=>prev.filter(p=>p.id!==id));
+    bumpLocal();
+    apiDelete("personnel",id).catch(()=>setSyncStatus("오류"));
+  }}
+/>
 )}
           {activeMenu==="리포트"&&<Reports schedules={schedules} tasks={tasks}/>}
         </div>
@@ -1043,7 +1058,6 @@ function CalendarView({schedules,currentMonth,setCurrentMonth,todayStr,selectedS
 }
 
 // ── 현장 조직도 편집기 ────────────────────────────────
-// 직군별 색상 팔레트
 const ORG_GROUPS=[
   {label:"현장소장",color:"#6C63FF"},{label:"공사",color:"#3B82F6"},
   {label:"공무",color:"#0EA5E9"},{label:"기계",color:"#F59E0B"},
@@ -1051,69 +1065,138 @@ const ORG_GROUPS=[
   {label:"품질",color:"#EC4899"},{label:"관리",color:"#F97316"},
   {label:"기타",color:"#94A3B8"},
 ];
-function getGroupColor(group){return(ORG_GROUPS.find(g=>g.label===group)||{color:"#94A3B8"}).color;}
+function getGroupColor(g){return(ORG_GROUPS.find(x=>x.label===g)||{color:"#94A3B8"}).color;}
 
-function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSaveBump}){
+// 인원 로우데이터 관리 모달
+function PersonnelMgrModal({personnel,onSave,onDelete,onClose}){
+  const emp={id:"",group:"현장소장",role:"",grade:"",name:"",age:"",phone:""};
+  const [form,setForm]=useState(emp);
+  const [editing,setEditing]=useState(null);
+  const sf=k=>e=>setForm(f=>({...f,[k]:e.target.value}));
+  function startEdit(p){setEditing(p.id);setForm({group:p.group||"현장소장",role:p.role||"",grade:p.grade||"",name:p.name||"",age:p.age||"",phone:p.phone||""});}
+  function reset(){setEditing(null);setForm(emp);}
+  function save(){
+    if(!form.name.trim()){alert("이름을 입력하세요.");return;}
+    const row={...form,id:editing||`per${Date.now()}`};
+    onSave(row); reset();
+  }
+  const inp={width:"100%",border:"1px solid #CBD5E0",borderRadius:7,padding:"7px 10px",fontSize:13,color:"#2D3748",outline:"none",boxSizing:"border-box"};
+  return <div style={{position:"fixed",inset:0,background:"rgba(30,30,60,0.55)",zIndex:600,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={onClose}>
+    <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:18,width:"100%",maxWidth:640,maxHeight:"85vh",display:"flex",flexDirection:"column",boxShadow:"0 8px 40px rgba(0,0,0,0.2)",overflow:"hidden"}}>
+      <div style={{padding:"18px 22px",borderBottom:"1px solid #E2E8F0",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+        <h3 style={{margin:0,fontSize:16,fontWeight:800,color:"#1A1A2E"}}>👤 인원 로우데이터 관리</h3>
+        <button onClick={onClose} style={{background:"none",border:"none",fontSize:22,color:"#A0AEC0",cursor:"pointer"}}>×</button>
+      </div>
+      {/* 입력 폼 */}
+      <div style={{padding:"16px 22px",borderBottom:"1px solid #EEF2F7",flexShrink:0,background:"#F8FAFC"}}>
+        <p style={{margin:"0 0 10px",fontSize:12,fontWeight:700,color:"#6C63FF"}}>{editing?"인원 수정":"새 인원 추가"}</p>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:10}}>
+          <div>
+            <label style={{fontSize:10,fontWeight:700,color:"#4A5568",display:"block",marginBottom:3}}>직군</label>
+            <select value={form.group} onChange={sf("group")} style={{...inp,background:"#fff"}}>
+              {ORG_GROUPS.map(g=><option key={g.label}>{g.label}</option>)}
+            </select>
+          </div>
+          <div><label style={{fontSize:10,fontWeight:700,color:"#4A5568",display:"block",marginBottom:3}}>직책</label><input value={form.role} onChange={sf("role")} placeholder="현장소장" style={inp}/></div>
+          <div><label style={{fontSize:10,fontWeight:700,color:"#4A5568",display:"block",marginBottom:3}}>직급</label><input value={form.grade} onChange={sf("grade")} placeholder="부장" style={inp}/></div>
+          <div><label style={{fontSize:10,fontWeight:700,color:"#4A5568",display:"block",marginBottom:3}}>이름 *</label><input value={form.name} onChange={sf("name")} placeholder="홍길동" style={inp}/></div>
+          <div><label style={{fontSize:10,fontWeight:700,color:"#4A5568",display:"block",marginBottom:3}}>나이</label><input value={form.age} onChange={sf("age")} placeholder="45" style={inp}/></div>
+          <div><label style={{fontSize:10,fontWeight:700,color:"#4A5568",display:"block",marginBottom:3}}>전화번호</label><input value={form.phone} onChange={sf("phone")} placeholder="010-0000-0000" style={inp}/></div>
+        </div>
+        <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+          {editing&&<button onClick={reset} style={{background:"#F7FAFC",border:"1px solid #CBD5E0",borderRadius:7,padding:"7px 14px",fontSize:12,color:"#718096",cursor:"pointer",fontWeight:600}}>취소</button>}
+          <button onClick={save} style={{background:"#6C63FF",border:"none",borderRadius:7,padding:"7px 18px",fontSize:12,color:"#fff",cursor:"pointer",fontWeight:700}}>{editing?"저장":"추가"}</button>
+        </div>
+      </div>
+      {/* 목록 */}
+      <div style={{flex:1,overflow:"auto",padding:"12px 22px"}}>
+        {personnel.length===0&&<p style={{textAlign:"center",color:"#A0AEC0",fontSize:13,marginTop:24}}>등록된 인원이 없습니다.</p>}
+        <div style={{display:"flex",flexDirection:"column",gap:6}}>
+          {personnel.map(p=>{
+            const gc=getGroupColor(p.group);
+            return <div key={p.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderRadius:10,border:"1px solid #E2E8F0",background:"#fff"}}>
+              <div style={{width:8,height:8,borderRadius:"50%",background:gc,flexShrink:0}}/>
+              <span style={{fontSize:10,padding:"2px 7px",borderRadius:5,background:gc+"22",color:gc,fontWeight:700,flexShrink:0}}>{p.group||"-"}</span>
+              <span style={{fontSize:12,fontWeight:700,color:"#1A1A2E",minWidth:60}}>{p.name}</span>
+              <span style={{fontSize:11,color:"#718096",flex:1}}>{[p.role,p.grade,p.age?"만 "+p.age+"세":"",p.phone].filter(Boolean).join(" · ")}</span>
+              <button onClick={()=>startEdit(p)} style={{fontSize:11,padding:"3px 9px",borderRadius:6,background:"#EEF2F7",color:"#6C63FF",border:"none",cursor:"pointer",fontWeight:700,flexShrink:0}}>수정</button>
+              <button onClick={()=>onDelete(p.id)} style={{fontSize:11,padding:"3px 9px",borderRadius:6,background:"#FFF5F5",color:"#F87171",border:"none",cursor:"pointer",fontWeight:700,flexShrink:0}}>삭제</button>
+            </div>;
+          })}
+        </div>
+      </div>
+    </div>
+  </div>;
+}
+
+function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSaveBump,personnel=[],onPersonnelSave,onPersonnelDelete,isAdmin=false}){
   const nodes=orgNodes.filter(n=>n.site_id===site.id);
-  const emptyForm={group:"시공",role:"",grade:"",name:"",age:"",phone:"",color:"#6C63FF",parentId:null};
-  const [modalForm,setModalForm]=useState(null); // null=닫힘, {...form, isNew, nodeId}
-  const [saving,setSaving]=useState(false);
+  const emptyForm={group:"현장소장",role:"",grade:"",name:"",age:"",phone:"",parentId:null};
+  const [modalForm,setModalForm]=useState(null);
+  const [showPersonnelMgr,setShowPersonnelMgr]=useState(false);
+  const [showAdminPw,setShowAdminPw]=useState(false);
+  const [adminPwInput,setAdminPwInput]=useState("");
+  const [adminPwError,setAdminPwError]=useState("");
+  const [showStats,setShowStats]=useState(true);
+  const [nameSuggest,setNameSuggest]=useState([]); // 자동완성 목록
   const mf=k=>e=>setModalForm(f=>({...f,[k]:e.target.value}));
 
-  function openAdd(parentId){
-    setModalForm({...emptyForm,parentId:parentId||null,isNew:true,nodeId:null});
+  function openAdd(parentId){setModalForm({...emptyForm,parentId:parentId||null,isNew:true,nodeId:null});}
+  function openEdit(n){setModalForm({group:n.group||"현장소장",role:n.role||"",grade:n.grade||"",name:n.name||"",age:n.age||"",phone:n.phone||"",parentId:n.parentId||null,isNew:false,nodeId:n.id});}
+
+  // 이름 입력 시 personnel 검색 → 자동완성
+  function onNameChange(e){
+    const v=e.target.value;
+    setModalForm(f=>({...f,name:v}));
+    if(v.trim().length===0){setNameSuggest([]);return;}
+    const matches=personnel.filter(p=>p.name.includes(v.trim()));
+    setNameSuggest(matches.slice(0,5));
   }
-  function openEdit(n){
-    setModalForm({group:n.group||"시공",role:n.role||"",grade:n.grade||"",name:n.name||"",age:n.age||"",phone:n.phone||"",color:n.color||getGroupColor(n.group||"시공"),parentId:n.parentId||null,isNew:false,nodeId:n.id});
+  // 자동완성 선택 시 전체 필드 채우기
+  function applyPersonnel(p){
+    setModalForm(f=>({...f,group:p.group||f.group,role:p.role||f.role,grade:p.grade||f.grade,name:p.name,age:p.age||f.age,phone:p.phone||f.phone}));
+    setNameSuggest([]);
   }
+
   function saveNode(){
     if(!modalForm.role.trim()){alert("직책을 입력하세요.");return;}
     const color=getGroupColor(modalForm.group);
     if(modalForm.isNew){
       const row={id:`org${Date.now()}`,site_id:site.id,group:modalForm.group,role:modalForm.role,grade:modalForm.grade,name:modalForm.name,age:modalForm.age,phone:modalForm.phone,color,parentId:modalForm.parentId||""};
-      onOrgSave(row); // 낙관적: 즉시 UI 반영
+      onOrgSave(row);
     } else {
       const existing=nodes.find(n=>n.id===modalForm.nodeId);
       const row={...existing,group:modalForm.group,role:modalForm.role,grade:modalForm.grade,name:modalForm.name,age:modalForm.age,phone:modalForm.phone,color};
       onOrgSave(row);
     }
-    setModalForm(null); // 즉시 닫기
+    setNameSuggest([]);
+    setModalForm(null);
   }
   function delNode(id){
     if(!window.confirm("이 노드와 하위 노드를 모두 삭제하시겠습니까?"))return;
-    function collectIds(nid){
-      const ch=nodes.filter(n=>n.parentId===nid).map(n=>n.id);
-      return[nid,...ch.flatMap(collectIds)];
-    }
-    onOrgDelete(collectIds(id)); // 배열로 한번에 전달
+    function collectIds(nid){const ch=nodes.filter(n=>n.parentId===nid).map(n=>n.id);return[nid,...ch.flatMap(collectIds)];}
+    onOrgDelete(collectIds(id));
   }
 
-  // 트리 노드 카드
   function NodeCard({n,depth}){
     const gc=getGroupColor(n.group);
     const kids=nodes.filter(c=>c.parentId===n.id);
     return <div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
       {depth>0&&<div style={{width:2,height:22,background:"#CBD5E0"}}/>}
       <div style={{background:"#fff",border:`2px solid ${gc}`,borderRadius:14,padding:"12px 16px",minWidth:130,textAlign:"center",boxShadow:"0 2px 12px rgba(0,0,0,0.09)",position:"relative"}}>
-        {/* 직군 뱃지 */}
         <div style={{position:"absolute",top:-10,left:"50%",transform:"translateX(-50%)",background:gc,color:"#fff",fontSize:9,fontWeight:800,padding:"2px 8px",borderRadius:6,whiteSpace:"nowrap"}}>{n.group||"기타"}</div>
-        {/* 아바타 */}
         <div style={{width:36,height:36,borderRadius:"50%",background:gc,display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,fontWeight:800,color:"#fff",margin:"6px auto 8px"}}>{(n.name||n.role||"?")[0]}</div>
-        {/* 정보 */}
         <p style={{margin:"0 0 1px",fontSize:10,color:gc,fontWeight:800,letterSpacing:0.3}}>{n.role||"-"}</p>
         {n.grade&&<p style={{margin:"0 0 2px",fontSize:9,color:"#A0AEC0",fontWeight:600}}>{n.grade}</p>}
         <p style={{margin:"0 0 2px",fontSize:13,fontWeight:800,color:"#1A1A2E"}}>{n.name||"미지정"}</p>
         {n.age&&<p style={{margin:"0 0 1px",fontSize:10,color:"#718096"}}>만 {n.age}세</p>}
         {n.phone&&<p style={{margin:"0 0 2px",fontSize:10,color:"#718096"}}>📞 {n.phone}</p>}
-        {/* 액션 */}
         <div style={{display:"flex",gap:3,justifyContent:"center",marginTop:8,flexWrap:"wrap"}}>
           <button onClick={()=>openEdit(n)} style={{fontSize:9,padding:"2px 6px",borderRadius:5,background:"#EEF2F7",color:"#6C63FF",border:"none",cursor:"pointer",fontWeight:700}}>✏ 수정</button>
           <button onClick={()=>openAdd(n.id)} style={{fontSize:9,padding:"2px 6px",borderRadius:5,background:"#F0FDF4",color:"#15803D",border:"none",cursor:"pointer",fontWeight:700}}>+ 부하</button>
-          {(!n.parentId||n.parentId==="")&&<button onClick={()=>delNode(n.id)} style={{fontSize:9,padding:"2px 6px",borderRadius:5,background:"#FFF5F5",color:"#F87171",border:"none",cursor:"pointer",fontWeight:700}}>✕</button>}
-          {n.parentId&&n.parentId!==""&&<button onClick={()=>delNode(n.id)} style={{fontSize:9,padding:"2px 6px",borderRadius:5,background:"#FFF5F5",color:"#F87171",border:"none",cursor:"pointer",fontWeight:700}}>✕</button>}
+          <button onClick={()=>delNode(n.id)} style={{fontSize:9,padding:"2px 6px",borderRadius:5,background:"#FFF5F5",color:"#F87171",border:"none",cursor:"pointer",fontWeight:700}}>✕</button>
         </div>
       </div>
-      {/* 자녀 */}
       {kids.length>0&&<>
         <div style={{width:2,height:22,background:"#CBD5E0"}}/>
         <div style={{display:"flex",gap:20,alignItems:"flex-start",position:"relative"}}>
@@ -1124,8 +1207,8 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
     </div>;
   }
 
-  // 직군 범례
   const usedGroups=[...new Set(nodes.map(n=>n.group||"기타"))];
+  const inp2={width:"100%",border:"1px solid #CBD5E0",borderRadius:8,padding:"9px 11px",fontSize:13,color:"#2D3748",outline:"none",boxSizing:"border-box"};
 
   return <div style={{position:"fixed",inset:0,background:"rgba(15,15,30,0.65)",zIndex:400,display:"flex",flexDirection:"column"}}>
     <div style={{background:"#F4F6FA",width:"100%",height:"100%",display:"flex",flexDirection:"column",overflow:"hidden"}}>
@@ -1136,16 +1219,66 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
           <p style={{margin:0,fontSize:10,color:"#A0AEC0",fontWeight:600}}>현장 조직도</p>
           <h2 style={{margin:0,fontSize:17,fontWeight:800,color:"#1A1A2E"}}>{site.name}</h2>
         </div>
-        {/* 직군 범례 */}
         <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
           {ORG_GROUPS.map(g=><span key={g.label} style={{fontSize:10,padding:"2px 8px",borderRadius:6,background:usedGroups.includes(g.label)?g.color:"#F1F5F9",color:usedGroups.includes(g.label)?"#fff":"#A0AEC0",fontWeight:700,border:`1px solid ${usedGroups.includes(g.label)?g.color:"#E2E8F0"}`}}>{g.label}</span>)}
         </div>
         <div style={{display:"flex",gap:8,flexShrink:0}}>
+          <button onClick={()=>setShowStats(v=>!v)} style={{background:"#EEF2F7",color:"#4A5568",border:"1px solid #CBD5E0",borderRadius:9,padding:"8px 14px",fontWeight:700,fontSize:12,cursor:"pointer"}}>{showStats?"📊 현황 숨기기":"📊 인원 현황"}</button>
+          <button onClick={()=>{if(isAdmin){setShowPersonnelMgr(true);}else{setShowAdminPw(true);setAdminPwInput("");setAdminPwError("");}}} style={{background:"#F0FDF4",color:"#15803D",border:"1px solid #86EFAC",borderRadius:9,padding:"8px 14px",fontWeight:700,fontSize:12,cursor:"pointer"}}>🔐 인원 관리</button>
           <button onClick={()=>openAdd(null)} style={{background:"#6C63FF",color:"#fff",border:"none",borderRadius:9,padding:"8px 16px",fontWeight:700,fontSize:13,cursor:"pointer"}}>+ 최상위 추가</button>
           <button onClick={onClose} style={{background:"none",border:"none",fontSize:26,color:"#A0AEC0",cursor:"pointer",lineHeight:1}}>×</button>
         </div>
       </div>
-      {/* 조직도 캔버스 */}
+      {/* 캔버스 + 인원현황 패널 */}
+      <div style={{flex:1,overflow:"auto",display:"flex",gap:0}}>
+      {/* 인원현황 패널 */}
+      {showStats&&nodes.length>0&&(()=>{
+        // 직군별 집계
+        const byGroup={};
+        ORG_GROUPS.forEach(g=>{byGroup[g.label]=[];});
+        nodes.forEach(n=>{const g=n.group||"기타";if(!byGroup[g])byGroup[g]=[];byGroup[g].push(n);});
+        // 직급별 집계
+        const gradeMap={};
+        nodes.forEach(n=>{const gr=n.grade||"미지정";if(!gradeMap[gr])gradeMap[gr]=0;gradeMap[gr]++;});
+        const grades=Object.entries(gradeMap).sort((a,b)=>b[1]-a[1]);
+        const total=nodes.length;
+        return <div style={{width:220,flexShrink:0,background:"#fff",borderLeft:"1px solid #E2E8F0",padding:"20px 16px",overflowY:"auto",display:"flex",flexDirection:"column",gap:20}}>
+          {/* 총 인원 */}
+          <div style={{textAlign:"center",padding:"14px 0",background:"linear-gradient(135deg,#6C63FF,#9F7AEA)",borderRadius:12}}>
+            <p style={{margin:0,fontSize:11,color:"rgba(255,255,255,0.8)",fontWeight:600}}>총 배치 인원</p>
+            <p style={{margin:"4px 0 0",fontSize:28,fontWeight:800,color:"#fff"}}>{total}<span style={{fontSize:14,fontWeight:600}}> 명</span></p>
+          </div>
+          {/* 직군별 */}
+          <div>
+            <p style={{margin:"0 0 10px",fontSize:12,fontWeight:800,color:"#2D3748"}}>📂 직군별 인원</p>
+            <div style={{display:"flex",flexDirection:"column",gap:5}}>
+              {ORG_GROUPS.filter(g=>byGroup[g.label]&&byGroup[g.label].length>0).map(g=>{
+                const cnt=byGroup[g.label].length;
+                const pct=Math.round(cnt/total*100);
+                return <div key={g.label}>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                    <span style={{fontSize:11,fontWeight:700,color:g.color}}>{g.label}</span>
+                    <span style={{fontSize:11,fontWeight:800,color:"#2D3748"}}>{cnt}명</span>
+                  </div>
+                  <div style={{height:5,borderRadius:3,background:"#EEF2F7",overflow:"hidden"}}>
+                    <div style={{height:"100%",width:`${pct}%`,background:g.color,borderRadius:3,transition:"width 0.3s"}}/>
+                  </div>
+                </div>;
+              })}
+            </div>
+          </div>
+          {/* 직급별 */}
+          <div>
+            <p style={{margin:"0 0 10px",fontSize:12,fontWeight:800,color:"#2D3748"}}>🏅 직급별 인원</p>
+            <div style={{display:"flex",flexDirection:"column",gap:4}}>
+              {grades.map(([grade,cnt])=><div key={grade} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 8px",borderRadius:7,background:"#F8FAFC"}}>
+                <span style={{fontSize:11,color:"#4A5568",fontWeight:600}}>{grade}</span>
+                <span style={{fontSize:12,fontWeight:800,color:"#6C63FF",minWidth:32,textAlign:"right"}}>{cnt}명</span>
+              </div>)}
+            </div>
+          </div>
+        </div>;
+      })()}
       <div style={{flex:1,overflow:"auto",padding:"36px 40px",display:"flex",justifyContent:"center",alignItems:"flex-start"}}>
         {nodes.length===0
           ?<div style={{textAlign:"center",color:"#A0AEC0",marginTop:80}}>
@@ -1158,49 +1291,89 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
           </div>
         }
       </div>
+      </div>
     </div>
+
+    {/* 관리자 암호 확인 모달 */}
+    {showAdminPw&&<div style={{position:"fixed",inset:0,background:"rgba(30,30,60,0.5)",zIndex:600,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={()=>setShowAdminPw(false)}>
+      <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:18,width:320,boxShadow:"0 8px 40px rgba(0,0,0,0.18)",overflow:"hidden"}}>
+        <div style={{height:4,background:"linear-gradient(90deg,#6C63FF,#9F7AEA)"}}/>
+        <div style={{padding:"24px 24px 20px",textAlign:"center"}}>
+          <div style={{fontSize:32,marginBottom:8}}>🔐</div>
+          <h3 style={{margin:"0 0 6px",fontSize:16,fontWeight:800,color:"#1A1A2E"}}>관리자 인증</h3>
+          <p style={{margin:"0 0 16px",fontSize:12,color:"#718096"}}>인원 관리는 관리자만 접근 가능합니다.</p>
+          <input type="password" value={adminPwInput} onChange={e=>{setAdminPwInput(e.target.value);setAdminPwError("");}}
+            onKeyDown={e=>{if(e.key==="Enter"){if(adminPwInput==="dongbu"){setShowAdminPw(false);setShowPersonnelMgr(true);setAdminPwInput("");}else setAdminPwError("암호가 올바르지 않습니다.");}}}
+            placeholder="관리자 암호 입력" autoFocus
+            style={{width:"100%",border:`1px solid ${adminPwError?"#F87171":"#CBD5E0"}`,borderRadius:10,padding:"11px 14px",fontSize:14,textAlign:"center",letterSpacing:4,outline:"none",boxSizing:"border-box",marginBottom:adminPwError?6:14}}/>
+          {adminPwError&&<p style={{color:"#F87171",fontSize:12,margin:"0 0 10px"}}>{adminPwError}</p>}
+          <button onClick={()=>{if(adminPwInput==="dongbu"){setShowAdminPw(false);setShowPersonnelMgr(true);setAdminPwInput("");}else setAdminPwError("암호가 올바르지 않습니다.");}}
+            style={{width:"100%",background:"linear-gradient(90deg,#6C63FF,#9C5CF7)",border:"none",borderRadius:10,padding:11,fontSize:14,fontWeight:700,color:"#fff",cursor:"pointer"}}>확인 →</button>
+        </div>
+      </div>
+    </div>}
+
     {/* 노드 편집 모달 */}
-    {modalForm&&<div style={{position:"fixed",inset:0,background:"rgba(30,30,60,0.5)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={()=>setModalForm(null)}>
+    {modalForm&&<div style={{position:"fixed",inset:0,background:"rgba(30,30,60,0.5)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={()=>{setModalForm(null);setNameSuggest([]);}}>
       <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:18,width:"100%",maxWidth:460,boxShadow:"0 8px 40px rgba(0,0,0,0.2)",overflow:"hidden"}}>
         <div style={{height:5,background:`linear-gradient(90deg,${getGroupColor(modalForm.group)},#C4B5FD)`}}/>
-        <div style={{padding:"22px 24px"}}>
-          <h3 style={{margin:"0 0 18px",fontSize:16,fontWeight:800,color:"#1A1A2E"}}>{modalForm.isNew?"노드 추가":"노드 수정"}</h3>
-          {/* 직군 선택 */}
-          <div style={{marginBottom:14}}>
-            <label style={{display:"block",fontSize:11,fontWeight:700,color:"#4A5568",marginBottom:6}}>직군 *</label>
-            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+        <div style={{padding:"20px 22px"}}>
+          <h3 style={{margin:"0 0 14px",fontSize:16,fontWeight:800,color:"#1A1A2E"}}>{modalForm.isNew?"노드 추가":"노드 수정"}</h3>
+          {/* 직군 */}
+          <div style={{marginBottom:12}}>
+            <label style={{display:"block",fontSize:11,fontWeight:700,color:"#4A5568",marginBottom:5}}>직군 *</label>
+            <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
               {ORG_GROUPS.map(g=><button key={g.label} onClick={()=>setModalForm(f=>({...f,group:g.label}))}
-                style={{fontSize:11,padding:"4px 10px",borderRadius:7,background:modalForm.group===g.label?g.color:"#F1F5F9",color:modalForm.group===g.label?"#fff":"#4A5568",border:`1px solid ${modalForm.group===g.label?g.color:"#E2E8F0"}`,cursor:"pointer",fontWeight:700}}>{g.label}</button>)}
+                style={{fontSize:10,padding:"4px 9px",borderRadius:7,background:modalForm.group===g.label?g.color:"#F1F5F9",color:modalForm.group===g.label?"#fff":"#4A5568",border:`1px solid ${modalForm.group===g.label?g.color:"#E2E8F0"}`,cursor:"pointer",fontWeight:700}}>{g.label}</button>)}
             </div>
           </div>
-          {/* 입력 그리드 */}
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:18}}>
+          {/* 이름 (자동완성) */}
+          <div style={{marginBottom:10,position:"relative"}}>
+            <label style={{display:"block",fontSize:11,fontWeight:700,color:"#4A5568",marginBottom:4}}>이름 <span style={{fontSize:10,color:"#6C63FF",fontWeight:600}}>(입력 시 인원 DB 자동 검색)</span></label>
+            <input value={modalForm.name} onChange={onNameChange} placeholder="이름 입력 또는 검색..."
+              style={{...inp2,border:`1px solid ${nameSuggest.length>0?"#6C63FF":"#CBD5E0"}`}}/>
+            {nameSuggest.length>0&&<div style={{position:"absolute",top:"100%",left:0,right:0,background:"#fff",border:"1px solid #6C63FF44",borderRadius:10,boxShadow:"0 4px 16px rgba(0,0,0,0.12)",zIndex:10,overflow:"hidden"}}>
+              {nameSuggest.map(p=>{const gc=getGroupColor(p.group);return <div key={p.id} onClick={()=>applyPersonnel(p)}
+                style={{padding:"9px 14px",cursor:"pointer",display:"flex",alignItems:"center",gap:10,borderBottom:"1px solid #F0F4F8"}}
+                onMouseEnter={e=>e.currentTarget.style.background="#F8F7FF"}
+                onMouseLeave={e=>e.currentTarget.style.background="#fff"}>
+                <div style={{width:28,height:28,borderRadius:"50%",background:gc,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:800,color:"#fff",flexShrink:0}}>{p.name[0]}</div>
+                <div>
+                  <p style={{margin:0,fontSize:13,fontWeight:700,color:"#1A1A2E"}}>{p.name}</p>
+                  <p style={{margin:0,fontSize:11,color:"#718096"}}>{[p.group,p.role,p.grade].filter(Boolean).join(" · ")}</p>
+                </div>
+              </div>;})}
+            </div>}
+          </div>
+          {/* 나머지 필드 */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
             {[
-              {key:"role",label:"직책 *",placeholder:"현장소장, 공무팀장..."},
-              {key:"grade",label:"직급",placeholder:"부장, 과장, 대리..."},
-              {key:"name",label:"이름",placeholder:"홍길동"},
+              {key:"role",label:"직책 *",placeholder:"현장소장..."},
+              {key:"grade",label:"직급",placeholder:"부장, 과장..."},
               {key:"age",label:"나이",placeholder:"45"},
-              {key:"phone",label:"전화번호",placeholder:"010-0000-0000",full:true},
-            ].map(({key,label,placeholder,full})=><div key={key} style={full?{gridColumn:"1/-1"}:{}}>
+              {key:"phone",label:"전화번호",placeholder:"010-0000-0000"},
+            ].map(({key,label,placeholder})=><div key={key}>
               <label style={{display:"block",fontSize:11,fontWeight:700,color:"#4A5568",marginBottom:4}}>{label}</label>
-              <input value={modalForm[key]} onChange={mf(key)}
-                placeholder={placeholder}
-                onKeyDown={e=>{if(e.key==="Enter"&&!full)saveNode();}}
-                style={{width:"100%",border:"1px solid #CBD5E0",borderRadius:8,padding:"9px 11px",fontSize:13,color:"#2D3748",outline:"none",boxSizing:"border-box"}}/>
+              <input value={modalForm[key]} onChange={mf(key)} placeholder={placeholder}
+                onKeyDown={e=>{if(e.key==="Enter")saveNode();}}
+                style={inp2}/>
             </div>)}
           </div>
           <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
-            <button onClick={()=>setModalForm(null)} style={{background:"#F7FAFC",color:"#718096",border:"1px solid #CBD5E0",borderRadius:8,padding:"9px 16px",fontWeight:600,fontSize:13,cursor:"pointer"}}>취소</button>
-            <button onClick={saveNode} disabled={saving} style={{background:"#6C63FF",color:"#fff",border:"none",borderRadius:8,padding:"9px 22px",fontWeight:700,fontSize:13,cursor:"pointer",opacity:saving?0.7:1}}>{saving?"저장 중...":"저장"}</button>
+            <button onClick={()=>{setModalForm(null);setNameSuggest([]);}} style={{background:"#F7FAFC",color:"#718096",border:"1px solid #CBD5E0",borderRadius:8,padding:"9px 16px",fontWeight:600,fontSize:13,cursor:"pointer"}}>취소</button>
+            <button onClick={saveNode} style={{background:"#6C63FF",color:"#fff",border:"none",borderRadius:8,padding:"9px 22px",fontWeight:700,fontSize:13,cursor:"pointer"}}>저장</button>
           </div>
         </div>
       </div>
     </div>}
+
+    {/* 인원 관리 모달 */}
+    {showPersonnelMgr&&<PersonnelMgrModal personnel={personnel} onSave={onPersonnelSave} onDelete={onPersonnelDelete} onClose={()=>setShowPersonnelMgr(false)}/>}
   </div>;
 }
 
 // ── 현장별 PM 현황 ─────────────────────────────────────
-function SitePMBoard({sites=[],onSave,onDelete,orgNodes=[],onOrgSave,onOrgDelete,onOrgSaveBump}){
+function SitePMBoard({sites=[],onSave,onDelete,orgNodes=[],onOrgSave,onOrgDelete,onOrgSaveBump,personnel=[],onPersonnelSave,onPersonnelDelete}){
   const [showModal,setShowModal]=useState(false);
   const [orgSite,setOrgSite]=useState(null);
   const [editing,setEditing]=useState(null);
@@ -1385,7 +1558,7 @@ function SitePMBoard({sites=[],onSave,onDelete,orgNodes=[],onOrgSave,onOrgDelete
       })}
     </div>
     {/* 조직도 모달 */}
-    {orgSite&&<OrgChartModal site={orgSite} onClose={()=>setOrgSite(null)} orgNodes={orgNodes} onOrgSave={onOrgSave} onOrgDelete={onOrgDelete} onOrgSaveBump={onOrgSaveBump}/>}
+    {orgSite&&<OrgChartModal site={orgSite} onClose={()=>setOrgSite(null)} orgNodes={orgNodes} onOrgSave={onOrgSave} onOrgDelete={onOrgDelete} onOrgSaveBump={onOrgSaveBump} personnel={personnel} onPersonnelSave={onPersonnelSave} onPersonnelDelete={onPersonnelDelete} isAdmin={false}/>}
     {/* 추가/수정 모달 */}
     {showModal&&<div style={{position:"fixed",inset:0,background:"rgba(30,30,60,0.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200,padding:16,overflowY:"auto"}}>
       <div style={{background:"#fff",borderRadius:18,padding:"28px 30px",width:"100%",maxWidth:520,boxShadow:"0 8px 40px rgba(0,0,0,0.18)",margin:"auto"}}>

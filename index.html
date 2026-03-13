@@ -1292,9 +1292,12 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
   // ── State ──
   const [modalForm,setModalForm]=useState(null);
   const [selectedId,setSelectedId]=useState(null);
-  const [sectionOrder,setSectionOrder]=useState([]); // 직종 섹션 순서 (드래그로 변경)
-  const [dragSec,setDragSec]=useState(null);         // 드래그 중인 섹션 key
-  const [dragOverSec,setDragOverSec]=useState(null); // 드래그 올라간 섹션 key
+  const [sectionOrder,setSectionOrder]=useState([]); // 직종 순서
+  const [dragSec,setDragSec]=useState(null);
+  const [dragOverSec,setDragOverSec]=useState(null);
+  const [rgOrder,setRgOrder]=useState({});    // 직군 순서: {jt: [rg,...]}
+  const [dragRg,setDragRg]=useState(null);    // 드래그 중 직군 {jt, rg}
+  const [dragOverRg,setDragOverRg]=useState(null); // 드롭 대상 직군 {jt, rg}
   const [showPersonnelMgr,setShowPersonnelMgr]=useState(false);
   const [showAdminPw,setShowAdminPw]=useState(false);
   const [adminPwInput,setAdminPwInput]=useState("");
@@ -1631,57 +1634,71 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
       </div>
     );
 
+    // ── 트리 구조 계산 ──
     const nodeIds=new Set(nodes.map(n=>n.id));
     const roots=nodes.filter(n=>!n.parentId||n.parentId===""||!nodeIds.has(n.parentId));
-    const JT_ORDER2=["건축","기계","전기","안전","품질","관리","토목","기타"];
+
+    // 현장소장
     const managers=roots.filter(n=>n.role_group==="현장소장")
       .sort((a,b)=>positionSortKey(a.position)-positionSortKey(b.position));
+
+    // 나머지 → job_type 별 분류
+    const JT_ORDER2=["건축","기계","전기","안전","품질","관리","토목","기타"];
     const others=roots.filter(n=>n.role_group!=="현장소장");
     const byJT2={};
     others.forEach(n=>{const jt=n.job_type||"기타";if(!byJT2[jt])byJT2[jt]=[];byJT2[jt].push(n);});
     const allJTs=[...new Set([...JT_ORDER2,...Object.keys(byJT2)])].filter(jt=>byJT2[jt]);
+    // 직종 순서 적용
     const orderedJTs=sectionOrder.length>0
       ?[...sectionOrder.filter(jt=>allJTs.includes(jt)),...allJTs.filter(jt=>!sectionOrder.includes(jt))]
       :allJTs;
 
-    // ── 마우스 기반 섹션 드래그 핸들러 ──
-    function handleSecMouseDown(e,jt){
+    // ── 직군 드래그 핸들러 ──
+    function handleRgMouseDown(e, jt, rg){
       e.stopPropagation();
       e.preventDefault();
-      if(isDragging.current)return; // 캔버스 패닝 중이면 무시
-      setDragSec(jt);
-
-      const startX=e.clientX;
-      let currentOver=null;
+      setDragRg({jt,rg});
+      let currentOverRg=null;
 
       function onMove(ev){
+        // 마우스 아래 요소들에서 data-rg, data-rgjt 속성 찾기
         const els=document.elementsFromPoint(ev.clientX,ev.clientY);
-        const secEl=els.find(el=>el.dataset&&el.dataset.secjt&&el.dataset.secjt!==jt);
-        const overJt=secEl?secEl.dataset.secjt:null;
-        if(overJt!==currentOver){
-          currentOver=overJt;
-          setDragOverSec(overJt);
+        let found=null;
+        for(const el of els){
+          if(el.dataset&&el.dataset.rg&&el.dataset.rgjt===jt&&el.dataset.rg!==rg){
+            found={jt:el.dataset.rgjt,rg:el.dataset.rg};
+            break;
+          }
+        }
+        if(JSON.stringify(found)!==JSON.stringify(currentOverRg)){
+          currentOverRg=found;
+          setDragOverRg(found);
         }
       }
 
-      function onUp(ev){
+      function onUp(){
         document.removeEventListener("mousemove",onMove);
         document.removeEventListener("mouseup",onUp);
-        const finalOver=currentOver;
-        setDragSec(null);
-        setDragOverSec(null);
-        if(finalOver&&finalOver!==jt){
-          setSectionOrder(prev=>{
-            const base=prev.length>0?[...prev.filter(t=>allJTs.includes(t)),...allJTs.filter(t=>!prev.includes(t))]:[...orderedJTs];
-            const fi=base.indexOf(jt);
-            const ti=base.indexOf(finalOver);
-            if(fi<0||ti<0)return prev;
-            const next=[...base];
-            next.splice(fi,1);
-            next.splice(ti,0,jt);
-            return next;
-          });
-        }
+        const target=currentOverRg;
+        setDragRg(null);
+        setDragOverRg(null);
+        if(!target||target.rg===rg||target.jt!==jt)return;
+        // 순서 변경
+        setRgOrder(prev=>{
+          const prevOrder=prev[jt];
+          // 현재 직군 목록 (순서 적용 전)
+          const allRgs=Object.keys(byJT2[jt].reduce((m,n)=>{
+            const r=n.role_group||"기타"; m[r]=1; return m;
+          },{}));
+          const base=prevOrder?[...prevOrder.filter(r=>allRgs.includes(r)),...allRgs.filter(r=>!prevOrder.includes(r))]:allRgs;
+          const fi=base.indexOf(rg);
+          const ti=base.indexOf(target.rg);
+          if(fi<0||ti<0)return prev;
+          const next=[...base];
+          next.splice(fi,1);
+          next.splice(ti,0,rg);
+          return {...prev,[jt]:next};
+        });
       }
 
       document.addEventListener("mousemove",onMove);
@@ -1708,66 +1725,78 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
           <div style={{height:2,background:"linear-gradient(90deg,transparent,#CBD5E0,transparent)",marginBottom:20}}/>
         )}
 
-        {orderedJTs.length>1&&(
-          <div style={{textAlign:"center",marginBottom:14}}>
-            <span style={{fontSize:10,color:"#A0AEC0",background:"#F8FAFC",
-              border:"1px solid #E2E8F0",borderRadius:6,padding:"3px 10px",userSelect:"none"}}>
-              ✥ 직종 헤더를 드래그하여 순서 변경
-            </span>
-          </div>
-        )}
+        {/* 안내 문구 */}
+        <div style={{textAlign:"center",marginBottom:14}}>
+          <span style={{fontSize:10,color:"#A0AEC0",background:"#F8FAFC",
+            border:"1px solid #E2E8F0",borderRadius:6,padding:"3px 10px",userSelect:"none"}}>
+            ✥ 직군 헤더(공사, 공무, 안전 등)를 드래그하여 좌우 순서 변경
+          </span>
+        </div>
 
         {/* 직종별 섹션 */}
-        <div style={{display:"flex",gap:24,alignItems:"flex-start",flexWrap:"wrap",justifyContent:"center"}}>
+        <div style={{display:"flex",gap:32,alignItems:"flex-start",flexWrap:"wrap",justifyContent:"center"}}>
           {orderedJTs.map(jt=>{
             const jtNodes=byJT2[jt];
+            // role_group 분류
             const byRG2={};
             jtNodes.forEach(n=>{const rg=n.role_group||"기타";if(!byRG2[rg])byRG2[rg]=[];byRG2[rg].push(n);});
+            const allRgs=Object.keys(byRG2);
+            // 직군 순서 적용
+            const prevRgOrder=rgOrder[jt]||[];
+            const orderedRgs=prevRgOrder.length>0
+              ?[...prevRgOrder.filter(r=>allRgs.includes(r)),...allRgs.filter(r=>!prevRgOrder.includes(r))]
+              :allRgs;
+
             const gcJT=getGroupColor(mapJobTypeToRoleGroup(jt,""));
-            const isDraggingThis=dragSec===jt;
-            const isDropTarget=dragOverSec===jt;
 
             return(
-              <div key={jt}
-                data-secjt={jt}
-                style={{
-                  display:"flex",flexDirection:"column",alignItems:"center",
-                  opacity:isDraggingThis?0.35:1,
-                  outline:isDropTarget?`3px dashed ${gcJT}`:"3px solid transparent",
-                  outlineOffset:8,borderRadius:14,
-                  transition:"opacity 0.1s",
-                }}>
-                {/* 드래그 핸들 헤더 */}
-                <div
-                  onMouseDown={e=>handleSecMouseDown(e,jt)}
-                  style={{
-                    fontSize:11,fontWeight:800,color:gcJT,marginBottom:10,
-                    padding:"6px 18px",borderRadius:12,
-                    background:isDraggingThis?gcJT+"44":isDropTarget?gcJT+"33":gcJT+"18",
-                    border:`2px solid ${isDraggingThis?gcJT:gcJT+"66"}`,
-                    cursor:"grab",userSelect:"none",
-                    display:"flex",alignItems:"center",gap:6,
-                    boxShadow:isDraggingThis?"0 4px 16px rgba(0,0,0,0.15)":"none",
-                    transform:isDraggingThis?"scale(1.05)":"scale(1)",
-                    transition:"all 0.1s",
-                  }}>
-                  <span style={{fontSize:14,opacity:0.7,letterSpacing:-2,lineHeight:1}}>⠿⠿</span>
+              <div key={jt} style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
+                {/* 직종 헤더 */}
+                <div style={{fontSize:11,fontWeight:800,color:gcJT,marginBottom:12,
+                  padding:"4px 16px",borderRadius:12,background:gcJT+"18",border:`1px solid ${gcJT}55`}}>
                   {jt}직
                 </div>
 
-                <div style={{display:"flex",gap:14,alignItems:"flex-start",
-                  flexWrap:"wrap",justifyContent:"center"}}>
-                  {Object.entries(byRG2).map(([rg2,rgNodes])=>{
-                    const gcRG=getGroupColor(rg2);
-                    const sortedRg=[...rgNodes]
+                {/* 직군 목록 - 가로 배치, 드래그 가능 */}
+                <div style={{display:"flex",gap:16,alignItems:"flex-start",flexWrap:"wrap",justifyContent:"center"}}>
+                  {orderedRgs.map(rg=>{
+                    const gcRG=getGroupColor(rg);
+                    const sortedRg=[...byRG2[rg]]
                       .sort((a,b)=>positionSortKey(a.position)-positionSortKey(b.position));
+                    const isDraggingThisRg=dragRg&&dragRg.jt===jt&&dragRg.rg===rg;
+                    const isDropTargetRg=dragOverRg&&dragOverRg.jt===jt&&dragOverRg.rg===rg;
+
                     return(
-                      <div key={rg2} style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
-                        <div style={{fontSize:10,fontWeight:700,color:gcRG,marginBottom:8,
-                          padding:"2px 10px",borderRadius:8,
-                          background:gcRG+"14",border:`1px solid ${gcRG}33`}}>
-                          {rg2}
+                      <div key={rg}
+                        data-rg={rg}
+                        data-rgjt={jt}
+                        style={{
+                          display:"flex",flexDirection:"column",alignItems:"center",
+                          opacity:isDraggingThisRg?0.35:1,
+                          outline:isDropTargetRg?`3px dashed ${gcRG}`:"3px solid transparent",
+                          outlineOffset:8,
+                          borderRadius:12,
+                          transition:"opacity 0.1s",
+                        }}>
+                        {/* 직군 헤더 - 드래그 핸들 */}
+                        <div
+                          onMouseDown={e=>handleRgMouseDown(e,jt,rg)}
+                          style={{
+                            fontSize:10,fontWeight:700,color:gcRG,marginBottom:8,
+                            padding:"5px 14px",borderRadius:10,
+                            background:isDraggingThisRg?gcRG+"44":isDropTargetRg?gcRG+"33":gcRG+"18",
+                            border:`2px solid ${isDraggingThisRg?gcRG:isDropTargetRg?gcRG:gcRG+"44"}`,
+                            cursor:"grab",userSelect:"none",
+                            display:"flex",alignItems:"center",gap:5,
+                            boxShadow:isDraggingThisRg?"0 4px 12px rgba(0,0,0,0.18)":"none",
+                            transform:isDraggingThisRg?"scale(1.06) translateY(-2px)":"scale(1)",
+                            transition:"all 0.1s",
+                          }}>
+                          <span style={{fontSize:12,opacity:0.55,letterSpacing:-2}}>⠿⠿</span>
+                          {rg}
                         </div>
+
+                        {/* 인원 노드 */}
                         <div style={{display:"flex",gap:10,alignItems:"flex-start",
                           flexWrap:"wrap",justifyContent:"center"}}>
                           {sortedRg.map(n=><NodeCard key={n.id} n={n} depth={0}/>)}
@@ -1807,6 +1836,7 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
       </div>
     );
   }
+
 
 
 
@@ -2060,11 +2090,10 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
           <div ref={canvasRef}
             onMouseDown={e=>{
               if(e.button!==0||selectedId||modalForm)return;
-              // 섹션 헤더(data-secjt) 위에서는 패닝 시작 안 함
+              // 드래그 핸들 요소(data-rg, data-secjt) 위에서는 패닝 차단
               let el=e.target;
               while(el&&el!==canvasRef.current){
-                if(el.dataset&&el.dataset.secjt)return;
-                if(el.getAttribute&&el.getAttribute("data-secjt"))return;
+                if(el.dataset&&(el.dataset.secjt||el.dataset.rg))return;
                 el=el.parentElement;
               }
               isDragging.current=true;

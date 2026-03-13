@@ -1249,33 +1249,43 @@ function PersonnelMgrModal({personnel,onSave,onDelete,onClose}){
 function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSaveBump,
   personnel=[],onPersonnelSave,onPersonnelDelete,siteMinStaff=[],onMinStaffSave,isAdmin=false}){
 
-  // ── 이 현장 노드만 필터 ──
-  const nodes=orgNodes.filter((n,i,arr)=>n.site_id===site.id&&arr.findIndex(x=>x.id===n.id)===i);
-  // 이 현장 최소인원 설정
-  const minStaffMap={}; // {role_group: min_count}
+  // 이 현장의 실제 인원 노드만 (가상 그룹노드 제거, 중복 제거)
+  const nodes=orgNodes.filter((n,i,arr)=>
+    n.site_id===site.id &&
+    n.role_group!=="__job_type__" && n.role_group!=="__role_group__" &&
+    arr.findIndex(x=>x.id===n.id)===i
+  );
+
+  // 최소인원 설정
+  const minStaffMap={};
   siteMinStaff.filter(m=>m.site_id===site.id).forEach(m=>{minStaffMap[m.role_group]=parseInt(m.min_count)||0;});
 
+  // Refs
   const canvasRef=useRef(null);
   const isDragging=useRef(false);
   const dragStart=useRef({x:0,y:0,sl:0,st:0});
+
+  // State
   const [modalForm,setModalForm]=useState(null);
+  const [selectedId,setSelectedId]=useState(null); // 이동 모드용 선택된 노드 ID
   const [showPersonnelMgr,setShowPersonnelMgr]=useState(false);
   const [showAdminPw,setShowAdminPw]=useState(false);
   const [adminPwInput,setAdminPwInput]=useState("");
   const [adminPwError,setAdminPwError]=useState("");
   const [showStats,setShowStats]=useState(true);
   const [showMinStaffEditor,setShowMinStaffEditor]=useState(false);
-  const [nameSuggest,setNameSuggest]=useState([]);
   const [autoGenConfirm,setAutoGenConfirm]=useState(false);
+  const [nameSuggest,setNameSuggest]=useState([]);
 
-  // ── 직군별 인원 집계 + 인력부족 감지 ──
+  // 직군별 집계 + 인력부족
   const byGroup={};
   ORG_GROUPS.forEach(g=>{byGroup[g.label]=0;});
-  nodes.forEach(n=>{const g=n.role_group||n.group||"기타";byGroup[g]=(byGroup[g]||0)+1;});
-  const shortages=ORG_GROUPS.filter(g=>(minStaffMap[g.label]||0)>0&&byGroup[g.label]<(minStaffMap[g.label]||0))
+  nodes.forEach(n=>{const g=n.role_group||"기타";byGroup[g]=(byGroup[g]||0)+1;});
+  const shortages=ORG_GROUPS
+    .filter(g=>(minStaffMap[g.label]||0)>0 && byGroup[g.label]<(minStaffMap[g.label]||0))
     .map(g=>({group:g.label,color:g.color,current:byGroup[g.label],min:minStaffMap[g.label]}));
 
-  // ── 자동완성 ──
+  // 자동완성
   function onNameChange(e){
     const v=e.target.value;
     setModalForm(f=>({...f,name:v}));
@@ -1285,475 +1295,800 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
   function applyPersonnel(p){
     const rg=mapJobTypeToRoleGroup(p.job_type,p.position);
     setModalForm(f=>({...f,
-      emp_id:p.emp_id||f.emp_id,
-      name:p.name,
-      job_type:p.job_type||f.job_type,
-      role_group:rg,
-      position:p.position||f.position,
-      rank:p.rank||f.rank,
-      emp_type:p.emp_type||f.emp_type,
-      age:p.age||f.age,
-      phone:p.phone||f.phone,
+      emp_id:p.emp_id||f.emp_id, name:p.name,
+      job_type:p.job_type||f.job_type, role_group:rg,
+      position:p.position||f.position, rank:p.rank||f.rank,
+      emp_type:p.emp_type||f.emp_type, age:p.age||f.age, phone:p.phone||f.phone,
     }));
     setNameSuggest([]);
   }
 
-  // ── 노드 추가/수정 모달 ──
-  const emptyForm={emp_id:"",job_type:"건축",role_group:"공사",position:"",rank:"",emp_type:"정규직",name:"",age:"",phone:"",memo:"",parentId:null,isNew:true,nodeId:null};
-  function openAdd(parentId){setModalForm({...emptyForm,parentId:parentId||null});}
-  function openEdit(n){setModalForm({
-    emp_id:n.emp_id||"",job_type:n.job_type||"건축",role_group:n.role_group||n.group||"공사",
-    position:n.position||"",rank:n.rank||n.grade||"",emp_type:n.emp_type||"정규직",
-    name:n.name||"",age:n.age||"",phone:n.phone||"",memo:n.memo||"",
-    parentId:n.parentId||null,isNew:false,nodeId:n.id
-  });}
+  // 노드 모달
+  const emptyForm={emp_id:"",job_type:"건축",role_group:"공사",position:"",rank:"",
+    emp_type:"정규직",name:"",age:"",phone:"",memo:"",parentId:"",isNew:true,nodeId:null};
+
+  function openAdd(parentId){
+    setSelectedId(null);
+    setModalForm({...emptyForm,parentId:parentId||""});
+  }
+  function openEdit(n){
+    setSelectedId(null);
+    setModalForm({
+      emp_id:n.emp_id||"",
+      job_type:n.job_type||"건축",
+      role_group:n.role_group||mapJobTypeToRoleGroup(n.job_type||"건축",n.position||""),
+      position:n.position||"", rank:n.rank||"",
+      emp_type:n.emp_type||"정규직",
+      name:n.name||"", age:n.age||"", phone:n.phone||"", memo:n.memo||"",
+      parentId:n.parentId||"", isNew:false, nodeId:n.id
+    });
+  }
   function mf(k){return e=>setModalForm(f=>({...f,[k]:e.target.value}));}
 
   function saveNode(){
-    if(!modalForm.name.trim()&&!modalForm.position.trim()){alert("성명 또는 직위를 입력하세요.");return;}
+    if(!modalForm.name.trim()){alert("성명을 입력하세요.");return;}
     const rg=modalForm.role_group||mapJobTypeToRoleGroup(modalForm.job_type,modalForm.position);
     const color=getGroupColor(rg);
+    const base={
+      site_id:site.id, emp_id:modalForm.emp_id||"",
+      job_type:modalForm.job_type, role_group:rg,
+      position:modalForm.position, rank:modalForm.rank,
+      emp_type:modalForm.emp_type, name:modalForm.name,
+      age:modalForm.age, phone:modalForm.phone,
+      color, parentId:modalForm.parentId||"",
+      memo:modalForm.memo||"", is_manual:"true"
+    };
     if(modalForm.isNew){
-      const row={id:`org${Date.now()}`,site_id:site.id,
-        emp_id:modalForm.emp_id,job_type:modalForm.job_type,role_group:rg,
-        position:modalForm.position,rank:modalForm.rank,emp_type:modalForm.emp_type,
-        name:modalForm.name,age:modalForm.age,phone:modalForm.phone,
-        color,parentId:modalForm.parentId||"",memo:modalForm.memo,is_manual:"true"};
-      onOrgSave(row);
+      onOrgSave({...base, id:`org${Date.now()}`});
     } else {
-      const existing=nodes.find(n=>n.id===modalForm.nodeId);
-      const row={...existing,emp_id:modalForm.emp_id,job_type:modalForm.job_type,role_group:rg,
-        position:modalForm.position,rank:modalForm.rank,emp_type:modalForm.emp_type,
-        name:modalForm.name,age:modalForm.age,phone:modalForm.phone,
-        color,memo:modalForm.memo,is_manual:"true"};
-      onOrgSave(row);
+      const existing=nodes.find(n=>n.id===modalForm.nodeId)||{};
+      onOrgSave({...existing, ...base, id:modalForm.nodeId});
     }
-    setNameSuggest([]);setModalForm(null);
+    setNameSuggest([]);
+    setModalForm(null);
   }
+
+  // 노드 삭제
   function delNode(id){
-    if(!window.confirm("이 노드만 삭제합니다. 하위 노드는 상위로 재연결됩니다."))return;
+    if(!window.confirm("이 노드를 삭제합니다. 하위 노드는 상위로 재연결됩니다."))return;
     const target=nodes.find(n=>n.id===id);
     const newParent=target?target.parentId||"":"";
     nodes.filter(n=>n.parentId===id).forEach(child=>onOrgSave({...child,parentId:newParent}));
     onOrgDelete([id]);
+    if(selectedId===id)setSelectedId(null);
   }
 
-  // ── 조직도 자동 생성 ──
+  // 노드 선택(이동 모드) + 이동
+  function handleNodeClick(id){
+    if(selectedId && selectedId!==id){
+      // 이동 실행 - 선택된 노드를 클릭된 노드 아래로
+      const moving=nodes.find(n=>n.id===selectedId);
+      if(!moving){setSelectedId(null);return;}
+      // 순환 방지
+      let cur=id;
+      while(cur){
+        if(cur===selectedId){alert("자신의 하위로 이동할 수 없습니다.");setSelectedId(null);return;}
+        const p=nodes.find(n=>n.id===cur);
+        cur=p?p.parentId||"":"";
+      }
+      onOrgSave({...moving, parentId:id, is_manual:"true"});
+      setSelectedId(null);
+    } else {
+      setSelectedId(prev=>prev===id?null:id);
+    }
+  }
+
+  // 자동 생성
   function autoGenerateOrg(){
-    // 부서명 = 현장명인 인원 필터
-    const matched=personnel.filter(p=>p.department===site.name||p.department===site.name.trim());
-    if(matched.length===0){alert(`"${site.name}" 현장에 배치된 인원이 없습니다.\n인원 관리에서 부서명을 현장명과 동일하게 입력하세요.`);return;}
-
-    // 직위 정렬 함수
-    function sortByPosition(arr){return [...arr].sort((a,b)=>positionSortKey(a.position)-positionSortKey(b.position));}
-
-    // 1단계: 직종별 그룹화
-    const jobTypeGroups={};
-    matched.forEach(p=>{
-      const jt=p.job_type||"기타";
-      if(!jobTypeGroups[jt])jobTypeGroups[jt]=[];
-      jobTypeGroups[jt].push(p);
-    });
-
-    const newNodes=[];
+    const matched=personnel.filter(p=>(p.department||"").trim()===(site.name||"").trim());
+    if(matched.length===0){
+      alert(`"${site.name}" 현장 배치 인원이 없습니다.
+인원관리에서 부서명을 현장명과 동일하게 입력하세요.`);
+      return;
+    }
     const now=Date.now();
+    let idx=0;
+    const newNodes=[];
 
-    // 현장소장은 별도 처리 (최상위)
-    const managers=matched.filter(p=>p.position==="현장소장");
-    managers.forEach((p,i)=>{
-      newNodes.push({
-        id:`org${now+i}`,site_id:site.id,
-        emp_id:p.emp_id||"",job_type:p.job_type||"",role_group:"현장소장",
-        position:p.position,rank:p.rank||"",emp_type:p.emp_type||"정규직",
-        name:p.name,age:p.age||"",phone:p.phone||"",
-        color:getGroupColor("현장소장"),parentId:"",memo:"",is_manual:"false"
-      });
-    });
-
-    let nodeIdx=managers.length;
-
-    // 나머지 인원: 직종→직군 매핑하여 트리 생성
-    const nonManagers=matched.filter(p=>p.position!=="현장소장");
-    Object.entries(jobTypeGroups).forEach(([jt,persons])=>{
-      const nonMgr=persons.filter(p=>p.position!=="현장소장");
-      if(nonMgr.length===0)return;
-
-      // 2단계: 직종 그룹 노드
-      const jtId=`org${now+1000+nodeIdx}`;
-      nodeIdx++;
-      newNodes.push({
-        id:jtId,site_id:site.id,
-        emp_id:"",job_type:jt,role_group:"__job_type__",
-        position:"",rank:"",emp_type:"",
-        name:jt,age:"",phone:"",
-        color:"#94A3B8",parentId:"",memo:"",is_manual:"false"
-      });
-
-      // 3단계: 직군별 그룹화
-      const rgGroups={};
-      nonMgr.forEach(p=>{
-        const rg=mapJobTypeToRoleGroup(p.job_type,p.position);
-        if(!rgGroups[rg])rgGroups[rg]=[];
-        rgGroups[rg].push(p);
-      });
-
-      Object.entries(rgGroups).forEach(([rg,rgPersons])=>{
-        const rgId=`org${now+2000+nodeIdx}`;
-        nodeIdx++;
-        newNodes.push({
-          id:rgId,site_id:site.id,
-          emp_id:"",job_type:jt,role_group:"__role_group__",
-          position:"",rank:"",emp_type:"",
-          name:rg,age:"",phone:"",
-          color:getGroupColor(rg),parentId:jtId,memo:"",is_manual:"false"
-        });
-
-        // 4단계: 직위 정렬 후 인원 배치
-        sortByPosition(rgPersons).forEach(p=>{
-          const col=getGroupColor(mapJobTypeToRoleGroup(p.job_type,p.position));
-          newNodes.push({
-            id:`org${now+3000+nodeIdx}`,site_id:site.id,
-            emp_id:p.emp_id||"",job_type:p.job_type||"",
-            role_group:mapJobTypeToRoleGroup(p.job_type,p.position),
-            position:p.position||"",rank:p.rank||"",emp_type:p.emp_type||"정규직",
-            name:p.name,age:p.age||"",phone:p.phone||"",
-            color:col,parentId:rgId,memo:"",is_manual:"false"
-          });
-          nodeIdx++;
-        });
-      });
-    });
-
-    // 기존 이 현장 노드 모두 삭제 후 새 노드 저장
-    if(nodes.length>0) onOrgDelete(nodes.map(n=>n.id));
-    newNodes.forEach(n=>onOrgSave(n));
-    setAutoGenConfirm(false);
-    alert(`✅ 조직도 자동 생성 완료!\n총 ${newNodes.length}개 노드 생성 (인원 ${matched.length}명)`);
-  }
-
-  // ── 인력부족 최소인원 저장 ──
-  function saveMinStaff(roleGroup, minCount){
-    if(onMinStaffSave) onMinStaffSave({site_id:site.id,role_group:roleGroup,min_count:String(minCount)});
-  }
-
-  // ── NodeCard 컴포넌트 ──
-  function NodeCard({n,depth}){
-    const isGroupNode=n.role_group==="__job_type__"||n.role_group==="__role_group__";
-    if(isGroupNode){
-      const gc=n.role_group==="__job_type__"?"#64748B":getGroupColor(n.name);
-      const kids=nodes.filter(c=>c.parentId===n.id);
-      return <div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
-        {depth>0&&<div style={{width:2,height:22,background:"#CBD5E0"}}/>}
-        <div style={{background:gc,borderRadius:10,padding:"6px 18px",display:"flex",alignItems:"center",gap:8,boxShadow:"0 2px 8px rgba(0,0,0,0.1)",position:"relative"}}>
-          <span style={{fontSize:12,fontWeight:800,color:"#fff"}}>{n.name}</span>
-          <span style={{fontSize:10,color:"rgba(255,255,255,0.75)"}}>{kids.length}명</span>
-          <button onClick={()=>openAdd(n.id)} style={{fontSize:9,padding:"1px 5px",borderRadius:4,background:"rgba(255,255,255,0.2)",color:"#fff",border:"none",cursor:"pointer",fontWeight:700,marginLeft:4}}>+</button>
-          <button onClick={()=>delNode(n.id)} style={{fontSize:9,padding:"1px 5px",borderRadius:4,background:"rgba(255,255,255,0.15)",color:"rgba(255,255,255,0.8)",border:"none",cursor:"pointer",fontWeight:700}}>✕</button>
-        </div>
-        {kids.length>0&&<>
-          <div style={{width:2,height:18,background:"#CBD5E0"}}/>
-          <div style={{display:"flex",gap:16,alignItems:"flex-start",position:"relative"}}>
-            {kids.length>1&&<div style={{position:"absolute",top:0,left:"calc(50% - 1px)",width:"calc(100% - 80px)",height:2,background:"#CBD5E0",transform:"translateX(-50%)"}}/>}
-            {kids.map(k=><NodeCard key={k.id} n={k} depth={depth+1}/>)}
-          </div>
-        </>}
-      </div>;
+    function makeNode(p,parentId){
+      const rg=mapJobTypeToRoleGroup(p.job_type,p.position);
+      return {
+        id:`org${now+idx++}`, site_id:site.id,
+        emp_id:p.emp_id||"", job_type:p.job_type||"기타", role_group:rg,
+        position:p.position||"", rank:p.rank||"",
+        emp_type:p.emp_type||"정규직", name:p.name,
+        age:p.age||"", phone:p.phone||"",
+        color:getGroupColor(rg), parentId:parentId||"",
+        memo:"", is_manual:"false"
+      };
     }
 
-    // 인원 노드
-    const gc2=getGroupColor(n.role_group||n.group||"기타");
-    const kids2=nodes.filter(c=>c.parentId===n.id);
+    // 1. 현장소장 최상위
+    matched.filter(p=>p.position==="현장소장")
+      .forEach(p=>newNodes.push(makeNode(p,"")));
+
+    // 2. 나머지: job_type 정렬 → role_group 정렬 → 직위 정렬
+    const JT_ORDER=["건축","기계","전기","안전","품질","관리","토목","기타"];
+    const nonMgr=matched.filter(p=>p.position!=="현장소장");
+    const byJT={};
+    nonMgr.forEach(p=>{const jt=p.job_type||"기타";if(!byJT[jt])byJT[jt]=[];byJT[jt].push(p);});
+    const sortedJTs=[...new Set([...JT_ORDER,...Object.keys(byJT)])].filter(jt=>byJT[jt]);
+
+    sortedJTs.forEach(jt=>{
+      const persons=byJT[jt];
+      // role_group별 분류
+      const byRG={};
+      persons.forEach(p=>{const rg=mapJobTypeToRoleGroup(p.job_type,p.position);if(!byRG[rg])byRG[rg]=[];byRG[rg].push(p);});
+      Object.entries(byRG).forEach(([rg,rgPersons])=>{
+        // 직위 정렬
+        const sorted=[...rgPersons].sort((a,b)=>positionSortKey(a.position)-positionSortKey(b.position));
+        sorted.forEach(p=>newNodes.push(makeNode(p,"")));
+      });
+    });
+
+    // 기존 노드 삭제 후 새 노드 저장
+    if(nodes.length>0)onOrgDelete(nodes.map(n=>n.id));
+    setTimeout(()=>{
+      newNodes.forEach((n,i)=>setTimeout(()=>onOrgSave(n),i*40));
+      setTimeout(()=>alert(`✅ 자동 생성 완료! ${newNodes.length}명 배치`),newNodes.length*40+300);
+    },300);
+    setAutoGenConfirm(false);
+  }
+
+  // 최소인원 저장
+  function saveMinStaff(roleGroup,minCount){
+    if(onMinStaffSave)onMinStaffSave({site_id:site.id,role_group:roleGroup,min_count:String(minCount)});
+  }
+
+  const inp2={width:"100%",border:"1px solid #CBD5E0",borderRadius:8,padding:"9px 11px",
+    fontSize:13,color:"#2D3748",outline:"none",boxSizing:"border-box",background:"#fff"};
+  const JOB_TYPES=["건축","기계","전기","안전","품질","관리","토목","기타"];
+
+  // NodeCard
+  function NodeCard({n,depth}){
+    const gc=getGroupColor(n.role_group||"기타");
+    const children=nodes.filter(c=>c.parentId===n.id)
+      .sort((a,b)=>positionSortKey(a.position)-positionSortKey(b.position));
+    const isSelected=selectedId===n.id;
+    const isMoveTarget=selectedId&&selectedId!==n.id;
+
     return <div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
-      {depth>0&&<div style={{width:2,height:22,background:"#CBD5E0"}}/>}
-      <div style={{background:"#fff",border:`2px solid ${gc2}`,borderRadius:14,padding:"12px 14px",minWidth:130,maxWidth:160,textAlign:"center",boxShadow:"0 2px 12px rgba(0,0,0,0.09)",position:"relative"}}>
-        <div style={{position:"absolute",top:-10,left:"50%",transform:"translateX(-50%)",background:gc2,color:"#fff",fontSize:9,fontWeight:800,padding:"2px 8px",borderRadius:6,whiteSpace:"nowrap"}}>{n.role_group||n.group||"기타"}</div>
-        {n.job_type&&<div style={{position:"absolute",top:-10,right:8,background:"#94A3B8",color:"#fff",fontSize:8,fontWeight:700,padding:"1px 5px",borderRadius:5}}>{n.job_type}</div>}
-        <div style={{width:36,height:36,borderRadius:"50%",background:gc2,display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,fontWeight:800,color:"#fff",margin:"6px auto 8px"}}>{(n.name||"?")[0]}</div>
-        {n.position&&<p style={{margin:"0 0 1px",fontSize:10,color:gc2,fontWeight:800,letterSpacing:0.3}}>{n.position}</p>}
-        {n.rank&&<p style={{margin:"0 0 2px",fontSize:9,color:"#A0AEC0",fontWeight:600}}>{n.rank}</p>}
+      {depth>0&&<div style={{width:2,height:20,background:"#CBD5E0"}}/>}
+      <div
+        onClick={e=>{e.stopPropagation();handleNodeClick(n.id);}}
+        style={{
+          background:isSelected?"#EDE9FE":"#fff",
+          border:`2px solid ${isSelected?"#6C63FF":isMoveTarget?"#86EFAC":gc}`,
+          borderRadius:14,padding:"10px 13px",minWidth:118,maxWidth:155,textAlign:"center",
+          boxShadow:isSelected?"0 0 0 3px rgba(108,99,255,0.3)":"0 2px 10px rgba(0,0,0,0.08)",
+          position:"relative",cursor:isMoveTarget?"copy":"pointer",transition:"all 0.15s"
+        }}>
+        {/* 직군 뱃지 */}
+        <div style={{position:"absolute",top:-10,left:"50%",transform:"translateX(-50%)",
+          background:gc,color:"#fff",fontSize:9,fontWeight:800,padding:"2px 8px",
+          borderRadius:6,whiteSpace:"nowrap"}}>
+          {n.role_group||"기타"}
+        </div>
+        {/* 직종 뱃지 */}
+        {n.job_type&&<div style={{position:"absolute",top:4,right:4,background:"#94A3B8",
+          color:"#fff",fontSize:8,fontWeight:700,padding:"1px 4px",borderRadius:4}}>
+          {n.job_type}
+        </div>}
+        {/* 선택 체크 */}
+        {isSelected&&<div style={{position:"absolute",top:-8,right:-8,width:18,height:18,
+          background:"#6C63FF",borderRadius:"50%",display:"flex",alignItems:"center",
+          justifyContent:"center",fontSize:10,color:"#fff",fontWeight:800}}>✓</div>}
+        {/* 아바타 */}
+        <div style={{width:32,height:32,borderRadius:"50%",background:gc,display:"flex",
+          alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:800,
+          color:"#fff",margin:"6px auto 5px"}}>
+          {(n.name||"?")[0]}
+        </div>
+        {n.position&&<p style={{margin:"0 0 1px",fontSize:10,color:gc,fontWeight:800}}>{n.position}</p>}
+        {n.rank&&<p style={{margin:"0 0 2px",fontSize:9,color:"#A0AEC0"}}>{n.rank}</p>}
         <p style={{margin:"0 0 2px",fontSize:13,fontWeight:800,color:"#1A1A2E"}}>{n.name||"미지정"}</p>
-        {n.emp_type&&<span style={{fontSize:8,padding:"1px 5px",borderRadius:4,background:n.emp_type==="정규직"?"#EDE9FE":"#FEF3C7",color:n.emp_type==="정규직"?"#6C63FF":"#92400E",fontWeight:700,display:"inline-block",marginBottom:2}}>{n.emp_type}</span>}
+        {n.emp_type&&<span style={{fontSize:8,padding:"1px 5px",borderRadius:4,
+          background:n.emp_type==="정규직"?"#EDE9FE":"#FEF3C7",
+          color:n.emp_type==="정규직"?"#6C63FF":"#92400E",
+          fontWeight:700,display:"inline-block",marginBottom:2}}>{n.emp_type}</span>}
         {n.age&&<p style={{margin:"0 0 1px",fontSize:10,color:"#718096"}}>만 {n.age}세</p>}
         {n.phone&&<p style={{margin:"0 0 2px",fontSize:10,color:"#718096"}}>📞 {n.phone}</p>}
         {n.memo&&<p style={{margin:"0 0 2px",fontSize:9,color:"#9CA3AF",fontStyle:"italic"}}>{n.memo}</p>}
-        <div style={{display:"flex",gap:3,justifyContent:"center",marginTop:8,flexWrap:"wrap"}}>
-          <button onClick={()=>openEdit(n)} style={{fontSize:9,padding:"2px 6px",borderRadius:5,background:"#EEF2F7",color:"#6C63FF",border:"none",cursor:"pointer",fontWeight:700}}>✏</button>
-          <button onClick={()=>openAdd(n.id)} style={{fontSize:9,padding:"2px 6px",borderRadius:5,background:"#F0FDF4",color:"#15803D",border:"none",cursor:"pointer",fontWeight:700}}>+</button>
-          <button onClick={()=>delNode(n.id)} style={{fontSize:9,padding:"2px 6px",borderRadius:5,background:"#FFF5F5",color:"#F87171",border:"none",cursor:"pointer",fontWeight:700}}>✕</button>
+        {isSelected&&<p style={{margin:"3px 0 0",fontSize:8,color:"#6C63FF",fontWeight:700}}>
+          다른 노드 클릭 → 그 아래로 이동
+        </p>}
+        {/* 버튼 */}
+        <div style={{display:"flex",gap:3,justifyContent:"center",marginTop:6,flexWrap:"wrap"}}>
+          <button onClick={e=>{e.stopPropagation();openEdit(n);}}
+            style={{fontSize:9,padding:"2px 7px",borderRadius:5,background:"#EEF2F7",
+            color:"#6C63FF",border:"none",cursor:"pointer",fontWeight:700}}>✏ 수정</button>
+          <button onClick={e=>{e.stopPropagation();openAdd(n.id);}}
+            style={{fontSize:9,padding:"2px 7px",borderRadius:5,background:"#F0FDF4",
+            color:"#15803D",border:"none",cursor:"pointer",fontWeight:700}}>+ 하위</button>
+          <button onClick={e=>{e.stopPropagation();delNode(n.id);}}
+            style={{fontSize:9,padding:"2px 7px",borderRadius:5,background:"#FFF5F5",
+            color:"#F87171",border:"none",cursor:"pointer",fontWeight:700}}>✕</button>
         </div>
       </div>
-      {kids2.length>0&&<>
-        <div style={{width:2,height:22,background:"#CBD5E0"}}/>
-        <div style={{display:"flex",gap:20,alignItems:"flex-start",position:"relative"}}>
-          {kids2.length>1&&<div style={{position:"absolute",top:0,left:"calc(50% - 1px)",width:"calc(100% - 130px)",height:2,background:"#CBD5E0",transform:"translateX(-50%)"}}/>}
-          {kids2.map(k=><NodeCard key={k.id} n={k} depth={depth+1}/>)}
+      {children.length>0&&<>
+        <div style={{width:2,height:20,background:"#CBD5E0"}}/>
+        <div style={{display:"flex",gap:14,alignItems:"flex-start",position:"relative"}}>
+          {children.length>1&&<div style={{position:"absolute",top:0,left:"50%",
+            width:"calc(100% - 80px)",height:2,background:"#CBD5E0",transform:"translateX(-50%)"}}/>}
+          {children.map(k=><NodeCard key={k.id} n={k} depth={depth+1}/>)}
         </div>
       </>}
     </div>;
   }
 
-  const inp2={width:"100%",border:"1px solid #CBD5E0",borderRadius:8,padding:"9px 11px",fontSize:13,color:"#2D3748",outline:"none",boxSizing:"border-box",background:"#fff"};
-  const JOB_TYPES=["건축","기계","전기","안전","품질","관리","토목","기타"];
-
-  return <div style={{position:"fixed",inset:0,background:"rgba(15,15,30,0.65)",zIndex:400,display:"flex",flexDirection:"column"}}>
-    <div style={{background:"#F4F6FA",width:"100%",height:"100%",display:"flex",flexDirection:"column",overflow:"hidden"}}>
-
-      {/* 헤더 */}
-      <div style={{background:"#fff",borderBottom:"1px solid #E2E8F0",padding:"12px 20px",display:"flex",alignItems:"center",gap:12,flexShrink:0,flexWrap:"wrap"}}>
-        <div style={{width:36,height:36,borderRadius:10,background:"linear-gradient(135deg,#6C63FF,#9F7AEA)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,flexShrink:0}}>🏢</div>
-        <div style={{flex:1,minWidth:100}}>
-          <p style={{margin:0,fontSize:10,color:"#A0AEC0",fontWeight:600}}>현장 조직도</p>
-          <h2 style={{margin:0,fontSize:16,fontWeight:800,color:"#1A1A2E"}}>{site.name}</h2>
-        </div>
-        {shortages.length>0&&<div style={{display:"flex",alignItems:"center",gap:6,background:"#FEF2F2",border:"1px solid #FCA5A5",borderRadius:8,padding:"6px 12px"}}>
-          <span style={{fontSize:14}}>⚠️</span>
-          <span style={{fontSize:11,fontWeight:700,color:"#DC2626"}}>인력 부족 {shortages.length}개 직군</span>
-        </div>}
-        <div style={{display:"flex",gap:6,flexShrink:0,flexWrap:"wrap"}}>
-          <button onClick={()=>setShowStats(v=>!v)} style={{background:"#EEF2F7",color:"#4A5568",border:"1px solid #CBD5E0",borderRadius:8,padding:"7px 12px",fontWeight:700,fontSize:11,cursor:"pointer"}}>{showStats?"📊 숨기기":"📊 현황"}</button>
-          <button onClick={()=>setShowMinStaffEditor(v=>!v)} style={{background:"#FEF3C7",color:"#92400E",border:"1px solid #FCD34D",borderRadius:8,padding:"7px 12px",fontWeight:700,fontSize:11,cursor:"pointer"}}>⚙ 최소인원</button>
-          <button onClick={()=>setAutoGenConfirm(true)} style={{background:"linear-gradient(90deg,#6C63FF,#9F7AEA)",color:"#fff",border:"none",borderRadius:8,padding:"7px 14px",fontWeight:700,fontSize:11,cursor:"pointer"}}>🔄 자동 생성</button>
-          <button onClick={()=>{if(isAdmin){setShowPersonnelMgr(true);}else{setShowAdminPw(true);setAdminPwInput("");setAdminPwError("");}}} style={{background:"#F0FDF4",color:"#15803D",border:"1px solid #86EFAC",borderRadius:8,padding:"7px 12px",fontWeight:700,fontSize:11,cursor:"pointer"}}>🔐 인원 관리</button>
-          <button onClick={()=>openAdd(null)} style={{background:"#6C63FF",color:"#fff",border:"none",borderRadius:8,padding:"7px 14px",fontWeight:700,fontSize:12,cursor:"pointer"}}>+ 추가</button>
-          <button onClick={onClose} style={{background:"none",border:"none",fontSize:24,color:"#A0AEC0",cursor:"pointer",lineHeight:1}}>×</button>
+  // 트리 렌더: job_type → role_group 섹션으로 시각적 그룹화
+  function renderCanvas(){
+    if(nodes.length===0)return(
+      <div style={{display:"flex",flexDirection:"column",alignItems:"center",
+        justifyContent:"center",height:"100%",gap:16,padding:40}}>
+        <div style={{fontSize:52}}>🏢</div>
+        <p style={{fontSize:15,fontWeight:600,color:"#A0AEC0",margin:0}}>조직도가 비어있습니다.</p>
+        <p style={{fontSize:13,color:"#A0AEC0",margin:0}}>
+          인원 DB가 있다면 <strong style={{color:"#6C63FF"}}>🔄 자동 생성</strong>을 눌러보세요.
+        </p>
+        <div style={{display:"flex",gap:10}}>
+          <button onClick={()=>setAutoGenConfirm(true)}
+            style={{background:"linear-gradient(90deg,#6C63FF,#9F7AEA)",color:"#fff",
+            border:"none",borderRadius:10,padding:"10px 22px",fontWeight:700,fontSize:13,cursor:"pointer"}}>
+            🔄 자동 생성
+          </button>
+          <button onClick={()=>openAdd("")}
+            style={{background:"#EEF2F7",color:"#6C63FF",border:"1px solid #CBD5E0",
+            borderRadius:10,padding:"10px 22px",fontWeight:700,fontSize:13,cursor:"pointer"}}>
+            + 수동 추가
+          </button>
         </div>
       </div>
+    );
 
-      {/* 인력부족 배너 */}
-      {shortages.length>0&&<div style={{background:"#FFF5F5",borderBottom:"1px solid #FCA5A5",padding:"8px 20px",flexShrink:0,display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-        <span style={{fontSize:11,fontWeight:700,color:"#DC2626"}}>⚠ 인력 부족:</span>
-        {shortages.map(s=><span key={s.group} style={{fontSize:11,padding:"2px 8px",borderRadius:6,background:"#FEE2E2",color:"#DC2626",fontWeight:600,border:"1px solid #FCA5A5"}}>
-          {s.group} ({s.current}/{s.min}명)
-        </span>)}
-      </div>}
+    // 최상위 노드들 (parentId 없거나 부모가 존재하지 않는 노드)
+    const nodeIds=new Set(nodes.map(n=>n.id));
+    const roots=nodes.filter(n=>!n.parentId||n.parentId===""||!nodeIds.has(n.parentId));
 
-      {/* 최소인원 설정 패널 */}
-      {showMinStaffEditor&&<div style={{background:"#FFFBEB",borderBottom:"1px solid #FCD34D",padding:"12px 20px",flexShrink:0}}>
-        <p style={{margin:"0 0 10px",fontSize:12,fontWeight:800,color:"#92400E"}}>⚙ 직군별 최소 필요 인원 설정</p>
-        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-          {ORG_GROUPS.map(g=><div key={g.label} style={{display:"flex",alignItems:"center",gap:5,background:"#fff",borderRadius:8,padding:"5px 10px",border:"1px solid #FCD34D"}}>
-            <span style={{width:8,height:8,borderRadius:"50%",background:g.color,display:"inline-block"}}/>
-            <span style={{fontSize:11,fontWeight:700,color:g.color,minWidth:44}}>{g.label}</span>
-            <input type="number" min="0" max="20" defaultValue={minStaffMap[g.label]||0}
-              onChange={e=>saveMinStaff(g.label,e.target.value)}
-              style={{width:40,border:"1px solid #CBD5E0",borderRadius:5,padding:"2px 6px",fontSize:12,textAlign:"center"}}/>
-            <span style={{fontSize:10,color:"#A0AEC0"}}>명</span>
-          </div>)}
-        </div>
-      </div>}
+    // 현장소장
+    const managers=roots.filter(n=>n.role_group==="현장소장")
+      .sort((a,b)=>positionSortKey(a.position)-positionSortKey(b.position));
 
-      {/* 캔버스 + 인원현황 패널 */}
-      <div style={{flex:1,overflow:"hidden",display:"flex"}}>
-        {/* 인원현황 패널 */}
-        {showStats&&<div style={{width:220,flexShrink:0,background:"#fff",borderRight:"1px solid #E2E8F0",overflowY:"auto",padding:"16px 14px",display:"flex",flexDirection:"column",gap:16}}>
-          <div style={{textAlign:"center",padding:"12px 0",background:"linear-gradient(135deg,#6C63FF,#9F7AEA)",borderRadius:12}}>
-            <p style={{margin:0,fontSize:11,color:"rgba(255,255,255,0.8)",fontWeight:600}}>총 배치 인원</p>
-            <p style={{margin:"4px 0 0",fontSize:26,fontWeight:800,color:"#fff"}}>{nodes.filter(n=>n.role_group!=="__job_type__"&&n.role_group!=="__role_group__").length}<span style={{fontSize:13,fontWeight:600}}> 명</span></p>
-          </div>
-          {/* 직군별 + 인력부족 */}
-          <div>
-            <p style={{margin:"0 0 8px",fontSize:12,fontWeight:800,color:"#2D3748"}}>📂 직군별 인원</p>
-            <div style={{display:"flex",flexDirection:"column",gap:4}}>
-              {ORG_GROUPS.map(g=>{
-                const cnt=byGroup[g.label];
-                const min=minStaffMap[g.label]||0;
-                const short=min>0&&cnt<min;
-                const total=nodes.filter(n=>n.role_group!=="__job_type__"&&n.role_group!=="__role_group__").length||1;
-                const pct=Math.round(cnt/total*100);
-                return <div key={g.label} style={{opacity:cnt===0?0.35:1}}>
-                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:2}}>
-                    <span style={{fontSize:10,fontWeight:700,color:g.color}}>{g.label}</span>
-                    <span style={{fontSize:10,fontWeight:800,color:short?"#EF4444":"#2D3748"}}>
-                      {cnt}명{min>0&&<span style={{color:short?"#EF4444":"#A0AEC0"}}>/{min}</span>}
-                      {short&&" ⚠"}
-                    </span>
-                  </div>
-                  <div style={{height:5,borderRadius:3,background:"#EEF2F7",overflow:"hidden"}}>
-                    <div style={{height:"100%",width:`${pct}%`,background:short?"#EF4444":g.color,borderRadius:3}}/>
-                  </div>
-                </div>;
-              })}
+    // 나머지 최상위 노드 → job_type → role_group 섹션
+    const JT_ORDER=["건축","기계","전기","안전","품질","관리","토목","기타"];
+    const others=roots.filter(n=>n.role_group!=="현장소장");
+    const byJT={};
+    others.forEach(n=>{const jt=n.job_type||"기타";if(!byJT[jt])byJT[jt]=[];byJT[jt].push(n);});
+    const sortedJTs=[...new Set([...JT_ORDER,...Object.keys(byJT)])].filter(jt=>byJT[jt]);
+
+    return(
+      <div style={{padding:"32px 40px",minWidth:"max-content",minHeight:"100%"}}
+        onClick={()=>{if(selectedId)setSelectedId(null);}}>
+
+        {/* 현장소장 섹션 */}
+        {managers.length>0&&(
+          <div style={{marginBottom:28,display:"flex",flexDirection:"column",alignItems:"center"}}>
+            <div style={{fontSize:11,fontWeight:800,color:"#6C63FF",letterSpacing:1,
+              padding:"3px 14px",borderRadius:12,background:"#EDE9FE",
+              border:"1px solid #C4B5FD",marginBottom:12}}>
+              현장소장
+            </div>
+            <div style={{display:"flex",gap:16,justifyContent:"center"}}>
+              {managers.map(n=><NodeCard key={n.id} n={n} depth={0}/>)}
             </div>
           </div>
-          {/* 직위별 */}
-          {(()=>{
-            const posMap={};
-            nodes.filter(n=>n.role_group!=="__job_type__"&&n.role_group!=="__role_group__")
-              .forEach(n=>{const pos=n.position||"미지정";posMap[pos]=(posMap[pos]||0)+1;});
-            const sorted=Object.entries(posMap).sort((a,b)=>positionSortKey(a[0])-positionSortKey(b[0]));
-            if(sorted.length===0)return null;
-            return <div>
-              <p style={{margin:"0 0 8px",fontSize:12,fontWeight:800,color:"#2D3748"}}>🏅 직위별 인원</p>
-              <div style={{display:"flex",flexDirection:"column",gap:3}}>
-                {sorted.map(([pos,cnt])=><div key={pos} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 8px",borderRadius:6,background:"#F8FAFC"}}>
-                  <span style={{fontSize:10,color:"#4A5568",fontWeight:600}}>{pos}</span>
-                  <span style={{fontSize:11,fontWeight:800,color:"#6C63FF"}}>{cnt}명</span>
-                </div>)}
-              </div>
-            </div>;
-          })()}
-          {/* 사원구분 */}
-          {(()=>{
-            const pnodes=nodes.filter(n=>n.role_group!=="__job_type__"&&n.role_group!=="__role_group__");
-            const reg=pnodes.filter(n=>!n.emp_type||n.emp_type==="정규직").length;
-            const irr=pnodes.filter(n=>n.emp_type==="비정규직").length;
-            if(pnodes.length===0)return null;
-            return <div style={{display:"flex",gap:6}}>
-              <div style={{flex:1,background:"#EDE9FE",borderRadius:8,padding:"8px",textAlign:"center"}}>
-                <p style={{margin:0,fontSize:9,color:"#6C63FF",fontWeight:700}}>정규직</p>
-                <p style={{margin:"2px 0 0",fontSize:18,fontWeight:800,color:"#6C63FF"}}>{reg}</p>
-              </div>
-              <div style={{flex:1,background:"#FEF3C7",borderRadius:8,padding:"8px",textAlign:"center"}}>
-                <p style={{margin:0,fontSize:9,color:"#92400E",fontWeight:700}}>비정규직</p>
-                <p style={{margin:"2px 0 0",fontSize:18,fontWeight:800,color:"#92400E"}}>{irr}</p>
-              </div>
-            </div>;
-          })()}
-        </div>}
+        )}
 
-        {/* 조직도 캔버스 */}
-        <div ref={canvasRef}
-          onMouseDown={e=>{if(e.button!==0)return;isDragging.current=true;dragStart.current={x:e.clientX,y:e.clientY,sl:canvasRef.current.scrollLeft,st:canvasRef.current.scrollTop};canvasRef.current.style.cursor="grabbing";canvasRef.current.style.userSelect="none";}}
-          onMouseMove={e=>{if(!isDragging.current)return;canvasRef.current.scrollLeft=dragStart.current.sl-(e.clientX-dragStart.current.x);canvasRef.current.scrollTop=dragStart.current.st-(e.clientY-dragStart.current.y);}}
-          onMouseUp={()=>{isDragging.current=false;if(canvasRef.current){canvasRef.current.style.cursor="grab";canvasRef.current.style.userSelect="";}}}
-          onMouseLeave={()=>{isDragging.current=false;if(canvasRef.current){canvasRef.current.style.cursor="grab";canvasRef.current.style.userSelect="";}}}
-          style={{flex:1,overflow:"auto",cursor:"grab"}}>
-          {nodes.length===0
-            ?<div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100%",gap:16,padding:40}}>
-              <div style={{fontSize:52}}>🏢</div>
-              <p style={{fontSize:15,fontWeight:600,color:"#A0AEC0",margin:0}}>조직도가 비어있습니다.</p>
-              <p style={{fontSize:13,color:"#A0AEC0",margin:0}}>인원 DB가 있다면 <strong style={{color:"#6C63FF"}}>🔄 자동 생성</strong> 버튼을 눌러보세요.</p>
-              <div style={{display:"flex",gap:10}}>
-                <button onClick={()=>setAutoGenConfirm(true)} style={{background:"linear-gradient(90deg,#6C63FF,#9F7AEA)",color:"#fff",border:"none",borderRadius:10,padding:"10px 22px",fontWeight:700,fontSize:13,cursor:"pointer"}}>🔄 인원 DB 기반 자동 생성</button>
-                <button onClick={()=>openAdd(null)} style={{background:"#EEF2F7",color:"#6C63FF",border:"1px solid #CBD5E0",borderRadius:10,padding:"10px 22px",fontWeight:700,fontSize:13,cursor:"pointer"}}>+ 수동으로 추가</button>
+        {managers.length>0&&sortedJTs.length>0&&(
+          <div style={{height:2,background:"linear-gradient(90deg,transparent,#CBD5E0,transparent)",marginBottom:28}}/>
+        )}
+
+        {/* 직종별 섹션 */}
+        <div style={{display:"flex",gap:28,alignItems:"flex-start",flexWrap:"wrap",justifyContent:"center"}}>
+          {sortedJTs.map(jt=>{
+            const jtNodes=byJT[jt];
+            // role_group별 분류
+            const byRG={};
+            jtNodes.forEach(n=>{const rg=n.role_group||"기타";if(!byRG[rg])byRG[rg]=[];byRG[rg].push(n);});
+            const gc_jt=getGroupColor(mapJobTypeToRoleGroup(jt,""));
+
+            return(
+              <div key={jt} style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
+                {/* 직종 헤더 */}
+                <div style={{fontSize:12,fontWeight:800,color:gc_jt,marginBottom:10,
+                  padding:"4px 16px",borderRadius:12,
+                  background:gc_jt+"18",border:`1px solid ${gc_jt}55`}}>
+                  {jt}직
+                </div>
+                <div style={{display:"flex",gap:16,alignItems:"flex-start",
+                  flexWrap:"wrap",justifyContent:"center"}}>
+                  {Object.entries(byRG).map(([rg,rgNodes])=>{
+                    const gc_rg=getGroupColor(rg);
+                    const sortedRgNodes=[...rgNodes]
+                      .sort((a,b)=>positionSortKey(a.position)-positionSortKey(b.position));
+                    return(
+                      <div key={rg} style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
+                        {/* 직군 서브헤더 */}
+                        <div style={{fontSize:10,fontWeight:700,color:gc_rg,marginBottom:8,
+                          padding:"2px 10px",borderRadius:8,
+                          background:gc_rg+"14",border:`1px solid ${gc_rg}33`}}>
+                          {rg}
+                        </div>
+                        <div style={{display:"flex",gap:10,alignItems:"flex-start",
+                          flexWrap:"wrap",justifyContent:"center"}}>
+                          {sortedRgNodes.map(n=><NodeCard key={n.id} n={n} depth={0}/>)}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-            :<div style={{display:"flex",gap:32,alignItems:"flex-start",flexWrap:"nowrap",padding:"40px 60px",justifyContent:"center",minWidth:"max-content",minHeight:"100%"}}>
-              {nodes.filter(n=>!n.parentId||n.parentId==="").map(n=><NodeCard key={n.id} n={n} depth={0}/>)}
-            </div>
-          }
+            );
+          })}
         </div>
+
+        {/* 이동 모드 하단 안내바 */}
+        {selectedId&&(
+          <div style={{position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",
+            background:"#1A1A2E",color:"#fff",borderRadius:14,padding:"10px 20px",
+            fontSize:13,fontWeight:600,boxShadow:"0 4px 24px rgba(0,0,0,0.35)",
+            display:"flex",gap:12,alignItems:"center",zIndex:500,whiteSpace:"nowrap"}}>
+            <span>🔵 이동 모드 — 이동할 위치의 노드를 클릭하세요</span>
+            <button onClick={e=>{e.stopPropagation();
+              const moving=nodes.find(n=>n.id===selectedId);
+              if(moving){onOrgSave({...moving,parentId:"",is_manual:"true"});}
+              setSelectedId(null);}}
+              style={{background:"#6C63FF",border:"none",borderRadius:8,padding:"4px 12px",
+              color:"#fff",fontSize:11,cursor:"pointer",fontWeight:700}}>
+              최상위로
+            </button>
+            <button onClick={e=>{e.stopPropagation();setSelectedId(null);}}
+              style={{background:"#64748B",border:"none",borderRadius:8,padding:"4px 12px",
+              color:"#fff",fontSize:11,cursor:"pointer",fontWeight:700}}>
+              취소
+            </button>
+          </div>
+        )}
       </div>
-    </div>
+    );
+  }
 
-    {/* 자동 생성 확인 모달 */}
-    {autoGenConfirm&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:700,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={()=>setAutoGenConfirm(false)}>
-      <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:18,width:340,boxShadow:"0 8px 40px rgba(0,0,0,0.2)",overflow:"hidden"}}>
-        <div style={{height:4,background:"linear-gradient(90deg,#6C63FF,#9F7AEA)"}}/>
-        <div style={{padding:"24px 24px 20px"}}>
-          <div style={{fontSize:36,textAlign:"center",marginBottom:12}}>🔄</div>
-          <h3 style={{margin:"0 0 10px",fontSize:16,fontWeight:800,color:"#1A1A2E",textAlign:"center"}}>조직도 자동 생성</h3>
-          <p style={{margin:"0 0 6px",fontSize:13,color:"#4A5568",textAlign:"center"}}>
-            인원 DB의 <strong>부서명 = "{site.name}"</strong> 인원으로 조직도를 자동 생성합니다.
-          </p>
-          <p style={{margin:"0 0 20px",fontSize:12,color:"#EF4444",textAlign:"center",fontWeight:600}}>⚠ 기존 조직도는 모두 삭제됩니다.</p>
-          <div style={{display:"flex",gap:10}}>
-            <button onClick={()=>setAutoGenConfirm(false)} style={{flex:1,background:"#F7FAFC",border:"1px solid #CBD5E0",borderRadius:10,padding:"11px",fontSize:13,color:"#718096",cursor:"pointer",fontWeight:600}}>취소</button>
-            <button onClick={autoGenerateOrg} style={{flex:1,background:"linear-gradient(90deg,#6C63FF,#9F7AEA)",border:"none",borderRadius:10,padding:"11px",fontSize:13,color:"#fff",cursor:"pointer",fontWeight:700}}>자동 생성</button>
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(15,15,30,0.65)",zIndex:400,
+      display:"flex",flexDirection:"column"}}
+      onClick={()=>{if(selectedId)setSelectedId(null);}}>
+      <div style={{background:"#F4F6FA",width:"100%",height:"100%",
+        display:"flex",flexDirection:"column",overflow:"hidden"}}
+        onClick={e=>e.stopPropagation()}>
+
+        {/* 헤더 */}
+        <div style={{background:"#fff",borderBottom:"1px solid #E2E8F0",padding:"12px 20px",
+          display:"flex",alignItems:"center",gap:12,flexShrink:0,flexWrap:"wrap"}}>
+          <div style={{width:36,height:36,borderRadius:10,
+            background:"linear-gradient(135deg,#6C63FF,#9F7AEA)",display:"flex",
+            alignItems:"center",justifyContent:"center",fontSize:17,flexShrink:0}}>🏢</div>
+          <div style={{flex:1,minWidth:100}}>
+            <p style={{margin:0,fontSize:10,color:"#A0AEC0",fontWeight:600}}>현장 조직도</p>
+            <h2 style={{margin:0,fontSize:16,fontWeight:800,color:"#1A1A2E"}}>{site.name}</h2>
+          </div>
+          {shortages.length>0&&(
+            <div style={{display:"flex",alignItems:"center",gap:6,background:"#FEF2F2",
+              border:"1px solid #FCA5A5",borderRadius:8,padding:"6px 12px"}}>
+              <span>⚠️</span>
+              <span style={{fontSize:11,fontWeight:700,color:"#DC2626"}}>인력 부족 {shortages.length}개 직군</span>
+            </div>
+          )}
+          <div style={{display:"flex",gap:6,flexShrink:0,flexWrap:"wrap"}}>
+            <button onClick={()=>setShowStats(v=>!v)}
+              style={{background:"#EEF2F7",color:"#4A5568",border:"1px solid #CBD5E0",
+              borderRadius:8,padding:"7px 12px",fontWeight:700,fontSize:11,cursor:"pointer"}}>
+              {showStats?"📊 숨기기":"📊 현황"}
+            </button>
+            <button onClick={()=>setShowMinStaffEditor(v=>!v)}
+              style={{background:"#FEF3C7",color:"#92400E",border:"1px solid #FCD34D",
+              borderRadius:8,padding:"7px 12px",fontWeight:700,fontSize:11,cursor:"pointer"}}>
+              ⚙ 최소인원
+            </button>
+            <button onClick={()=>setAutoGenConfirm(true)}
+              style={{background:"linear-gradient(90deg,#6C63FF,#9F7AEA)",color:"#fff",
+              border:"none",borderRadius:8,padding:"7px 14px",fontWeight:700,fontSize:11,cursor:"pointer"}}>
+              🔄 자동 생성
+            </button>
+            <button onClick={()=>{if(isAdmin){setShowPersonnelMgr(true);}else{setShowAdminPw(true);setAdminPwInput("");setAdminPwError("");}}}
+              style={{background:"#F0FDF4",color:"#15803D",border:"1px solid #86EFAC",
+              borderRadius:8,padding:"7px 12px",fontWeight:700,fontSize:11,cursor:"pointer"}}>
+              🔐 인원 관리
+            </button>
+            <button onClick={()=>openAdd("")}
+              style={{background:"#6C63FF",color:"#fff",border:"none",
+              borderRadius:8,padding:"7px 14px",fontWeight:700,fontSize:12,cursor:"pointer"}}>
+              + 추가
+            </button>
+            <button onClick={onClose}
+              style={{background:"none",border:"none",fontSize:24,color:"#A0AEC0",cursor:"pointer",lineHeight:1}}>
+              ×
+            </button>
           </div>
         </div>
-      </div>
-    </div>}
 
-    {/* 노드 추가/수정 모달 */}
-    {modalForm&&<div style={{position:"fixed",inset:0,background:"rgba(30,30,60,0.5)",zIndex:600,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={()=>{setModalForm(null);setNameSuggest([]);}}>
-      <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:18,width:"100%",maxWidth:420,boxShadow:"0 8px 40px rgba(0,0,0,0.2)",overflow:"hidden"}}>
-        <div style={{height:4,background:"linear-gradient(90deg,#6C63FF,#9F7AEA)"}}/>
-        <div style={{padding:"22px 22px 20px"}}>
-          <h3 style={{margin:"0 0 18px",fontSize:15,fontWeight:800,color:"#1A1A2E"}}>{modalForm.isNew?"+ 노드 추가":"✏ 노드 수정"}</h3>
-          <div style={{display:"flex",flexDirection:"column",gap:12}}>
-            {/* 이름 + 자동완성 */}
-            <div style={{position:"relative"}}>
-              <label style={{fontSize:11,fontWeight:700,color:"#4A5568",display:"block",marginBottom:4}}>성명</label>
-              <input value={modalForm.name} onChange={onNameChange} placeholder="인원 DB에서 검색" style={inp2}/>
-              {nameSuggest.length>0&&<div style={{position:"absolute",top:"100%",left:0,right:0,background:"#fff",border:"1px solid #CBD5E0",borderRadius:10,boxShadow:"0 4px 20px rgba(0,0,0,0.12)",zIndex:50,overflow:"hidden",maxHeight:200,overflowY:"auto"}}>
-                {nameSuggest.map(p=>{
-                  const rg=mapJobTypeToRoleGroup(p.job_type,p.position);
-                  const gc=getGroupColor(rg);
-                  return <div key={p.id||p.emp_id||p.name} onClick={()=>applyPersonnel(p)}
-                    style={{padding:"10px 14px",cursor:"pointer",borderBottom:"1px solid #EEF2F7",display:"flex",alignItems:"center",gap:8}}
-                    onMouseEnter={e=>e.currentTarget.style.background="#F8F7FF"} onMouseLeave={e=>e.currentTarget.style.background="#fff"}>
-                    <span style={{fontSize:9,padding:"2px 6px",borderRadius:4,background:gc+"22",color:gc,fontWeight:700}}>{rg}</span>
-                    <span style={{fontSize:13,fontWeight:700,color:"#1A1A2E"}}>{p.name}</span>
-                    <span style={{fontSize:10,color:"#718096",flex:1}}>{[p.position,p.job_type,p.department].filter(Boolean).join(" · ")}</span>
-                  </div>;
+        {/* 인력부족 배너 */}
+        {shortages.length>0&&(
+          <div style={{background:"#FFF5F5",borderBottom:"1px solid #FCA5A5",
+            padding:"7px 20px",flexShrink:0,display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+            <span style={{fontSize:11,fontWeight:700,color:"#DC2626"}}>⚠ 인력 부족:</span>
+            {shortages.map(s=>(
+              <span key={s.group} style={{fontSize:11,padding:"2px 8px",borderRadius:6,
+                background:"#FEE2E2",color:"#DC2626",fontWeight:600,border:"1px solid #FCA5A5"}}>
+                {s.group} ({s.current}/{s.min}명)
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* 최소인원 설정 패널 */}
+        {showMinStaffEditor&&(
+          <div style={{background:"#FFFBEB",borderBottom:"1px solid #FCD34D",
+            padding:"12px 20px",flexShrink:0}}>
+            <p style={{margin:"0 0 10px",fontSize:12,fontWeight:800,color:"#92400E"}}>
+              ⚙ 직군별 최소 필요 인원
+            </p>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              {ORG_GROUPS.map(g=>(
+                <div key={g.label} style={{display:"flex",alignItems:"center",gap:5,
+                  background:"#fff",borderRadius:8,padding:"5px 10px",border:"1px solid #FCD34D"}}>
+                  <span style={{width:8,height:8,borderRadius:"50%",background:g.color,display:"inline-block"}}/>
+                  <span style={{fontSize:11,fontWeight:700,color:g.color,minWidth:44}}>{g.label}</span>
+                  <input type="number" min="0" max="20" defaultValue={minStaffMap[g.label]||0}
+                    onBlur={e=>saveMinStaff(g.label,e.target.value)}
+                    style={{width:40,border:"1px solid #CBD5E0",borderRadius:5,
+                    padding:"2px 6px",fontSize:12,textAlign:"center"}}/>
+                  <span style={{fontSize:10,color:"#A0AEC0"}}>명</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 본문 */}
+        <div style={{flex:1,overflow:"hidden",display:"flex"}}>
+
+          {/* 인원현황 패널 */}
+          {showStats&&(
+            <div style={{width:200,flexShrink:0,background:"#fff",borderRight:"1px solid #E2E8F0",
+              overflowY:"auto",padding:"14px 12px",display:"flex",flexDirection:"column",gap:12}}>
+              <div style={{textAlign:"center",padding:"12px 0",
+                background:"linear-gradient(135deg,#6C63FF,#9F7AEA)",borderRadius:12}}>
+                <p style={{margin:0,fontSize:11,color:"rgba(255,255,255,0.8)",fontWeight:600}}>총 배치 인원</p>
+                <p style={{margin:"4px 0 0",fontSize:26,fontWeight:800,color:"#fff"}}>
+                  {nodes.length}<span style={{fontSize:13,fontWeight:600}}> 명</span>
+                </p>
+              </div>
+              {/* 직종별 */}
+              <div>
+                <p style={{margin:"0 0 7px",fontSize:11,fontWeight:800,color:"#2D3748"}}>🔧 직종별</p>
+                {(()=>{
+                  const byJT2={};
+                  nodes.forEach(n=>{const jt=n.job_type||"기타";byJT2[jt]=(byJT2[jt]||0)+1;});
+                  return Object.entries(byJT2).sort((a,b)=>b[1]-a[1]).map(([jt,cnt])=>{
+                    const pct=nodes.length?Math.round(cnt/nodes.length*100):0;
+                    const gc2=getGroupColor(mapJobTypeToRoleGroup(jt,""));
+                    return(
+                      <div key={jt} style={{marginBottom:5}}>
+                        <div style={{display:"flex",justifyContent:"space-between",marginBottom:2}}>
+                          <span style={{fontSize:10,fontWeight:700,color:gc2}}>{jt}</span>
+                          <span style={{fontSize:10,fontWeight:800,color:"#2D3748"}}>{cnt}명</span>
+                        </div>
+                        <div style={{height:5,borderRadius:3,background:"#EEF2F7",overflow:"hidden"}}>
+                          <div style={{height:"100%",width:`${pct}%`,background:gc2,borderRadius:3}}/>
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+              {/* 직군별 */}
+              <div>
+                <p style={{margin:"0 0 7px",fontSize:11,fontWeight:800,color:"#2D3748"}}>📂 직군별</p>
+                {ORG_GROUPS.map(g=>{
+                  const cnt=byGroup[g.label];
+                  const min=minStaffMap[g.label]||0;
+                  const short=min>0&&cnt<min;
+                  const pct=nodes.length?Math.round(cnt/nodes.length*100):0;
+                  return(
+                    <div key={g.label} style={{marginBottom:4,opacity:cnt===0?0.3:1}}>
+                      <div style={{display:"flex",justifyContent:"space-between",marginBottom:2}}>
+                        <span style={{fontSize:10,fontWeight:700,color:g.color}}>{g.label}</span>
+                        <span style={{fontSize:10,fontWeight:800,color:short?"#EF4444":"#2D3748"}}>
+                          {cnt}{min>0&&<span style={{color:short?"#EF4444":"#A0AEC0"}}>/{min}</span>}
+                          {short&&" ⚠"}
+                        </span>
+                      </div>
+                      <div style={{height:5,borderRadius:3,background:"#EEF2F7",overflow:"hidden"}}>
+                        <div style={{height:"100%",width:`${pct}%`,background:short?"#EF4444":g.color,borderRadius:3}}/>
+                      </div>
+                    </div>
+                  );
                 })}
-              </div>}
+              </div>
+              {/* 직위별 */}
+              {(()=>{
+                const posMap2={};
+                nodes.forEach(n=>{const pos=n.position||"미지정";posMap2[pos]=(posMap2[pos]||0)+1;});
+                const sorted2=Object.entries(posMap2).sort((a,b)=>positionSortKey(a[0])-positionSortKey(b[0]));
+                if(!sorted2.length)return null;
+                return(
+                  <div>
+                    <p style={{margin:"0 0 7px",fontSize:11,fontWeight:800,color:"#2D3748"}}>🏅 직위별</p>
+                    {sorted2.map(([pos,cnt])=>(
+                      <div key={pos} style={{display:"flex",justifyContent:"space-between",
+                        alignItems:"center",padding:"3px 8px",borderRadius:6,
+                        background:"#F8FAFC",marginBottom:2}}>
+                        <span style={{fontSize:10,color:"#4A5568",fontWeight:600}}>{pos}</span>
+                        <span style={{fontSize:11,fontWeight:800,color:"#6C63FF"}}>{cnt}명</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+              {/* 사원구분 */}
+              {nodes.length>0&&(()=>{
+                const reg=nodes.filter(n=>!n.emp_type||n.emp_type==="정규직").length;
+                const irr=nodes.filter(n=>n.emp_type==="비정규직").length;
+                return(
+                  <div style={{display:"flex",gap:6}}>
+                    <div style={{flex:1,background:"#EDE9FE",borderRadius:8,padding:"7px",textAlign:"center"}}>
+                      <p style={{margin:0,fontSize:9,color:"#6C63FF",fontWeight:700}}>정규직</p>
+                      <p style={{margin:"2px 0 0",fontSize:17,fontWeight:800,color:"#6C63FF"}}>{reg}</p>
+                    </div>
+                    <div style={{flex:1,background:"#FEF3C7",borderRadius:8,padding:"7px",textAlign:"center"}}>
+                      <p style={{margin:0,fontSize:9,color:"#92400E",fontWeight:700}}>비정규직</p>
+                      <p style={{margin:"2px 0 0",fontSize:17,fontWeight:800,color:"#92400E"}}>{irr}</p>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-              <div>
-                <label style={{fontSize:11,fontWeight:700,color:"#4A5568",display:"block",marginBottom:4}}>직종</label>
-                <select value={modalForm.job_type} onChange={e=>{const jt=e.target.value;const rg=mapJobTypeToRoleGroup(jt,modalForm.position);setModalForm(f=>({...f,job_type:jt,role_group:rg}));}} style={inp2}>
-                  {JOB_TYPES.map(j=><option key={j}>{j}</option>)}
-                </select>
-              </div>
-              <div>
-                <label style={{fontSize:11,fontWeight:700,color:"#4A5568",display:"block",marginBottom:4}}>직군 (자동매핑)</label>
-                <select value={modalForm.role_group} onChange={mf("role_group")} style={inp2}>
-                  {ORG_GROUPS.map(g=><option key={g.label}>{g.label}</option>)}
-                </select>
-              </div>
-              <div>
-                <label style={{fontSize:11,fontWeight:700,color:"#4A5568",display:"block",marginBottom:4}}>직위</label>
-                <input value={modalForm.position} onChange={mf("position")} placeholder="부장, 차장..." style={inp2}/>
-              </div>
-              <div>
-                <label style={{fontSize:11,fontWeight:700,color:"#4A5568",display:"block",marginBottom:4}}>직급</label>
-                <input value={modalForm.rank} onChange={mf("rank")} placeholder="3급, 4급..." style={inp2}/>
-              </div>
-            </div>
-            <div>
-              <label style={{fontSize:11,fontWeight:700,color:"#4A5568",display:"block",marginBottom:4}}>사원구분</label>
-              <div style={{display:"flex",gap:6}}>
-                {["정규직","비정규직"].map(t=><button key={t} onClick={()=>setModalForm(f=>({...f,emp_type:t}))}
-                  style={{flex:1,padding:"8px",borderRadius:8,border:`1px solid ${modalForm.emp_type===t?"#6C63FF":"#CBD5E0"}`,background:modalForm.emp_type===t?"#6C63FF":"#fff",color:modalForm.emp_type===t?"#fff":"#4A5568",fontSize:12,fontWeight:700,cursor:"pointer"}}>{t}</button>)}
-              </div>
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-              <div>
-                <label style={{fontSize:11,fontWeight:700,color:"#4A5568",display:"block",marginBottom:4}}>나이(만)</label>
-                <input type="number" value={modalForm.age} onChange={mf("age")} placeholder="45" style={inp2}/>
-              </div>
-              <div>
-                <label style={{fontSize:11,fontWeight:700,color:"#4A5568",display:"block",marginBottom:4}}>전화번호</label>
-                <input value={modalForm.phone} onChange={mf("phone")} placeholder="010-0000-0000" style={inp2}/>
-              </div>
-            </div>
-            <div>
-              <label style={{fontSize:11,fontWeight:700,color:"#4A5568",display:"block",marginBottom:4}}>비고</label>
-              <input value={modalForm.memo} onChange={mf("memo")} placeholder="자유 메모" style={inp2}/>
-            </div>
-          </div>
-          <div style={{display:"flex",gap:10,marginTop:18}}>
-            <button onClick={()=>{setModalForm(null);setNameSuggest([]);}} style={{flex:1,background:"#F7FAFC",border:"1px solid #CBD5E0",borderRadius:10,padding:"11px",fontSize:13,color:"#718096",cursor:"pointer",fontWeight:600}}>취소</button>
-            <button onClick={saveNode} style={{flex:2,background:"#6C63FF",border:"none",borderRadius:10,padding:"11px",fontSize:13,color:"#fff",cursor:"pointer",fontWeight:700}}>저장</button>
+          )}
+
+          {/* 조직도 캔버스 */}
+          <div ref={canvasRef}
+            onMouseDown={e=>{
+              if(e.button!==0||selectedId)return;
+              isDragging.current=true;
+              dragStart.current={x:e.clientX,y:e.clientY,
+                sl:canvasRef.current.scrollLeft,st:canvasRef.current.scrollTop};
+              canvasRef.current.style.cursor="grabbing";
+              canvasRef.current.style.userSelect="none";
+            }}
+            onMouseMove={e=>{
+              if(!isDragging.current)return;
+              canvasRef.current.scrollLeft=dragStart.current.sl-(e.clientX-dragStart.current.x);
+              canvasRef.current.scrollTop=dragStart.current.st-(e.clientY-dragStart.current.y);
+            }}
+            onMouseUp={()=>{
+              isDragging.current=false;
+              if(canvasRef.current){
+                canvasRef.current.style.cursor=selectedId?"default":"grab";
+                canvasRef.current.style.userSelect="";
+              }
+            }}
+            onMouseLeave={()=>{
+              isDragging.current=false;
+              if(canvasRef.current){
+                canvasRef.current.style.cursor=selectedId?"default":"grab";
+                canvasRef.current.style.userSelect="";
+              }
+            }}
+            style={{flex:1,overflow:"auto",cursor:selectedId?"default":"grab"}}>
+            {renderCanvas()}
           </div>
         </div>
       </div>
-    </div>}
 
-    {/* 관리자 암호 확인 모달 */}
-    {showAdminPw&&<div style={{position:"fixed",inset:0,background:"rgba(30,30,60,0.5)",zIndex:600,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={()=>setShowAdminPw(false)}>
-      <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:18,width:320,boxShadow:"0 8px 40px rgba(0,0,0,0.18)",overflow:"hidden"}}>
-        <div style={{height:4,background:"linear-gradient(90deg,#6C63FF,#9F7AEA)"}}/>
-        <div style={{padding:"24px 24px 20px",textAlign:"center"}}>
-          <div style={{fontSize:36,marginBottom:12}}>🔐</div>
-          <h3 style={{margin:"0 0 8px",fontSize:15,fontWeight:800,color:"#1A1A2E"}}>관리자 인증</h3>
-          <p style={{margin:"0 0 16px",fontSize:12,color:"#718096"}}>인원 관리 기능은 관리자만 사용할 수 있습니다.</p>
-          <input type="password" value={adminPwInput} onChange={e=>setAdminPwInput(e.target.value)}
-            onKeyDown={e=>{if(e.key==="Enter"){if(adminPwInput==="dongbu"){setShowAdminPw(false);setShowPersonnelMgr(true);}else setAdminPwError("암호가 틀렸습니다.");} }}
-            placeholder="관리자 암호" autoFocus
-            style={{width:"100%",border:`1px solid ${adminPwError?"#F87171":"#CBD5E0"}`,borderRadius:10,padding:"10px 14px",fontSize:14,outline:"none",boxSizing:"border-box",marginBottom:6}}/>
-          {adminPwError&&<p style={{margin:"0 0 10px",fontSize:11,color:"#F87171"}}>{adminPwError}</p>}
-          <button onClick={()=>{if(adminPwInput==="dongbu"){setShowAdminPw(false);setShowPersonnelMgr(true);}else setAdminPwError("암호가 틀렸습니다.");}}
-            style={{width:"100%",background:"#6C63FF",border:"none",borderRadius:10,padding:"11px",fontSize:13,color:"#fff",cursor:"pointer",fontWeight:700,marginTop:4}}>확인</button>
+      {/* 자동 생성 확인 모달 */}
+      {autoGenConfirm&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:700,
+          display:"flex",alignItems:"center",justifyContent:"center",padding:16}}
+          onClick={()=>setAutoGenConfirm(false)}>
+          <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:18,width:360,
+            boxShadow:"0 8px 40px rgba(0,0,0,0.2)",overflow:"hidden"}}>
+            <div style={{height:4,background:"linear-gradient(90deg,#6C63FF,#9F7AEA)"}}/>
+            <div style={{padding:"24px 24px 20px",textAlign:"center"}}>
+              <div style={{fontSize:36,marginBottom:12}}>🔄</div>
+              <h3 style={{margin:"0 0 10px",fontSize:16,fontWeight:800,color:"#1A1A2E"}}>조직도 자동 생성</h3>
+              <p style={{margin:"0 0 6px",fontSize:13,color:"#4A5568"}}>
+                인원 DB의 <strong>부서명 = "{site.name}"</strong> 인원을<br/>
+                <strong>직종 → 직군 → 직위</strong> 순으로 자동 배치합니다.
+              </p>
+              <p style={{margin:"0 0 20px",fontSize:12,color:"#EF4444",fontWeight:600}}>
+                ⚠ 기존 조직도는 모두 삭제됩니다.
+              </p>
+              <div style={{display:"flex",gap:10}}>
+                <button onClick={()=>setAutoGenConfirm(false)}
+                  style={{flex:1,background:"#F7FAFC",border:"1px solid #CBD5E0",
+                  borderRadius:10,padding:"11px",fontSize:13,color:"#718096",
+                  cursor:"pointer",fontWeight:600}}>취소</button>
+                <button onClick={autoGenerateOrg}
+                  style={{flex:1,background:"linear-gradient(90deg,#6C63FF,#9F7AEA)",
+                  border:"none",borderRadius:10,padding:"11px",fontSize:13,
+                  color:"#fff",cursor:"pointer",fontWeight:700}}>생성</button>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
-    </div>}
+      )}
 
-    {/* 인원 로우데이터 관리 모달 */}
-    {showPersonnelMgr&&<PersonnelMgrModal personnel={personnel} onSave={onPersonnelSave} onDelete={onPersonnelDelete} onClose={()=>setShowPersonnelMgr(false)}/>}
-  </div>;
+      {/* 노드 추가/수정 모달 */}
+      {modalForm&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(30,30,60,0.5)",zIndex:600,
+          display:"flex",alignItems:"center",justifyContent:"center",padding:16}}
+          onClick={()=>{setModalForm(null);setNameSuggest([]);}}>
+          <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:18,
+            width:"100%",maxWidth:420,boxShadow:"0 8px 40px rgba(0,0,0,0.2)",
+            overflow:"hidden",maxHeight:"90vh",overflowY:"auto"}}>
+            <div style={{height:4,background:"linear-gradient(90deg,#6C63FF,#9F7AEA)"}}/>
+            <div style={{padding:"20px 22px"}}>
+              <h3 style={{margin:"0 0 16px",fontSize:15,fontWeight:800,color:"#1A1A2E"}}>
+                {modalForm.isNew?"+ 노드 추가":"✏ 노드 수정"}
+              </h3>
+              <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                {/* 이름 + 자동완성 */}
+                <div style={{position:"relative"}}>
+                  <label style={{fontSize:11,fontWeight:700,color:"#4A5568",display:"block",marginBottom:4}}>성명</label>
+                  <input value={modalForm.name} onChange={onNameChange}
+                    placeholder="인원 DB에서 자동완성" style={inp2}/>
+                  {nameSuggest.length>0&&(
+                    <div style={{position:"absolute",top:"100%",left:0,right:0,background:"#fff",
+                      border:"1px solid #CBD5E0",borderRadius:10,
+                      boxShadow:"0 4px 20px rgba(0,0,0,0.12)",zIndex:50,
+                      overflow:"hidden",maxHeight:200,overflowY:"auto"}}>
+                      {nameSuggest.map(p=>{
+                        const rg=mapJobTypeToRoleGroup(p.job_type,p.position);
+                        const gc3=getGroupColor(rg);
+                        return(
+                          <div key={p.id||p.name} onClick={()=>applyPersonnel(p)}
+                            style={{padding:"9px 14px",cursor:"pointer",borderBottom:"1px solid #EEF2F7",
+                            display:"flex",alignItems:"center",gap:8}}
+                            onMouseEnter={e=>e.currentTarget.style.background="#F8F7FF"}
+                            onMouseLeave={e=>e.currentTarget.style.background="#fff"}>
+                            <span style={{fontSize:9,padding:"2px 6px",borderRadius:4,
+                              background:gc3+"22",color:gc3,fontWeight:700}}>{rg}</span>
+                            <span style={{fontSize:13,fontWeight:700,color:"#1A1A2E"}}>{p.name}</span>
+                            <span style={{fontSize:10,color:"#718096",flex:1}}>
+                              {[p.position,p.job_type,p.department].filter(Boolean).join(" · ")}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                  <div>
+                    <label style={{fontSize:11,fontWeight:700,color:"#4A5568",display:"block",marginBottom:4}}>직종</label>
+                    <select value={modalForm.job_type} onChange={e=>{
+                      const jt=e.target.value;
+                      const rg=mapJobTypeToRoleGroup(jt,modalForm.position);
+                      setModalForm(f=>({...f,job_type:jt,role_group:rg}));
+                    }} style={inp2}>
+                      {JOB_TYPES.map(j=><option key={j}>{j}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{fontSize:11,fontWeight:700,color:"#4A5568",display:"block",marginBottom:4}}>직군 (자동매핑)</label>
+                    <select value={modalForm.role_group} onChange={mf("role_group")} style={inp2}>
+                      {ORG_GROUPS.map(g=><option key={g.label}>{g.label}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{fontSize:11,fontWeight:700,color:"#4A5568",display:"block",marginBottom:4}}>직위</label>
+                    <input value={modalForm.position} onChange={mf("position")} placeholder="부장, 차장..." style={inp2}/>
+                  </div>
+                  <div>
+                    <label style={{fontSize:11,fontWeight:700,color:"#4A5568",display:"block",marginBottom:4}}>직급</label>
+                    <input value={modalForm.rank} onChange={mf("rank")} placeholder="3급, 4급..." style={inp2}/>
+                  </div>
+                </div>
+                <div>
+                  <label style={{fontSize:11,fontWeight:700,color:"#4A5568",display:"block",marginBottom:4}}>사원구분</label>
+                  <div style={{display:"flex",gap:6}}>
+                    {["정규직","비정규직"].map(t=>(
+                      <button key={t} onClick={()=>setModalForm(f=>({...f,emp_type:t}))}
+                        style={{flex:1,padding:"8px",borderRadius:8,
+                        border:`1px solid ${modalForm.emp_type===t?"#6C63FF":"#CBD5E0"}`,
+                        background:modalForm.emp_type===t?"#6C63FF":"#fff",
+                        color:modalForm.emp_type===t?"#fff":"#4A5568",
+                        fontSize:12,fontWeight:700,cursor:"pointer"}}>{t}</button>
+                    ))}
+                  </div>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                  <div>
+                    <label style={{fontSize:11,fontWeight:700,color:"#4A5568",display:"block",marginBottom:4}}>나이(만)</label>
+                    <input type="number" value={modalForm.age} onChange={mf("age")} placeholder="45" style={inp2}/>
+                  </div>
+                  <div>
+                    <label style={{fontSize:11,fontWeight:700,color:"#4A5568",display:"block",marginBottom:4}}>전화번호</label>
+                    <input value={modalForm.phone} onChange={mf("phone")} placeholder="010-0000-0000" style={inp2}/>
+                  </div>
+                </div>
+                <div>
+                  <label style={{fontSize:11,fontWeight:700,color:"#4A5568",display:"block",marginBottom:4}}>비고</label>
+                  <input value={modalForm.memo} onChange={mf("memo")} placeholder="자유 메모" style={inp2}/>
+                </div>
+                {/* 상위 노드 선택 */}
+                <div>
+                  <label style={{fontSize:11,fontWeight:700,color:"#4A5568",display:"block",marginBottom:4}}>
+                    상위 노드 (종속 관계)
+                  </label>
+                  <select value={modalForm.parentId||""} onChange={mf("parentId")} style={inp2}>
+                    <option value="">── 최상위 (없음)</option>
+                    {nodes
+                      .filter(n=>n.id!==modalForm.nodeId)
+                      .sort((a,b)=>positionSortKey(a.position)-positionSortKey(b.position))
+                      .map(n=>(
+                        <option key={n.id} value={n.id}>
+                          {n.name} ({n.position||n.role_group||"−"}) [{n.job_type||"−"}]
+                        </option>
+                      ))
+                    }
+                  </select>
+                </div>
+              </div>
+              <div style={{display:"flex",gap:10,marginTop:16}}>
+                <button onClick={()=>{setModalForm(null);setNameSuggest([]);}}
+                  style={{flex:1,background:"#F7FAFC",border:"1px solid #CBD5E0",
+                  borderRadius:10,padding:"11px",fontSize:13,color:"#718096",
+                  cursor:"pointer",fontWeight:600}}>취소</button>
+                <button onClick={saveNode}
+                  style={{flex:2,background:"#6C63FF",border:"none",
+                  borderRadius:10,padding:"11px",fontSize:13,color:"#fff",
+                  cursor:"pointer",fontWeight:700}}>저장</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 관리자 암호 */}
+      {showAdminPw&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(30,30,60,0.5)",zIndex:600,
+          display:"flex",alignItems:"center",justifyContent:"center",padding:16}}
+          onClick={()=>setShowAdminPw(false)}>
+          <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:18,width:320,
+            boxShadow:"0 8px 40px rgba(0,0,0,0.18)",overflow:"hidden"}}>
+            <div style={{height:4,background:"linear-gradient(90deg,#6C63FF,#9F7AEA)"}}/>
+            <div style={{padding:"24px 24px 20px",textAlign:"center"}}>
+              <div style={{fontSize:36,marginBottom:12}}>🔐</div>
+              <h3 style={{margin:"0 0 8px",fontSize:15,fontWeight:800,color:"#1A1A2E"}}>관리자 인증</h3>
+              <input type="password" value={adminPwInput}
+                onChange={e=>setAdminPwInput(e.target.value)}
+                onKeyDown={e=>{if(e.key==="Enter"){
+                  if(adminPwInput==="dongbu"){setShowAdminPw(false);setShowPersonnelMgr(true);}
+                  else setAdminPwError("암호가 틀렸습니다.");
+                }}}
+                placeholder="관리자 암호" autoFocus
+                style={{width:"100%",border:`1px solid ${adminPwError?"#F87171":"#CBD5E0"}`,
+                borderRadius:10,padding:"10px 14px",fontSize:14,outline:"none",
+                boxSizing:"border-box",marginBottom:6}}/>
+              {adminPwError&&<p style={{margin:"0 0 10px",fontSize:11,color:"#F87171"}}>{adminPwError}</p>}
+              <button onClick={()=>{
+                if(adminPwInput==="dongbu"){setShowAdminPw(false);setShowPersonnelMgr(true);}
+                else setAdminPwError("암호가 틀렸습니다.");
+              }} style={{width:"100%",background:"#6C63FF",border:"none",borderRadius:10,
+                padding:"11px",fontSize:13,color:"#fff",cursor:"pointer",fontWeight:700,marginTop:4}}>
+                확인
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showPersonnelMgr&&<PersonnelMgrModal personnel={personnel}
+        onSave={onPersonnelSave} onDelete={onPersonnelDelete}
+        onClose={()=>setShowPersonnelMgr(false)}/>}
+    </div>
+  );
 }
 
 

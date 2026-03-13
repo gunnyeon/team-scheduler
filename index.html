@@ -1644,37 +1644,49 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
       ?[...sectionOrder.filter(jt=>allJTs.includes(jt)),...allJTs.filter(jt=>!sectionOrder.includes(jt))]
       :allJTs;
 
-    // ── 섹션 드래그 핸들러 ──
-    // HTML5 drag & drop (캔버스 패닝과 분리)
-    function onSecDragStart(e,jt){
+    // ── 마우스 기반 섹션 드래그 핸들러 ──
+    function handleSecMouseDown(e,jt){
       e.stopPropagation();
+      e.preventDefault();
+      if(isDragging.current)return; // 캔버스 패닝 중이면 무시
       setDragSec(jt);
-      e.dataTransfer.effectAllowed="move";
-      e.dataTransfer.setData("text/jt",jt);
+
+      const startX=e.clientX;
+      let currentOver=null;
+
+      function onMove(ev){
+        const els=document.elementsFromPoint(ev.clientX,ev.clientY);
+        const secEl=els.find(el=>el.dataset&&el.dataset.secjt&&el.dataset.secjt!==jt);
+        const overJt=secEl?secEl.dataset.secjt:null;
+        if(overJt!==currentOver){
+          currentOver=overJt;
+          setDragOverSec(overJt);
+        }
+      }
+
+      function onUp(ev){
+        document.removeEventListener("mousemove",onMove);
+        document.removeEventListener("mouseup",onUp);
+        const finalOver=currentOver;
+        setDragSec(null);
+        setDragOverSec(null);
+        if(finalOver&&finalOver!==jt){
+          setSectionOrder(prev=>{
+            const base=prev.length>0?[...prev.filter(t=>allJTs.includes(t)),...allJTs.filter(t=>!prev.includes(t))]:[...orderedJTs];
+            const fi=base.indexOf(jt);
+            const ti=base.indexOf(finalOver);
+            if(fi<0||ti<0)return prev;
+            const next=[...base];
+            next.splice(fi,1);
+            next.splice(ti,0,jt);
+            return next;
+          });
+        }
+      }
+
+      document.addEventListener("mousemove",onMove);
+      document.addEventListener("mouseup",onUp);
     }
-    function onSecDragOver(e,jt){
-      e.preventDefault();
-      e.stopPropagation();
-      if(jt!==dragSec)setDragOverSec(jt);
-    }
-    function onSecDragLeave(jt){
-      if(dragOverSec===jt)setDragOverSec(null);
-    }
-    function onSecDrop(e,targetJt){
-      e.preventDefault();
-      e.stopPropagation();
-      const from=dragSec;
-      setDragSec(null);setDragOverSec(null);
-      if(!from||from===targetJt)return;
-      const cur=[...orderedJTs];
-      const fi=cur.indexOf(from);
-      const ti=cur.indexOf(targetJt);
-      if(fi<0||ti<0)return;
-      cur.splice(fi,1);
-      cur.splice(ti,0,from);
-      setSectionOrder(cur);
-    }
-    function onSecDragEnd(){setDragSec(null);setDragOverSec(null);}
 
     return(
       <div style={{padding:"32px 40px",minWidth:"max-content",minHeight:"100%"}}
@@ -1699,8 +1711,8 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
         {orderedJTs.length>1&&(
           <div style={{textAlign:"center",marginBottom:14}}>
             <span style={{fontSize:10,color:"#A0AEC0",background:"#F8FAFC",
-              border:"1px solid #E2E8F0",borderRadius:6,padding:"3px 10px"}}>
-              ☰ 직종 헤더를 드래그하여 순서 변경
+              border:"1px solid #E2E8F0",borderRadius:6,padding:"3px 10px",userSelect:"none"}}>
+              ✥ 직종 헤더를 드래그하여 순서 변경
             </span>
           </div>
         )}
@@ -1713,33 +1725,36 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
             jtNodes.forEach(n=>{const rg=n.role_group||"기타";if(!byRG2[rg])byRG2[rg]=[];byRG2[rg].push(n);});
             const gcJT=getGroupColor(mapJobTypeToRoleGroup(jt,""));
             const isDraggingThis=dragSec===jt;
-            const isDropTarget=dragOverSec===jt&&dragSec!==jt;
+            const isDropTarget=dragOverSec===jt;
 
             return(
               <div key={jt}
-                onDragOver={e=>onSecDragOver(e,jt)}
-                onDragLeave={()=>onSecDragLeave(jt)}
-                onDrop={e=>onSecDrop(e,jt)}
+                data-secjt={jt}
                 style={{
                   display:"flex",flexDirection:"column",alignItems:"center",
-                  opacity:isDraggingThis?0.4:1,
-                  outline:isDropTarget?`2px dashed ${gcJT}`:"2px solid transparent",
-                  outlineOffset:10,borderRadius:14,padding:4,
-                  transition:"opacity 0.15s",
+                  opacity:isDraggingThis?0.35:1,
+                  outline:isDropTarget?`3px dashed ${gcJT}`:"3px solid transparent",
+                  outlineOffset:8,borderRadius:14,
+                  transition:"opacity 0.1s",
                 }}>
                 {/* 드래그 핸들 헤더 */}
                 <div
-                  draggable="true"
-                  onDragStart={e=>onSecDragStart(e,jt)}
-                  onDragEnd={onSecDragEnd}
-                  style={{fontSize:11,fontWeight:800,color:gcJT,marginBottom:10,
-                    padding:"5px 16px",borderRadius:12,background:gcJT+"18",
-                    border:`1px solid ${gcJT}55`,
+                  onMouseDown={e=>handleSecMouseDown(e,jt)}
+                  style={{
+                    fontSize:11,fontWeight:800,color:gcJT,marginBottom:10,
+                    padding:"6px 18px",borderRadius:12,
+                    background:isDraggingThis?gcJT+"44":isDropTarget?gcJT+"33":gcJT+"18",
+                    border:`2px solid ${isDraggingThis?gcJT:gcJT+"66"}`,
                     cursor:"grab",userSelect:"none",
-                    display:"flex",alignItems:"center",gap:6}}>
-                  <span style={{fontSize:13,opacity:0.6,letterSpacing:-1}}>⠿⠿</span>
+                    display:"flex",alignItems:"center",gap:6,
+                    boxShadow:isDraggingThis?"0 4px 16px rgba(0,0,0,0.15)":"none",
+                    transform:isDraggingThis?"scale(1.05)":"scale(1)",
+                    transition:"all 0.1s",
+                  }}>
+                  <span style={{fontSize:14,opacity:0.7,letterSpacing:-2,lineHeight:1}}>⠿⠿</span>
                   {jt}직
                 </div>
+
                 <div style={{display:"flex",gap:14,alignItems:"flex-start",
                   flexWrap:"wrap",justifyContent:"center"}}>
                   {Object.entries(byRG2).map(([rg2,rgNodes])=>{
@@ -1792,6 +1807,7 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
       </div>
     );
   }
+
 
 
 
@@ -2044,10 +2060,11 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
           <div ref={canvasRef}
             onMouseDown={e=>{
               if(e.button!==0||selectedId||modalForm)return;
-              // draggable 요소(섹션 헤더) 위에서는 패닝 시작 안 함
+              // 섹션 헤더(data-secjt) 위에서는 패닝 시작 안 함
               let el=e.target;
               while(el&&el!==canvasRef.current){
-                if(el.draggable)return;
+                if(el.dataset&&el.dataset.secjt)return;
+                if(el.getAttribute&&el.getAttribute("data-secjt"))return;
                 el=el.parentElement;
               }
               isDragging.current=true;

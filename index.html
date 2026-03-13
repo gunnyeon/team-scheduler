@@ -251,19 +251,19 @@ function App(){
     const skipApi=!!row._skipApi;
     delete row._skipApi;
     setOrgNodes(prev=>{const exists=prev.find(n=>n.id===row.id);return exists?prev.map(n=>n.id===row.id?row:n):[...prev,row];});
-    lastLocalChange.current=Date.now()+12000;
+    lastLocalChange.current=Math.max(lastLocalChange.current,Date.now()+12000);
     if(!skipApi){
       apiUpsert("org_nodes",row)
-        .then(()=>{lastLocalChange.current=Date.now()+8000;})
+        .then(()=>{lastLocalChange.current=Math.max(lastLocalChange.current,Date.now()+8000);})
         .catch(()=>setSyncStatus("오류"));
     }
   }
   function onOrgDelete(ids){
     const idArr=Array.isArray(ids)?ids:[ids];
     setOrgNodes(prev=>prev.filter(n=>!idArr.includes(n.id)));
-    lastLocalChange.current=Date.now()+12000;
+    lastLocalChange.current=Math.max(lastLocalChange.current,Date.now()+12000);
     Promise.all(idArr.map(id=>apiDelete("org_nodes",id)))
-      .then(()=>{lastLocalChange.current=Date.now()+8000;})
+      .then(()=>{lastLocalChange.current=Math.max(lastLocalChange.current,Date.now()+8000);})
       .catch(()=>{setSyncStatus("오류");});
   }
   function onOrgSaveBump(){bumpLocal();}
@@ -275,6 +275,25 @@ function App(){
     });
     // 폴링 20초 차단
     lastLocalChange.current=Date.now()+20000;
+  }
+  // 본사 조직도 전체 교체 (자동생성용) - replace_all 단일 API 호출
+  async function onHqOrgReplaceAll(newHqNodes){
+    // 1. 로컬 state: __hq__ 노드만 교체, 나머지 현장 노드 유지
+    setOrgNodes(prev=>{
+      const others=prev.filter(n=>n.site_id!=="__hq__");
+      return [...others,...newHqNodes];
+    });
+    // 2. 폴링 30초 차단
+    lastLocalChange.current=Date.now()+30000;
+    // 3. 전체 org_nodes를 replace_all로 한 번에 저장
+    try{
+      const allNodes=[...orgNodes.filter(n=>n.site_id!=="__hq__"),...newHqNodes];
+      await apiReplaceAll("org_nodes",ORG_HEADERS,allNodes);
+      lastLocalChange.current=Date.now()+8000;
+      setSyncStatus("동기화됨");
+    }catch(e){
+      setSyncStatus("오류");
+    }
   }
   function onPersonnelSave(row){
     setPersonnel(prev=>{const exists=prev.find(p=>p.id===row.id);return exists?prev.map(p=>p.id===row.id?row:p):[...prev,row];});
@@ -638,7 +657,7 @@ function App(){
                 입력
               </button>
             </div>
-          ):<PersonnelDashboard personnel={personnel} orgNodes={orgNodes} sites={sites} siteMinStaff={siteMinStaff} onOrgSave={onOrgSave} onOrgDelete={onOrgDelete}/>)}
+          ):<PersonnelDashboard personnel={personnel} orgNodes={orgNodes} sites={sites} siteMinStaff={siteMinStaff} onOrgSave={onOrgSave} onOrgDelete={onOrgDelete} onHqOrgReplaceAll={onHqOrgReplaceAll}/>)}
           {activeMenu==="일정 관리"&&<ScheduleBoard schedules={schedules} onEdit={s=>{setEditingSched(s);setShowSchedModal(true);}} onDelete={deleteSched} isMobile={isMobile}/>}
           {activeMenu==="업무 관리"&&<TaskBoard tasks={tasks} onEdit={t=>{setEditingTask(t);setShowTaskModal(true);}} onDelete={deleteTask} onStatusChange={updateTaskStatus} isMobile={isMobile}/>}
           {activeMenu==="캘린더(주요일정)"&&<CalendarView schedules={schedules} currentMonth={currentMonth} setCurrentMonth={setCurrentMonth} todayStr={todayStr} selectedSched={selectedSched} setSelectedSched={setSelectedSched} onDateClick={d=>{setEditingSched(null);setShowSchedModal({prefillDate:d});}} onEditSched={s=>{setEditingSched(s);setShowSchedModal(true);}} onDeleteSched={deleteSched} isMobile={isMobile}/>}
@@ -2679,7 +2698,7 @@ function SitePMBoard({sites=[],onSave,onDelete,orgNodes=[],onOrgSave,onOrgDelete
 
 
 // ── 리포트 ────────────────────────────────────────────
-function PersonnelDashboard({personnel=[],orgNodes=[],sites=[],onOrgSave,onOrgDelete}){
+function PersonnelDashboard({personnel=[],orgNodes=[],sites=[],onOrgSave,onOrgDelete,onHqOrgReplaceAll}){
   // ── hqNodes: org_nodes에서 site_id="__hq__" 행을 실시간으로 가져옴 ──
   const hqNodes=React.useMemo(()=>orgNodes.filter(n=>n.site_id==="__hq__"),[orgNodes]);
 
@@ -2768,8 +2787,13 @@ function PersonnelDashboard({personnel=[],orgNodes=[],sites=[],onOrgSave,onOrgDe
     const target=hqNodes.find(n=>n.id===id);
     const newParent=target?target.parentId||"":"";
     const children=hqNodes.filter(n=>n.parentId===id);
-    children.forEach((ch,i)=>setTimeout(()=>{if(onOrgSave)onOrgSave({...ch,parentId:newParent});},i*60));
-    setTimeout(()=>{if(onOrgDelete)onOrgDelete([id]);},children.length*60+120);
+    // 로컬 state 즉시 반영 (하위 재연결 + 삭제)
+    // onOrgSave가 내부적으로 setOrgNodes를 호출하므로 연속 호출해도 로컬은 즉시 반영됨
+    // API 저장은 순차 처리: 재연결 먼저, 그 다음 삭제
+    children.forEach(ch=>{if(onOrgSave)onOrgSave({...ch,parentId:newParent,_skipApi:false});});
+    // 하위 재연결 API 완료 후 삭제 (200ms 여유)
+    const delay=children.length>0?300:0;
+    setTimeout(()=>{if(onOrgDelete)onOrgDelete([id]);},delay);
     if(selectedId===id)setSelectedId(null);
   }
 
@@ -2806,17 +2830,11 @@ function PersonnelDashboard({personnel=[],orgNodes=[],sites=[],onOrgSave,onOrgDe
         age:(p.age||"").toString(), phone:(p.phone||"").toString(),
         memo:"", color:"#534AB7", is_manual:"true", emp_id:""
       }));
-    // 기존 본사 노드 삭제 후 새로 순차 저장
-    if(hqNodes.length>0&&onOrgDelete){
-      await new Promise(res=>{
-        hqNodes.forEach((n,i)=>setTimeout(()=>onOrgDelete([n.id]),i*60));
-        setTimeout(res,hqNodes.length*60+200);
-      });
-    }
-    if(onOrgSave) nodes2.forEach((n,i)=>setTimeout(()=>onOrgSave(n),i*80));
     setChildOrder({});
+    // replace_all 단일 호출로 안정적으로 저장
+    if(onHqOrgReplaceAll) await onHqOrgReplaceAll(nodes2);
   }
-
+  
   function onNameChange(e){
     const v=e.target.value;
     setModalForm(f=>({...f,name:v}));

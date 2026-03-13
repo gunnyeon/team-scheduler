@@ -2650,216 +2650,552 @@ function SitePMBoard({sites=[],onSave,onDelete,orgNodes=[],onOrgSave,onOrgDelete
 
 
 // ── 리포트 ────────────────────────────────────────────
-function PersonnelDashboard({personnel=[],orgNodes=[],sites=[],siteMinStaff=[]}){
-  // ── 본부 전체 통계 ──
+function PersonnelDashboard({personnel=[],orgNodes=[],sites=[]}){
+  const [search,setSearch]=React.useState("");
+  const [searchResult,setSearchResult]=React.useState(null);
+  const [hqOrgNodes,setHqOrgNodes]=React.useState([]); // 본사 조직도 노드 (로컬)
+  const [hqDragChild,setHqDragChild]=React.useState(null);
+  const [hqDragOver,setHqDragOver]=React.useState(null);
+  const [hqChildOrder,setHqChildOrder]=React.useState({});
+  const [hqModal,setHqModal]=React.useState(null); // {mode:'add'|'edit', node, parentId}
+  const [showHqOrg,setShowHqOrg]=React.useState(false);
+
+  // ── 기본 집계 ──
   const total=personnel.length;
-  const regular=personnel.filter(p=>!p.emp_type||p.emp_type==="정규직").length;
+  const regular=personnel.filter(p=>p.emp_type==="정규직").length;
   const irregular=personnel.filter(p=>p.emp_type==="비정규직").length;
-  const headOffice=personnel.filter(p=>p.dept_type==="본사").length;
-  const siteStaff=personnel.filter(p=>!p.dept_type||p.dept_type==="현장").length;
+  const headCount=personnel.filter(p=>(p.dept_type||"").includes("본사")).length;
+  const siteCount=personnel.filter(p=>(p.dept_type||"").includes("현장")).length;
 
-  // 직종별 (job_type 기준)
-  const JOB_TYPES_ORDER=["건축","기계","전기","안전","품질","관리","토목","기타"];
-  const byJobType={};
-  personnel.forEach(p=>{const j=p.job_type||"기타";byJobType[j]=(byJobType[j]||0)+1;});
-
-  // 직군별 (자동 매핑)
-  const byGroup={};
-  ORG_GROUPS.forEach(g=>{byGroup[g.label]=0;});
-  personnel.forEach(p=>{const g=mapJobTypeToRoleGroup(p.job_type,p.position);byGroup[g]=(byGroup[g]||0)+1;});
-
-  // 직위별 (POSITION_SORT 기준 정렬)
-  const byPos={};
-  personnel.forEach(p=>{const pos=p.position||"미지정";byPos[pos]=(byPos[pos]||0)+1;});
-  const sortedPos=Object.entries(byPos).sort((a,b)=>{
-    const ia=positionSortKey(a[0]); const ib=positionSortKey(b[0]);
-    return ia-ib;
+  // 부서별 (dept_type 구분)
+  const hqDepts={}, siteDepts={};
+  personnel.forEach(p=>{
+    const dept=(p.department||"미지정").trim();
+    const dt=(p.dept_type||"").trim();
+    if(dt.includes("본사")){hqDepts[dept]=(hqDepts[dept]||0)+1;}
+    else{siteDepts[dept]=(siteDepts[dept]||0)+1;}
   });
 
-  // 사원구분별
-  const empTypes=[["정규직",regular,"#6C63FF","#EDE9FE"],["비정규직",irregular,"#F59E0B","#FEF3C7"]];
+  // 직종별
+  const JT_ORDER=["건축","기계","전기","안전","품질","관리","토목","기타"];
+  const byJT={};
+  personnel.forEach(p=>{const j=(p.job_type||"기타").trim();byJT[j]=(byJT[j]||0)+1;});
+  const jtEntries=[...JT_ORDER.filter(j=>byJT[j]),...Object.keys(byJT).filter(j=>!JT_ORDER.includes(j)&&byJT[j])]
+    .map(j=>[j,byJT[j]]);
 
-  // ── 현장별 배치 인원 (personnel 부서명 기준) ──
-  const siteStats=sites.map(s=>{
-    // personnel.department === site.name 으로 매핑
-    const sPersonnel=personnel.filter(p=>p.department===s.name);
-    const byGrp={};
-    ORG_GROUPS.forEach(g=>{byGrp[g.label]=0;});
-    sPersonnel.forEach(p=>{const g=mapJobTypeToRoleGroup(p.job_type,p.position);byGrp[g]=(byGrp[g]||0)+1;});
-    const reg2=sPersonnel.filter(p=>!p.emp_type||p.emp_type==="정규직").length;
-    const irr2=sPersonnel.filter(p=>p.emp_type==="비정규직").length;
-    // 인력 부족 체크 — siteMinStaff DB 기준, 없으면 기본값
-    const siteMinMap={};
-    siteMinStaff.filter(m=>m.site_id===s.id).forEach(m=>{siteMinMap[m.role_group]=parseInt(m.min_count)||0;});
-    const defaultMin={"공사":3,"안전":1,"품질":1,"관리":1};
-    const minMap=Object.keys(siteMinMap).length>0?siteMinMap:defaultMin;
-    const shortage=Object.entries(minMap).filter(([g,min])=>min>0&&(byGrp[g]||0)<min).map(([g,min])=>({group:g,current:byGrp[g]||0,min}));
-    return {site:s,total:sPersonnel.length,regular:reg2,irregular:irr2,byGrp,shortage};
-  }).sort((a,b)=>b.total-a.total);
+  // 직위별
+  const byPos={};
+  personnel.forEach(p=>{const pos=(p.position||"미지정").trim();byPos[pos]=(byPos[pos]||0)+1;});
+  const posEntries=Object.entries(byPos).sort((a,b)=>positionSortKey(a[0])-positionSortKey(b[0]));
 
-  const totalShortage=siteStats.filter(s=>s.shortage.length>0).length;
+  // ── 인원 검색 ──
+  function doSearch(){
+    const q=search.trim();
+    if(!q){setSearchResult(null);return;}
+    const found=personnel.filter(p=>
+      (p.name||"").includes(q)||(p.emp_id||"").includes(q)||(p.department||"").includes(q)
+    );
+    setSearchResult(found);
+  }
 
-  const cardStyle={background:"#fff",borderRadius:14,padding:"20px 22px",boxShadow:"0 2px 12px rgba(0,0,0,0.06)",border:"1px solid #EEF2F7"};
-  const SEC=({title,accent,children,extra})=><div style={cardStyle}>
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-      <p style={{margin:0,fontSize:13,fontWeight:800,color:"#2D3748",display:"flex",alignItems:"center",gap:6}}>
-        <span style={{width:4,height:16,background:accent,borderRadius:2,display:"inline-block"}}/>
-        {title}
-      </p>
-      {extra}
-    </div>
-    {children}
-  </div>;
+  // ── 본사 조직도 ──
+  function genId2(){return`hq${Date.now().toString(36)}${Math.random().toString(36).slice(2,6)}`;}
 
-  return <div style={{display:"flex",flexDirection:"column",gap:20}}>
-    {/* 인력 부족 경고 배너 */}
-    {totalShortage>0&&<div style={{background:"linear-gradient(90deg,rgba(248,113,113,0.08),rgba(239,68,68,0.04))",border:"1px solid #FCA5A5",borderRadius:14,padding:"14px 20px"}}>
-      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
-        <span style={{fontSize:18}}>⚠️</span>
-        <h3 style={{margin:0,fontSize:14,fontWeight:800,color:"#DC2626"}}>인력 부족 현장 {totalShortage}개소 — 즉시 확인 필요</h3>
+  // 본사 인원 (dept_type에 "본사" 포함)
+  const hqPersonnel=personnel.filter(p=>(p.dept_type||"").includes("본사"));
+
+  function addHqNode(parentId,form){
+    const node={id:genId2(),parentId:parentId||"",name:form.name,position:form.position||"",
+      department:form.department||"",job_type:form.job_type||"",emp_type:form.emp_type||"정규직",
+      rank:form.rank||"",age:form.age||"",phone:form.phone||"",memo:form.memo||""};
+    setHqOrgNodes(prev=>[...prev,node]);
+    setHqModal(null);
+  }
+  function editHqNode(id,form){
+    setHqOrgNodes(prev=>prev.map(n=>n.id===id?{...n,...form}:n));
+    setHqModal(null);
+  }
+  function delHqNode(id){
+    if(!window.confirm("삭제하시겠습니까?"))return;
+    setHqOrgNodes(prev=>{
+      const newParent=prev.find(n=>n.id===id)?.parentId||"";
+      return prev.filter(n=>n.id!==id).map(n=>n.parentId===id?{...n,parentId:newParent}:n);
+    });
+  }
+
+  // 본사 조직도 형제 드래그
+  function hqChildDragDown(e,childId,parentId){
+    e.stopPropagation();e.preventDefault();
+    setHqDragChild(childId);
+    let cur=null;
+    const siblings=hqOrgNodes.filter(n=>n.parentId===parentId);
+    function mv(ev){
+      const els=document.elementsFromPoint(ev.clientX,ev.clientY);
+      let f=null;
+      for(const el of els){
+        if(el.dataset?.hqchild&&el.dataset?.hqparent===parentId&&el.dataset.hqchild!==childId){f=el.dataset.hqchild;break;}
+      }
+      if(f!==cur){cur=f;setHqDragOver(f);}
+    }
+    function up(){
+      document.removeEventListener("mousemove",mv);
+      document.removeEventListener("mouseup",up);
+      const t=cur;setHqDragChild(null);setHqDragOver(null);
+      if(!t||t===childId)return;
+      setHqChildOrder(prev=>{
+        const sIds=siblings.map(n=>n.id);
+        const ord=prev[parentId]||sIds;
+        const base=[...ord.filter(id=>sIds.includes(id)),...sIds.filter(id=>!ord.includes(id))];
+        const fi=base.indexOf(childId),ti=base.indexOf(t);
+        if(fi<0||ti<0)return prev;
+        const nx=[...base];nx.splice(fi,1);nx.splice(ti,0,childId);
+        return {...prev,[parentId]:nx};
+      });
+    }
+    document.addEventListener("mousemove",mv);
+    document.addEventListener("mouseup",up);
+  }
+
+  // 본사 조직도 노드 렌더
+  function HqNodeCard({n,depth}){
+    const rawCh=hqOrgNodes.filter(c=>c.parentId===n.id);
+    const ord=hqChildOrder[n.id]||[];
+    const children=[
+      ...ord.map(id=>rawCh.find(c=>c.id===id)).filter(Boolean),
+      ...rawCh.filter(c=>!ord.includes(c.id))
+    ];
+    const colors={"현장소장":"#6C63FF","본부장":"#2EC4B6","팀장":"#FB923C","부장":"#4ECDC4","차장":"#FF6B9D","과장":"#A78BFA","대리":"#34D399","사원":"#94A3B8"};
+    const gc=colors[n.position]||"#6C63FF";
+    return(
+      <div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
+        {depth>0&&<div style={{width:2,height:16,background:"#CBD5E0"}}/>}
+        <div style={{background:"#fff",border:`2px solid ${gc}`,borderRadius:12,padding:"8px 12px",
+          minWidth:110,maxWidth:145,textAlign:"center",boxShadow:"0 2px 8px rgba(0,0,0,0.07)",position:"relative"}}>
+          <div style={{position:"absolute",top:-9,left:"50%",transform:"translateX(-50%)",
+            background:gc,color:"#fff",fontSize:8,fontWeight:800,padding:"1px 7px",borderRadius:5,whiteSpace:"nowrap"}}>
+            {n.department||"본사"}
+          </div>
+          <div style={{width:28,height:28,borderRadius:"50%",background:gc,display:"flex",
+            alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800,color:"#fff",margin:"6px auto 4px"}}>
+            {(n.name||"?")[0]}
+          </div>
+          {n.position&&<p style={{margin:"0 0 1px",fontSize:9,color:gc,fontWeight:800}}>{n.position}</p>}
+          <p style={{margin:"0 0 3px",fontSize:12,fontWeight:800,color:"#1A1A2E"}}>{n.name||"미지정"}</p>
+          {n.rank&&<p style={{margin:"0 0 1px",fontSize:8,color:"#A0AEC0"}}>{n.rank}</p>}
+          {n.age&&<p style={{margin:"0 0 1px",fontSize:8,color:"#718096"}}>만 {n.age}세</p>}
+          <div style={{display:"flex",gap:3,justifyContent:"center",marginTop:5}}>
+            <button onClick={()=>setHqModal({mode:"edit",node:n})}
+              style={{fontSize:8,padding:"2px 6px",borderRadius:4,background:"#EEF2F7",color:"#6C63FF",border:"none",cursor:"pointer",fontWeight:700}}>✏</button>
+            <button onClick={()=>setHqModal({mode:"add",parentId:n.id})}
+              style={{fontSize:8,padding:"2px 6px",borderRadius:4,background:"#F0FDF4",color:"#15803D",border:"none",cursor:"pointer",fontWeight:700}}>+</button>
+            <button onClick={()=>delHqNode(n.id)}
+              style={{fontSize:8,padding:"2px 6px",borderRadius:4,background:"#FFF5F5",color:"#F87171",border:"none",cursor:"pointer",fontWeight:700}}>✕</button>
+          </div>
+        </div>
+        {children.length>0&&<>
+          <div style={{width:2,height:16,background:"#CBD5E0"}}/>
+          <div style={{display:"flex",gap:12,alignItems:"flex-start",position:"relative"}}>
+            {children.length>1&&<div style={{position:"absolute",top:0,left:"50%",
+              width:"calc(100% - 60px)",height:2,background:"#CBD5E0",transform:"translateX(-50%)"}}/>}
+            {children.map(k=>{
+              const isDk=hqDragChild===k.id,isOk=hqDragOver===k.id;
+              const gcK=colors[k.position]||"#6C63FF";
+              return(
+                <div key={k.id} data-hqchild={k.id} data-hqparent={n.id}
+                  style={{display:"flex",flexDirection:"column",alignItems:"center",
+                    opacity:isDk?0.3:1,outline:isOk?`2px dashed ${gcK}`:"2px solid transparent",
+                    outlineOffset:5,borderRadius:10,transition:"opacity 0.1s"}}>
+                  {children.length>1&&<div onMouseDown={e=>hqChildDragDown(e,k.id,n.id)}
+                    style={{fontSize:9,color:gcK,marginBottom:3,padding:"2px 8px",borderRadius:5,
+                      background:gcK+"15",border:`1px dashed ${gcK}44`,cursor:"grab",userSelect:"none",
+                      display:"flex",alignItems:"center",gap:3}}>
+                    <span style={{letterSpacing:-2,opacity:0.5}}>⠿⠿</span>
+                    <span style={{fontWeight:700}}>{k.department||k.position||"노드"}</span>
+                  </div>}
+                  <HqNodeCard n={k} depth={depth+1}/>
+                </div>
+              );
+            })}
+          </div>
+        </>}
       </div>
-      <div style={{display:"flex",flexDirection:"column",gap:5}}>
-        {siteStats.filter(s=>s.shortage.length>0).map(({site,shortage})=>
-          shortage.map(sh=><div key={site.id+sh.group} style={{background:"#fff",borderRadius:8,padding:"8px 14px",border:"1px solid #FCA5A5",borderLeft:"4px solid #EF4444",fontSize:12,color:"#374151"}}>
-            <strong style={{color:"#DC2626"}}>{site.name}</strong> — {sh.group} 직군 인원 부족
-            <span style={{marginLeft:8,color:"#EF4444",fontWeight:700}}>(현재 {sh.current}명 / 최소 {sh.min}명)</span>
-          </div>)
+    );
+  }
+
+  const hqRoots=hqOrgNodes.filter(n=>!n.parentId||n.parentId==="");
+
+  // ── UI 공통 ──
+  const CARD={background:"#fff",borderRadius:14,padding:"18px 20px",
+    boxShadow:"0 2px 12px rgba(0,0,0,0.05)",border:"1px solid #EEF2F7"};
+  const gcMap={"건축":"#3B82F6","기계":"#F59E0B","전기":"#EAB308","안전":"#22C55E",
+    "품질":"#EC4899","관리":"#F97316","토목":"#14B8A6","기타":"#94A3B8"};
+
+  function Bar({pct,color,height=6}){
+    return <div style={{height,background:"#F1F5F9",borderRadius:height,overflow:"hidden",flex:1}}>
+      <div style={{height:"100%",width:`${pct}%`,background:color,borderRadius:height,transition:"width 0.4s"}}/>
+    </div>;
+  }
+
+  function SectionTitle({icon,label,count}){
+    return <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:14}}>
+      <span style={{fontSize:15}}>{icon}</span>
+      <span style={{fontSize:13,fontWeight:800,color:"#1E293B"}}>{label}</span>
+      {count!=null&&<span style={{fontSize:11,color:"#94A3B8",fontWeight:600,marginLeft:"auto"}}>{count}명</span>}
+    </div>;
+  }
+
+  // 본사 자동 생성 (인원 로우데이터 기반)
+  function autoGenHq(){
+    if(!window.confirm("인원 로우데이터의 본사 인원으로 자동 생성합니다.\n기존 데이터는 초기화됩니다."))return;
+    const depts={};
+    hqPersonnel.forEach(p=>{
+      const dept=(p.department||"미지정").trim();
+      if(!depts[dept])depts[dept]=[];
+      depts[dept].push(p);
+    });
+    const nodes2=[];
+    let topId=null;
+    // 가장 인원 많은 부서 또는 "본사"를 루트
+    const deptNames=Object.keys(depts).sort((a,b)=>depts[b].length-depts[a].length);
+    deptNames.forEach((dept,di)=>{
+      const persons=depts[dept].sort((a,b)=>positionSortKey(a.position)-positionSortKey(b.position));
+      // 부서 대표 노드(없이 바로 인원 나열)
+      persons.forEach(p=>{
+        nodes2.push({id:genId2(),parentId:"",name:p.name,position:p.position||"",
+          department:p.department||dept,job_type:p.job_type||"",
+          emp_type:p.emp_type||"정규직",rank:p.rank||"",age:p.age||"",phone:p.phone||"",memo:""});
+      });
+    });
+    setHqOrgNodes(nodes2);
+  }
+
+  return(
+    <div style={{padding:"20px 24px",background:"#F8FAFC",minHeight:"100%",overflowY:"auto"}}>
+      {/* ── 상단 헤더 ── */}
+      <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:22}}>
+        <div style={{width:42,height:42,borderRadius:12,background:"linear-gradient(135deg,#6C63FF,#9F7AEA)",
+          display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>👥</div>
+        <div style={{flex:1}}>
+          <p style={{margin:0,fontSize:11,color:"#94A3B8",fontWeight:600}}>인원현황 대시보드</p>
+          <h2 style={{margin:0,fontSize:18,fontWeight:800,color:"#0F172A"}}>전체 인원 {total}명</h2>
+        </div>
+        {/* 검색창 */}
+        <div style={{display:"flex",gap:6,alignItems:"center"}}>
+          <input value={search} onChange={e=>setSearch(e.target.value)}
+            onKeyDown={e=>e.key==="Enter"&&doSearch()}
+            placeholder="이름 / 사번 / 부서 검색"
+            style={{border:"1px solid #CBD5E0",borderRadius:9,padding:"8px 13px",fontSize:12,
+              outline:"none",width:190,boxSizing:"border-box"}}/>
+          <button onClick={doSearch}
+            style={{background:"#6C63FF",color:"#fff",border:"none",borderRadius:9,
+              padding:"8px 14px",fontWeight:700,fontSize:12,cursor:"pointer"}}>검색</button>
+          {searchResult&&<button onClick={()=>{setSearchResult(null);setSearch("");}}
+            style={{background:"#EEF2F7",color:"#64748B",border:"none",borderRadius:9,
+              padding:"8px 10px",fontWeight:700,fontSize:12,cursor:"pointer"}}>✕</button>}
+        </div>
+      </div>
+
+      {/* ── 검색 결과 ── */}
+      {searchResult&&(
+        <div style={{...CARD,marginBottom:20}}>
+          <SectionTitle icon="🔍" label={`검색 결과 — "${search}"`} count={searchResult.length}/>
+          {searchResult.length===0?(
+            <p style={{color:"#94A3B8",fontSize:13,textAlign:"center",padding:"20px 0"}}>검색 결과가 없습니다.</p>
+          ):(
+            <div style={{overflowX:"auto"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+                <thead>
+                  <tr style={{background:"#F8FAFC"}}>
+                    {["사번","성명","부서","구분","직종","직위","직급","고용형태","나이","연락처"].map(h=>(
+                      <th key={h} style={{padding:"8px 10px",textAlign:"left",fontWeight:700,
+                        color:"#64748B",borderBottom:"1px solid #E2E8F0",whiteSpace:"nowrap"}}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {searchResult.map((p,i)=>(
+                    <tr key={p.id||i} style={{borderBottom:"1px solid #F1F5F9",
+                      background:i%2===0?"#fff":"#FAFAFA"}}>
+                      {[p.emp_id,p.name,p.department,p.dept_type,p.job_type,
+                        p.position,p.rank,p.emp_type,p.age?`만 ${p.age}세`:"",p.phone].map((v,j)=>(
+                        <td key={j} style={{padding:"7px 10px",color:"#374151",whiteSpace:"nowrap"}}>
+                          {v||<span style={{color:"#CBD5E0"}}>—</span>}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── KPI 카드 4개 ── */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}}>
+        {[
+          {label:"전체 인원",value:total,unit:"명",color:"#6C63FF",bg:"#EDE9FE",icon:"👥"},
+          {label:"본사 인원",value:headCount,unit:"명",color:"#2EC4B6",bg:"#CCFBF1",icon:"🏢"},
+          {label:"현장 인원",value:siteCount,unit:"명",color:"#FB923C",bg:"#FEF3C7",icon:"🏗"},
+          {label:"정규직 비율",value:total>0?Math.round(regular/total*100):0,unit:"%",color:"#22C55E",bg:"#F0FDF4",icon:"✅"},
+        ].map(k=>(
+          <div key={k.label} style={{...CARD,display:"flex",alignItems:"center",gap:12,padding:"14px 16px"}}>
+            <div style={{width:40,height:40,borderRadius:10,background:k.bg,
+              display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>{k.icon}</div>
+            <div>
+              <p style={{margin:0,fontSize:10,color:"#94A3B8",fontWeight:600}}>{k.label}</p>
+              <p style={{margin:"2px 0 0",fontSize:20,fontWeight:800,color:k.color,lineHeight:1}}>
+                {k.value}<span style={{fontSize:11,fontWeight:600}}>{k.unit}</span>
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── 메인 그리드 ── */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:16,marginBottom:20}}>
+
+        {/* 본사 부서별 */}
+        <div style={CARD}>
+          <SectionTitle icon="🏢" label="본사 부서별 인원" count={headCount}/>
+          <div style={{display:"flex",flexDirection:"column",gap:5}}>
+            {Object.entries(hqDepts).sort((a,b)=>b[1]-a[1]).map(([dept,cnt])=>{
+              const pct=headCount?Math.round(cnt/headCount*100):0;
+              return(
+                <div key={dept}>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                    <span style={{fontSize:11,fontWeight:600,color:"#374151"}}>{dept}</span>
+                    <span style={{fontSize:11,fontWeight:800,color:"#6C63FF"}}>{cnt}명<span style={{fontSize:9,color:"#94A3B8",marginLeft:3}}>{pct}%</span></span>
+                  </div>
+                  <Bar pct={pct} color="#6C63FF"/>
+                </div>
+              );
+            })}
+            {Object.keys(hqDepts).length===0&&<p style={{color:"#94A3B8",fontSize:12,textAlign:"center",padding:"16px 0"}}>본사 인원 없음</p>}
+          </div>
+        </div>
+
+        {/* 현장 부서별 */}
+        <div style={CARD}>
+          <SectionTitle icon="🏗" label="현장 부서별 인원" count={siteCount}/>
+          <div style={{display:"flex",flexDirection:"column",gap:5}}>
+            {Object.entries(siteDepts).sort((a,b)=>b[1]-a[1]).map(([dept,cnt])=>{
+              const pct=siteCount?Math.round(cnt/siteCount*100):0;
+              return(
+                <div key={dept}>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                    <span style={{fontSize:11,fontWeight:600,color:"#374151"}}>{dept}</span>
+                    <span style={{fontSize:11,fontWeight:800,color:"#FB923C"}}>{cnt}명<span style={{fontSize:9,color:"#94A3B8",marginLeft:3}}>{pct}%</span></span>
+                  </div>
+                  <Bar pct={pct} color="#FB923C"/>
+                </div>
+              );
+            })}
+            {Object.keys(siteDepts).length===0&&<p style={{color:"#94A3B8",fontSize:12,textAlign:"center",padding:"16px 0"}}>현장 인원 없음</p>}
+          </div>
+        </div>
+
+        {/* 정규직/비정규직 */}
+        <div style={CARD}>
+          <SectionTitle icon="📋" label="고용 형태별 인원"/>
+          <div style={{display:"flex",gap:10,marginBottom:16}}>
+            {[["정규직",regular,"#22C55E","#F0FDF4"],["비정규직",irregular,"#F59E0B","#FFFBEB"]].map(([lb,cnt,col,bg])=>(
+              <div key={lb} style={{flex:1,background:bg,borderRadius:10,padding:"12px",textAlign:"center",
+                border:`1px solid ${col}44`}}>
+                <p style={{margin:0,fontSize:10,fontWeight:700,color:col}}>{lb}</p>
+                <p style={{margin:"4px 0 0",fontSize:22,fontWeight:800,color:col}}>{cnt}</p>
+                <p style={{margin:"2px 0 0",fontSize:10,color:col,opacity:0.7}}>
+                  {total?Math.round(cnt/total*100):0}%
+                </p>
+              </div>
+            ))}
+          </div>
+          {/* 도넛 대용 바 */}
+          <div style={{height:10,borderRadius:5,overflow:"hidden",display:"flex"}}>
+            <div style={{width:`${total?regular/total*100:50}%`,background:"#22C55E"}}/>
+            <div style={{flex:1,background:"#F59E0B"}}/>
+          </div>
+          <div style={{display:"flex",justifyContent:"space-between",marginTop:4}}>
+            <span style={{fontSize:9,color:"#22C55E",fontWeight:700}}>정규직 {total?Math.round(regular/total*100):0}%</span>
+            <span style={{fontSize:9,color:"#F59E0B",fontWeight:700}}>비정규직 {total?Math.round(irregular/total*100):0}%</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── 직종별 + 직위별 ── */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:20}}>
+
+        {/* 직종별 */}
+        <div style={CARD}>
+          <SectionTitle icon="🔧" label="직종별 인원" count={total}/>
+          <div style={{display:"flex",flexDirection:"column",gap:6}}>
+            {jtEntries.map(([jt,cnt])=>{
+              const pct=total?Math.round(cnt/total*100):0;
+              const col=gcMap[jt]||"#94A3B8";
+              return(
+                <div key={jt} style={{display:"flex",alignItems:"center",gap:8}}>
+                  <span style={{width:8,height:8,borderRadius:"50%",background:col,flexShrink:0}}/>
+                  <span style={{fontSize:11,fontWeight:700,color:"#374151",width:30,flexShrink:0}}>{jt}</span>
+                  <Bar pct={pct} color={col}/>
+                  <span style={{fontSize:11,fontWeight:800,color:"#374151",minWidth:26,textAlign:"right"}}>{cnt}</span>
+                  <span style={{fontSize:9,color:"#94A3B8",minWidth:28,textAlign:"right"}}>{pct}%</span>
+                </div>
+              );
+            })}
+            {jtEntries.length===0&&<p style={{color:"#94A3B8",fontSize:12,textAlign:"center",padding:"16px 0"}}>데이터 없음</p>}
+          </div>
+        </div>
+
+        {/* 직위별 */}
+        <div style={CARD}>
+          <SectionTitle icon="🏅" label="직위별 인원" count={total}/>
+          <div style={{display:"flex",flexDirection:"column",gap:5}}>
+            {posEntries.map(([pos,cnt])=>{
+              const pct=total?Math.round(cnt/total*100):0;
+              return(
+                <div key={pos} style={{display:"flex",alignItems:"center",gap:8}}>
+                  <span style={{fontSize:10,fontWeight:700,color:"#6C63FF",width:52,flexShrink:0}}>{pos}</span>
+                  <Bar pct={pct} color="#6C63FF"/>
+                  <span style={{fontSize:11,fontWeight:800,color:"#374151",minWidth:26,textAlign:"right"}}>{cnt}</span>
+                  <span style={{fontSize:9,color:"#94A3B8",minWidth:28,textAlign:"right"}}>{pct}%</span>
+                </div>
+              );
+            })}
+            {posEntries.length===0&&<p style={{color:"#94A3B8",fontSize:12,textAlign:"center",padding:"16px 0"}}>데이터 없음</p>}
+          </div>
+        </div>
+      </div>
+
+      {/* ── 본사 조직도 ── */}
+      <div style={CARD}>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
+          <span style={{fontSize:15}}>🏛</span>
+          <span style={{fontSize:13,fontWeight:800,color:"#1E293B"}}>본사 조직도</span>
+          <span style={{fontSize:11,color:"#94A3B8",marginLeft:"auto"}}>{hqOrgNodes.length}명</span>
+          <button onClick={()=>setShowHqOrg(v=>!v)}
+            style={{background:"#EEF2F7",border:"none",borderRadius:7,padding:"5px 12px",
+              fontSize:11,fontWeight:700,color:"#64748B",cursor:"pointer"}}>
+            {showHqOrg?"접기":"펼치기"}
+          </button>
+          <button onClick={autoGenHq}
+            style={{background:"linear-gradient(90deg,#6C63FF,#9F7AEA)",border:"none",borderRadius:7,
+              padding:"5px 12px",fontSize:11,fontWeight:700,color:"#fff",cursor:"pointer"}}>
+            🔄 자동생성
+          </button>
+          <button onClick={()=>setHqModal({mode:"add",parentId:""})}
+            style={{background:"#6C63FF",border:"none",borderRadius:7,padding:"5px 12px",
+              fontSize:11,fontWeight:700,color:"#fff",cursor:"pointer"}}>+ 추가</button>
+        </div>
+
+        {showHqOrg&&(
+          hqRoots.length===0?(
+            <div style={{textAlign:"center",padding:"30px 0",color:"#94A3B8"}}>
+              <p style={{fontSize:13,margin:"0 0 8px"}}>본사 조직도가 비어있습니다.</p>
+              <p style={{fontSize:11,margin:0}}>🔄 자동생성 또는 + 추가로 시작하세요.</p>
+            </div>
+          ):(
+            <div style={{overflowX:"auto",padding:"8px 0"}}>
+              <div style={{display:"flex",gap:24,justifyContent:"center",alignItems:"flex-start",minWidth:"max-content"}}>
+                {hqRoots.map(n=><HqNodeCard key={n.id} n={n} depth={0}/>)}
+              </div>
+            </div>
+          )
         )}
       </div>
-    </div>}
 
-    {/* KPI 카드 */}
-    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12}}>
-      {[
-        {label:"총 등록 인원",val:total,unit:"명",color:"#6C63FF",bg:"#EDE9FE",icon:"👥"},
-        {label:"정규직",val:regular,unit:"명",color:"#22C55E",bg:"#F0FDF4",icon:"🏷"},
-        {label:"비정규직",val:irregular,unit:"명",color:"#F59E0B",bg:"#FEF3C7",icon:"📋"},
-        {label:"본사 인원",val:headOffice,unit:"명",color:"#6366F1",bg:"#EEF2FF",icon:"🏢"},
-        {label:"현장 인원",val:siteStaff,unit:"명",color:"#0EA5E9",bg:"#F0F9FF",icon:"🏗"},
-        {label:"인력부족 현장",val:totalShortage,unit:"개소",color:totalShortage>0?"#DC2626":"#6B7280",bg:totalShortage>0?"#FEF2F2":"#F9FAFB",icon:"⚠️"},
-      ].map(k=><div key={k.label} style={{...cardStyle,background:k.bg,border:"none",display:"flex",alignItems:"center",gap:12,padding:"16px 18px"}}>
-        <div style={{fontSize:26}}>{k.icon}</div>
-        <div>
-          <p style={{margin:0,fontSize:10,color:k.color,fontWeight:700}}>{k.label}</p>
-          <p style={{margin:"2px 0 0",fontSize:24,fontWeight:800,color:k.color}}>{k.val}<span style={{fontSize:12,fontWeight:600}}> {k.unit}</span></p>
-        </div>
-      </div>)}
-    </div>
-
-    {/* 직종별 + 직군별 */}
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
-      <SEC title="직종별 인원 현황" accent="#3B82F6">
-        <div style={{display:"flex",flexDirection:"column",gap:7}}>
-          {JOB_TYPES_ORDER.filter(j=>byJobType[j]>0).map(j=>{
-            const cnt=byJobType[j]; const pct=total?Math.round(cnt/total*100):0;
-            const gc=getGroupColor(mapJobTypeToRoleGroup(j,""));
-            return <div key={j}>
-              <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
-                <span style={{fontSize:12,fontWeight:700,color:gc}}>{j}</span>
-                <span style={{fontSize:12,fontWeight:800,color:"#2D3748"}}>{cnt}명 <span style={{fontSize:10,color:"#A0AEC0"}}>({pct}%)</span></span>
-              </div>
-              <div style={{height:7,borderRadius:4,background:"#EEF2F7",overflow:"hidden"}}>
-                <div style={{height:"100%",width:`${pct}%`,background:gc,borderRadius:4}}/>
-              </div>
-            </div>;
-          })}
-          {Object.values(byJobType).every(v=>v===0)&&<p style={{textAlign:"center",color:"#A0AEC0",fontSize:13}}>데이터 없음</p>}
-        </div>
-      </SEC>
-
-      <SEC title="직군별 인원 현황" accent="#6C63FF">
-        <div style={{display:"flex",flexDirection:"column",gap:7}}>
-          {ORG_GROUPS.filter(g=>byGroup[g.label]>0).map(g=>{
-            const cnt=byGroup[g.label]; const pct=total?Math.round(cnt/total*100):0;
-            return <div key={g.label}>
-              <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
-                <span style={{fontSize:12,fontWeight:700,color:g.color}}>{g.label}</span>
-                <span style={{fontSize:12,fontWeight:800,color:"#2D3748"}}>{cnt}명 <span style={{fontSize:10,color:"#A0AEC0"}}>({pct}%)</span></span>
-              </div>
-              <div style={{height:7,borderRadius:4,background:"#EEF2F7",overflow:"hidden"}}>
-                <div style={{height:"100%",width:`${pct}%`,background:g.color,borderRadius:4}}/>
-              </div>
-            </div>;
-          })}
-          {total===0&&<p style={{textAlign:"center",color:"#A0AEC0",fontSize:13}}>데이터 없음</p>}
-        </div>
-      </SEC>
-    </div>
-
-    {/* 직위별 + 사원구분 */}
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
-      <SEC title="직위별 인원 현황" accent="#0EA5E9">
-        <div style={{display:"flex",flexDirection:"column",gap:5}}>
-          {sortedPos.map(([pos,cnt])=>{
-            const pct=total?Math.round(cnt/total*100):0;
-            return <div key={pos} style={{display:"flex",alignItems:"center",gap:10}}>
-              <span style={{fontSize:12,color:"#4A5568",fontWeight:600,width:72,flexShrink:0}}>{pos}</span>
-              <div style={{flex:1,height:7,borderRadius:4,background:"#EEF2F7",overflow:"hidden"}}>
-                <div style={{height:"100%",width:`${pct}%`,background:"#6C63FF",borderRadius:4}}/>
-              </div>
-              <span style={{fontSize:12,fontWeight:800,color:"#6C63FF",minWidth:32,textAlign:"right"}}>{cnt}명</span>
-            </div>;
-          })}
-          {sortedPos.length===0&&<p style={{textAlign:"center",color:"#A0AEC0",fontSize:13}}>데이터 없음</p>}
-        </div>
-      </SEC>
-      <SEC title="사원구분 현황" accent="#22C55E">
-        <div style={{display:"flex",gap:12,marginBottom:16}}>
-          {empTypes.map(([label,cnt,color,bg])=><div key={label} style={{flex:1,background:bg,borderRadius:10,padding:"14px 16px",textAlign:"center"}}>
-            <p style={{margin:0,fontSize:11,fontWeight:700,color}}>{label}</p>
-            <p style={{margin:"6px 0 0",fontSize:28,fontWeight:800,color}}>{cnt}<span style={{fontSize:13}}> 명</span></p>
-            <p style={{margin:"4px 0 0",fontSize:11,color,opacity:0.8}}>{total?Math.round(cnt/total*100):0}%</p>
-          </div>)}
-        </div>
-        <div style={{display:"flex",gap:10}}>
-          {[["본사",headOffice,"#6366F1","#EEF2FF"],["현장",siteStaff,"#0EA5E9","#F0F9FF"]].map(([label,cnt,color,bg])=><div key={label} style={{flex:1,background:bg,borderRadius:8,padding:"10px 12px",textAlign:"center"}}>
-            <p style={{margin:0,fontSize:10,fontWeight:700,color}}>{label}</p>
-            <p style={{margin:"4px 0 0",fontSize:20,fontWeight:800,color}}>{cnt}<span style={{fontSize:11}}> 명</span></p>
-          </div>)}
-        </div>
-      </SEC>
-    </div>
-
-    {/* 현장별 인원현황 */}
-    <SEC title="현장별 배치 인원 현황 (인원 DB 부서명 기준)" accent="#F59E0B">
-      {siteStats.every(s=>s.total===0)
-        ?<p style={{textAlign:"center",color:"#A0AEC0",fontSize:13}}>배치된 인원이 없습니다. 인원의 부서명을 현장명과 동일하게 입력하세요.</p>
-        :<div style={{display:"flex",flexDirection:"column",gap:10}}>
-          {siteStats.filter(s=>s.total>0).map(({site,total:tot,regular:r,irregular:ir,byGrp,shortage})=><div key={site.id}
-            style={{border:`1px solid ${shortage.length>0?"#FCA5A5":"#EEF2F7"}`,borderRadius:12,padding:"14px 16px",background:shortage.length>0?"#FFF5F5":"#FAFAFA"}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
-              <div>
-                <p style={{margin:0,fontSize:13,fontWeight:800,color:"#1A1A2E",display:"flex",alignItems:"center",gap:6}}>
-                  {site.name}
-                  {shortage.length>0&&<span style={{fontSize:9,padding:"1px 5px",borderRadius:4,background:"#EF4444",color:"#fff",fontWeight:700}}>인력부족</span>}
-                </p>
-                <p style={{margin:"2px 0 0",fontSize:11,color:"#718096"}}>{site.pm&&`PM: ${site.pm}`} {site.location&&`· ${site.location}`}</p>
-              </div>
-              <div style={{textAlign:"right"}}>
-                <p style={{margin:0,fontSize:22,fontWeight:800,color:"#6C63FF"}}>{tot}<span style={{fontSize:12}}> 명</span></p>
-                <p style={{margin:0,fontSize:10,color:"#718096"}}>정규 {r} · 비정규 {ir}</p>
-              </div>
+      {/* ── 본사 조직도 모달 ── */}
+      {hqModal&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:999,
+          display:"flex",alignItems:"center",justifyContent:"center",padding:16}}
+          onClick={()=>setHqModal(null)}>
+          <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:16,
+            width:"100%",maxWidth:380,boxShadow:"0 8px 40px rgba(0,0,0,0.18)",overflow:"hidden"}}>
+            <div style={{height:4,background:"linear-gradient(90deg,#6C63FF,#9F7AEA)"}}/>
+            <div style={{padding:"20px 22px"}}>
+              <h3 style={{margin:"0 0 16px",fontSize:14,fontWeight:800,color:"#1E293B"}}>
+                {hqModal.mode==="add"?"+ 노드 추가":"✏ 노드 수정"}
+              </h3>
+              {(()=>{
+                const init=hqModal.node||{};
+                const [fm,setFm]=React.useState({
+                  name:init.name||"",position:init.position||"",department:init.department||"",
+                  job_type:init.job_type||"",emp_type:init.emp_type||"정규직",
+                  rank:init.rank||"",age:init.age||"",phone:init.phone||"",memo:init.memo||""
+                });
+                const INP={width:"100%",border:"1px solid #CBD5E0",borderRadius:8,
+                  padding:"8px 10px",fontSize:12,outline:"none",boxSizing:"border-box"};
+                const fld=(label,key,placeholder)=>(
+                  <div key={key}>
+                    <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:3}}>{label}</label>
+                    <input value={fm[key]} onChange={e=>setFm(f=>({...f,[key]:e.target.value}))}
+                      placeholder={placeholder||""} style={INP}/>
+                  </div>
+                );
+                // 자동완성 후보 (본사 인원)
+                const suggest=fm.name.trim()
+                  ?hqPersonnel.filter(p=>p.name&&p.name.includes(fm.name.trim())).slice(0,5):[];
+                return(
+                  <div style={{display:"flex",flexDirection:"column",gap:9}}>
+                    <div style={{position:"relative"}}>
+                      <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:3}}>성명</label>
+                      <input value={fm.name} onChange={e=>{setFm(f=>({...f,name:e.target.value}));}}
+                        placeholder="인원 DB 자동완성" style={INP}/>
+                      {suggest.length>0&&(
+                        <div style={{position:"absolute",top:"100%",left:0,right:0,background:"#fff",
+                          border:"1px solid #CBD5E0",borderRadius:8,zIndex:50,maxHeight:160,overflowY:"auto",
+                          boxShadow:"0 4px 16px rgba(0,0,0,0.1)"}}>
+                          {suggest.map(p=>(
+                            <div key={p.id||p.name} onClick={()=>setFm(f=>({...f,
+                              name:p.name,position:p.position||f.position,department:p.department||f.department,
+                              job_type:p.job_type||f.job_type,emp_type:p.emp_type||f.emp_type,
+                              rank:p.rank||f.rank,age:p.age||f.age,phone:p.phone||f.phone}))}
+                              style={{padding:"7px 12px",cursor:"pointer",borderBottom:"1px solid #F1F5F9",
+                                fontSize:12,display:"flex",gap:8,alignItems:"center"}}
+                              onMouseEnter={e=>e.currentTarget.style.background="#F8F7FF"}
+                              onMouseLeave={e=>e.currentTarget.style.background="#fff"}>
+                              <strong>{p.name}</strong>
+                              <span style={{fontSize:10,color:"#94A3B8"}}>{[p.position,p.department].filter(Boolean).join(" · ")}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                      {fld("직위","position","본부장, 팀장...")}
+                      {fld("부서","department","경영지원팀...")}
+                      {fld("직종","job_type","건축, 관리...")}
+                      {fld("직급","rank","3급, 4급...")}
+                      {fld("나이","age","45")}
+                      {fld("연락처","phone","010-0000-0000")}
+                    </div>
+                    {fld("비고","memo","메모")}
+                    <div style={{display:"flex",gap:3,marginTop:2}}>
+                      {["정규직","비정규직"].map(t=>(
+                        <button key={t} onClick={()=>setFm(f=>({...f,emp_type:t}))}
+                          style={{flex:1,padding:"7px",borderRadius:8,border:`1px solid ${fm.emp_type===t?"#6C63FF":"#CBD5E0"}`,
+                            background:fm.emp_type===t?"#6C63FF":"#fff",
+                            color:fm.emp_type===t?"#fff":"#64748B",fontSize:11,fontWeight:700,cursor:"pointer"}}>{t}</button>
+                      ))}
+                    </div>
+                    <div style={{display:"flex",gap:8,marginTop:4}}>
+                      <button onClick={()=>setHqModal(null)}
+                        style={{flex:1,background:"#F7FAFC",border:"1px solid #CBD5E0",borderRadius:9,
+                          padding:"10px",fontSize:12,color:"#718096",cursor:"pointer",fontWeight:600}}>취소</button>
+                      <button onClick={()=>hqModal.mode==="add"?addHqNode(hqModal.parentId,fm):editHqNode(hqModal.node.id,fm)}
+                        style={{flex:2,background:"#6C63FF",border:"none",borderRadius:9,
+                          padding:"10px",fontSize:12,color:"#fff",cursor:"pointer",fontWeight:700}}>저장</button>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
-            <div style={{display:"flex",gap:3,height:8,borderRadius:4,overflow:"hidden",marginBottom:7}}>
-              {ORG_GROUPS.filter(g=>byGrp[g.label]>0).map(g=><div key={g.label}
-                title={`${g.label}: ${byGrp[g.label]}명`}
-                style={{flex:byGrp[g.label],background:g.color}}/>)}
-            </div>
-            <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
-              {ORG_GROUPS.filter(g=>byGrp[g.label]>0).map(g=><span key={g.label}
-                style={{fontSize:10,padding:"1px 7px",borderRadius:4,background:g.color+"22",color:g.color,fontWeight:700}}>{g.label} {byGrp[g.label]}</span>)}
-            </div>
-            {shortage.length>0&&<div style={{marginTop:8,display:"flex",flexDirection:"column",gap:3}}>
-              {shortage.map(sh=><p key={sh.group} style={{margin:0,fontSize:10,color:"#EF4444",fontWeight:600}}>
-                ⚠ {sh.group} 직군 인원 부족 (현재 {sh.current}명 / 최소 {sh.min}명)
-              </p>)}
-            </div>}
-          </div>)}
+          </div>
         </div>
-      }
-    </SEC>
-  </div>;
+      )}
+    </div>
+  );
 }
+
 
 function Reports({schedules,tasks}){
   const total=tasks.length;

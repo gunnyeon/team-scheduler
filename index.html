@@ -1585,8 +1585,9 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
     const isSelected=selectedId===n.id;
     const isMoveTarget=!!selectedId&&selectedId!==n.id;
 
-    // 하위 노드 전체 (직군 무관)
-    const rawChildren=nodes.filter(ch=>ch.parentId===n.id);
+    // 같은 직군(role_group)의 하위 노드만 표시
+    // 다른 직군 하위는 해당 직군 섹션에서 별도 렌더(🔗)되므로 여기서 제외
+    const rawChildren=nodes.filter(ch=>ch.parentId===n.id&&(ch.role_group||"기타")===(n.role_group||"기타"));
     // childOrder로 정렬된 하위 노드
     const orderList=childOrder[n.id]||[];
     const children=[

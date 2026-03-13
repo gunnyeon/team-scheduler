@@ -1295,9 +1295,12 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
   const [sectionOrder,setSectionOrder]=useState([]); // 직종 순서
   const [dragSec,setDragSec]=useState(null);
   const [dragOverSec,setDragOverSec]=useState(null);
-  const [rgOrder,setRgOrder]=useState({});    // 직군 순서: {jt: [rg,...]}
-  const [dragRg,setDragRg]=useState(null);    // 드래그 중 직군 {jt, rg}
-  const [dragOverRg,setDragOverRg]=useState(null); // 드롭 대상 직군 {jt, rg}
+  const [rgOrder,setRgOrder]=useState({});
+  const [dragRg,setDragRg]=useState(null);
+  const [dragOverRg,setDragOverRg]=useState(null);
+  const [childOrder,setChildOrder]=useState({}); // 형제 노드 순서: {parentId: [nodeId,...]}
+  const [dragChild,setDragChild]=useState(null); // 드래그 중인 노드 ID
+  const [dragOverChild,setDragOverChild]=useState(null); // 드롭 대상 노드 ID
   const [showPersonnelMgr,setShowPersonnelMgr]=useState(false);
   const [showAdminPw,setShowAdminPw]=useState(false);
   const [adminPwInput,setAdminPwInput]=useState("");
@@ -1531,10 +1534,65 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
   // ── NodeCard ──
   function NodeCard({n,depth}){
     const gc=getGroupColor(n.role_group||"기타");
-    const children=nodes.filter(ch=>ch.parentId===n.id)
-      .sort((a,b)=>positionSortKey(a.position)-positionSortKey(b.position));
     const isSelected=selectedId===n.id;
     const isMoveTarget=!!selectedId&&selectedId!==n.id;
+
+    // 하위 노드 전체 (직군 무관)
+    const rawChildren=nodes.filter(ch=>ch.parentId===n.id);
+    // childOrder로 정렬된 하위 노드
+    const orderList=childOrder[n.id]||[];
+    const children=[
+      ...orderList.map(id=>rawChildren.find(ch=>ch.id===id)).filter(Boolean),
+      ...rawChildren.filter(ch=>!orderList.includes(ch.id))
+        .sort((a,b)=>positionSortKey(a.position)-positionSortKey(b.position))
+    ];
+
+    // 형제 드래그 핸들러 (이 노드를 형제들 사이에서 이동)
+    function handleChildDragMouseDown(e, childId){
+      e.stopPropagation();
+      e.preventDefault();
+      setDragChild(childId);
+      let currentOver=null;
+
+      function onMove(ev){
+        const els=document.elementsFromPoint(ev.clientX,ev.clientY);
+        let found=null;
+        for(const el of els){
+          if(el.dataset&&el.dataset.childid&&
+             el.dataset.parentid===n.id&&
+             el.dataset.childid!==childId){
+            found=el.dataset.childid;
+            break;
+          }
+        }
+        if(found!==currentOver){
+          currentOver=found;
+          setDragOverChild(found||null);
+        }
+      }
+
+      function onUp(){
+        document.removeEventListener("mousemove",onMove);
+        document.removeEventListener("mouseup",onUp);
+        const target=currentOver;
+        setDragChild(null);
+        setDragOverChild(null);
+        if(!target||target===childId)return;
+        setChildOrder(prev=>{
+          const cur=children.map(ch=>ch.id);
+          const fi=cur.indexOf(childId);
+          const ti=cur.indexOf(target);
+          if(fi<0||ti<0)return prev;
+          const next=[...cur];
+          next.splice(fi,1);
+          next.splice(ti,0,childId);
+          return {...prev,[n.id]:next};
+        });
+      }
+
+      document.addEventListener("mousemove",onMove);
+      document.addEventListener("mouseup",onUp);
+    }
 
     return(
       <div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
@@ -1560,6 +1618,15 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
             color:"#fff",fontSize:8,fontWeight:700,padding:"1px 4px",borderRadius:4,pointerEvents:"none"}}>
             {n.job_type}
           </div>}
+          {/* 종속 표시: 부모가 다른 직군이면 작은 링크 아이콘 */}
+          {n.parentId&&n.parentId!==""&&(()=>{
+            const par=nodes.find(p=>p.id===n.parentId);
+            if(par&&(par.role_group||"기타")!==(n.role_group||"기타")){
+              return <div style={{position:"absolute",top:4,left:4,fontSize:8,
+                color:"#A0AEC0",pointerEvents:"none"}} title={`상위: ${par.name}`}>🔗</div>;
+            }
+            return null;
+          })()}
           {/* 선택 체크 */}
           {isSelected&&<div style={{position:"absolute",top:-8,right:-8,width:18,height:18,
             background:"#6C63FF",borderRadius:"50%",display:"flex",alignItems:"center",
@@ -1601,7 +1668,44 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
           <div style={{display:"flex",gap:14,alignItems:"flex-start",position:"relative"}}>
             {children.length>1&&<div style={{position:"absolute",top:0,left:"50%",
               width:"calc(100% - 80px)",height:2,background:"#CBD5E0",transform:"translateX(-50%)"}}/>}
-            {children.map(k=><NodeCard key={k.id} n={k} depth={depth+1}/>)}
+            {children.map(k=>{
+              const isDraggingK=dragChild===k.id;
+              const isOverK=dragOverChild===k.id;
+              const gcK=getGroupColor(k.role_group||"기타");
+              return(
+                <div key={k.id}
+                  data-childid={k.id}
+                  data-parentid={n.id}
+                  style={{
+                    display:"flex",flexDirection:"column",alignItems:"center",
+                    opacity:isDraggingK?0.3:1,
+                    outline:isOverK?`3px dashed ${gcK}`:"3px solid transparent",
+                    outlineOffset:6,borderRadius:12,
+                    transition:"opacity 0.1s",
+                  }}>
+                  {/* 드래그 핸들 (형제가 2명 이상일 때만) */}
+                  {children.length>1&&(
+                    <div
+                      onMouseDown={e=>handleChildDragMouseDown(e,k.id)}
+                      title="드래그하여 순서 변경"
+                      style={{
+                        fontSize:10,color:gcK,marginBottom:4,
+                        padding:"2px 10px",borderRadius:6,
+                        background:isDraggingK?gcK+"33":gcK+"11",
+                        border:`1px dashed ${gcK}55`,
+                        cursor:"grab",userSelect:"none",
+                        display:"flex",alignItems:"center",gap:4,
+                        transform:isDraggingK?"scale(1.05)":"scale(1)",
+                        transition:"all 0.1s",
+                      }}>
+                      <span style={{letterSpacing:-2,opacity:0.6}}>⠿⠿</span>
+                      <span style={{fontSize:9,fontWeight:700}}>{k.role_group||k.job_type||"노드"}</span>
+                    </div>
+                  )}
+                  <NodeCard n={k} depth={depth+1}/>
+                </div>
+              );
+            })}
           </div>
         </>}
       </div>
@@ -1634,34 +1738,41 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
       </div>
     );
 
-    // ── 트리 구조 계산 ──
     const nodeIds=new Set(nodes.map(n=>n.id));
-    const roots=nodes.filter(n=>!n.parentId||n.parentId===""||!nodeIds.has(n.parentId));
 
-    // 현장소장
-    const managers=roots.filter(n=>n.role_group==="현장소장")
+    // ── 현장소장 (role_group="현장소장") ──
+    const managers=nodes.filter(n=>n.role_group==="현장소장")
       .sort((a,b)=>positionSortKey(a.position)-positionSortKey(b.position));
 
-    // 나머지 → job_type 별 분류
+    // ── 직군별로 모든 노드 분류 (종속 여부 무관) ──
+    // 단, 각 직군 섹션에는 해당 직군의 "루트"만 표시
+    // 루트 기준: ① parentId 없음 ② parentId의 role_group이 다른 직군
     const JT_ORDER2=["건축","기계","전기","안전","품질","관리","토목","기타"];
-    const others=roots.filter(n=>n.role_group!=="현장소장");
+    const nonMgr=nodes.filter(n=>n.role_group!=="현장소장");
+
+    // job_type → role_group 별 전체 노드 맵
     const byJT2={};
-    others.forEach(n=>{const jt=n.job_type||"기타";if(!byJT2[jt])byJT2[jt]=[];byJT2[jt].push(n);});
+    nonMgr.forEach(n=>{
+      const jt=n.job_type||"기타";
+      if(!byJT2[jt])byJT2[jt]={};
+      const rg=n.role_group||"기타";
+      if(!byJT2[jt][rg])byJT2[jt][rg]=[];
+      byJT2[jt][rg].push(n);
+    });
+
     const allJTs=[...new Set([...JT_ORDER2,...Object.keys(byJT2)])].filter(jt=>byJT2[jt]);
-    // 직종 순서 적용
     const orderedJTs=sectionOrder.length>0
       ?[...sectionOrder.filter(jt=>allJTs.includes(jt)),...allJTs.filter(jt=>!sectionOrder.includes(jt))]
       :allJTs;
 
     // ── 직군 드래그 핸들러 ──
-    function handleRgMouseDown(e, jt, rg){
+    function handleRgMouseDown(e,jt,rg){
       e.stopPropagation();
       e.preventDefault();
       setDragRg({jt,rg});
       let currentOverRg=null;
 
       function onMove(ev){
-        // 마우스 아래 요소들에서 data-rg, data-rgjt 속성 찾기
         const els=document.elementsFromPoint(ev.clientX,ev.clientY);
         let found=null;
         for(const el of els){
@@ -1670,7 +1781,9 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
             break;
           }
         }
-        if(JSON.stringify(found)!==JSON.stringify(currentOverRg)){
+        const fs=found?found.rg+"|"+found.jt:"null";
+        const cs=currentOverRg?currentOverRg.rg+"|"+currentOverRg.jt:"null";
+        if(fs!==cs){
           currentOverRg=found;
           setDragOverRg(found);
         }
@@ -1683,14 +1796,12 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
         setDragRg(null);
         setDragOverRg(null);
         if(!target||target.rg===rg||target.jt!==jt)return;
-        // 순서 변경
         setRgOrder(prev=>{
-          const prevOrder=prev[jt];
-          // 현재 직군 목록 (순서 적용 전)
-          const allRgs=Object.keys(byJT2[jt].reduce((m,n)=>{
-            const r=n.role_group||"기타"; m[r]=1; return m;
-          },{}));
-          const base=prevOrder?[...prevOrder.filter(r=>allRgs.includes(r)),...allRgs.filter(r=>!prevOrder.includes(r))]:allRgs;
+          const allRgs=Object.keys(byJT2[jt]||{});
+          const prevOrder=prev[jt]||[];
+          const base=prevOrder.length>0
+            ?[...prevOrder.filter(r=>allRgs.includes(r)),...allRgs.filter(r=>!prevOrder.includes(r))]
+            :allRgs;
           const fi=base.indexOf(rg);
           const ti=base.indexOf(target.rg);
           if(fi<0||ti<0)return prev;
@@ -1705,6 +1816,24 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
       document.addEventListener("mouseup",onUp);
     }
 
+    // ── renderRgNodes: 직군 섹션의 루트 노드 결정 ──
+    // 이 직군의 노드 중 "같은 직군 부모가 없는" 노드만 최상위로 표시
+    // - 부모 없음 → 루트
+    // - 부모가 다른 직군 → 이 직군에서 루트 (🔗 아이콘 표시)
+    // - 부모가 같은 직군 → NodeCard 재귀로 처리 (여기서 표시 안 함)
+    function renderRgNodes(rgNodes){
+      const rgRoots=rgNodes.filter(n=>{
+        if(!n.parentId||n.parentId==="")return true;       // 부모 없음
+        if(!nodeIds.has(n.parentId))return true;            // 부모가 이 현장에 없음
+        const parent=nodes.find(p=>p.id===n.parentId);
+        if(!parent)return true;
+        // 부모가 다른 직군이면 이 직군의 루트로 표시
+        return (parent.role_group||"기타")!==(n.role_group||"기타");
+      }).sort((a,b)=>positionSortKey(a.position)-positionSortKey(b.position));
+
+      return rgRoots.map(n=><NodeCard key={n.id} n={n} depth={0}/>);
+    }
+
     return(
       <div style={{padding:"32px 40px",minWidth:"max-content",minHeight:"100%"}}
         onClick={e=>{if(selectedId&&e.target===e.currentTarget)setSelectedId(null);}}>
@@ -1712,9 +1841,10 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
         {/* 현장소장 */}
         {managers.length>0&&(
           <div style={{marginBottom:24,display:"flex",flexDirection:"column",alignItems:"center"}}>
-            <div style={{fontSize:11,fontWeight:800,color:"#6C63FF",
-              padding:"3px 14px",borderRadius:12,background:"#EDE9FE",
-              border:"1px solid #C4B5FD",marginBottom:12}}>현장소장</div>
+            <div style={{fontSize:11,fontWeight:800,color:"#6C63FF",padding:"3px 14px",
+              borderRadius:12,background:"#EDE9FE",border:"1px solid #C4B5FD",marginBottom:12}}>
+              현장소장
+            </div>
             <div style={{display:"flex",gap:16,justifyContent:"center",flexWrap:"wrap"}}>
               {managers.map(n=><NodeCard key={n.id} n={n} depth={0}/>)}
             </div>
@@ -1726,27 +1856,24 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
         )}
 
         {/* 안내 문구 */}
-        <div style={{textAlign:"center",marginBottom:14}}>
-          <span style={{fontSize:10,color:"#A0AEC0",background:"#F8FAFC",
-            border:"1px solid #E2E8F0",borderRadius:6,padding:"3px 10px",userSelect:"none"}}>
-            ✥ 직군 헤더(공사, 공무, 안전 등)를 드래그하여 좌우 순서 변경
-          </span>
-        </div>
+        {orderedJTs.some(jt=>Object.keys(byJT2[jt]||{}).length>1)&&(
+          <div style={{textAlign:"center",marginBottom:14}}>
+            <span style={{fontSize:10,color:"#A0AEC0",background:"#F8FAFC",
+              border:"1px solid #E2E8F0",borderRadius:6,padding:"3px 10px",userSelect:"none"}}>
+              ✥ 직군 헤더(⠿⠿ 공사, 안전 등)를 드래그하여 좌우 순서 변경
+            </span>
+          </div>
+        )}
 
         {/* 직종별 섹션 */}
         <div style={{display:"flex",gap:32,alignItems:"flex-start",flexWrap:"wrap",justifyContent:"center"}}>
           {orderedJTs.map(jt=>{
-            const jtNodes=byJT2[jt];
-            // role_group 분류
-            const byRG2={};
-            jtNodes.forEach(n=>{const rg=n.role_group||"기타";if(!byRG2[rg])byRG2[rg]=[];byRG2[rg].push(n);});
-            const allRgs=Object.keys(byRG2);
-            // 직군 순서 적용
+            const rgMap=byJT2[jt]||{};
+            const allRgs=Object.keys(rgMap);
             const prevRgOrder=rgOrder[jt]||[];
             const orderedRgs=prevRgOrder.length>0
               ?[...prevRgOrder.filter(r=>allRgs.includes(r)),...allRgs.filter(r=>!prevRgOrder.includes(r))]
               :allRgs;
-
             const gcJT=getGroupColor(mapJobTypeToRoleGroup(jt,""));
 
             return(
@@ -1757,12 +1884,10 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
                   {jt}직
                 </div>
 
-                {/* 직군 목록 - 가로 배치, 드래그 가능 */}
-                <div style={{display:"flex",gap:16,alignItems:"flex-start",flexWrap:"wrap",justifyContent:"center"}}>
+                {/* 직군 목록 */}
+                <div style={{display:"flex",gap:20,alignItems:"flex-start",flexWrap:"wrap",justifyContent:"center"}}>
                   {orderedRgs.map(rg=>{
                     const gcRG=getGroupColor(rg);
-                    const sortedRg=[...byRG2[rg]]
-                      .sort((a,b)=>positionSortKey(a.position)-positionSortKey(b.position));
                     const isDraggingThisRg=dragRg&&dragRg.jt===jt&&dragRg.rg===rg;
                     const isDropTargetRg=dragOverRg&&dragOverRg.jt===jt&&dragOverRg.rg===rg;
 
@@ -1774,8 +1899,7 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
                           display:"flex",flexDirection:"column",alignItems:"center",
                           opacity:isDraggingThisRg?0.35:1,
                           outline:isDropTargetRg?`3px dashed ${gcRG}`:"3px solid transparent",
-                          outlineOffset:8,
-                          borderRadius:12,
+                          outlineOffset:8,borderRadius:12,
                           transition:"opacity 0.1s",
                         }}>
                         {/* 직군 헤더 - 드래그 핸들 */}
@@ -1785,21 +1909,25 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
                             fontSize:10,fontWeight:700,color:gcRG,marginBottom:8,
                             padding:"5px 14px",borderRadius:10,
                             background:isDraggingThisRg?gcRG+"44":isDropTargetRg?gcRG+"33":gcRG+"18",
-                            border:`2px solid ${isDraggingThisRg?gcRG:isDropTargetRg?gcRG:gcRG+"44"}`,
-                            cursor:"grab",userSelect:"none",
+                            border:`2px solid ${isDraggingThisRg||isDropTargetRg?gcRG:gcRG+"44"}`,
+                            cursor:allRgs.length>1?"grab":"default",
+                            userSelect:"none",
                             display:"flex",alignItems:"center",gap:5,
                             boxShadow:isDraggingThisRg?"0 4px 12px rgba(0,0,0,0.18)":"none",
                             transform:isDraggingThisRg?"scale(1.06) translateY(-2px)":"scale(1)",
                             transition:"all 0.1s",
                           }}>
-                          <span style={{fontSize:12,opacity:0.55,letterSpacing:-2}}>⠿⠿</span>
+                          {allRgs.length>1&&<span style={{fontSize:12,opacity:0.55,letterSpacing:-2}}>⠿⠿</span>}
                           {rg}
+                          <span style={{fontSize:9,color:gcRG,opacity:0.7,fontWeight:600}}>
+                            ({rgMap[rg].length}명)
+                          </span>
                         </div>
 
-                        {/* 인원 노드 */}
+                        {/* 노드 트리 */}
                         <div style={{display:"flex",gap:10,alignItems:"flex-start",
                           flexWrap:"wrap",justifyContent:"center"}}>
-                          {sortedRg.map(n=><NodeCard key={n.id} n={n} depth={0}/>)}
+                          {renderRgNodes(rgMap[rg])}
                         </div>
                       </div>
                     );
@@ -1836,6 +1964,7 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
       </div>
     );
   }
+
 
 
 
@@ -2090,10 +2219,10 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
           <div ref={canvasRef}
             onMouseDown={e=>{
               if(e.button!==0||selectedId||modalForm)return;
-              // 드래그 핸들 요소(data-rg, data-secjt) 위에서는 패닝 차단
+              // 드래그 핸들 요소(data-rg, data-secjt, data-childid) 위에서는 패닝 차단
               let el=e.target;
               while(el&&el!==canvasRef.current){
-                if(el.dataset&&(el.dataset.secjt||el.dataset.rg))return;
+                if(el.dataset&&(el.dataset.secjt||el.dataset.rg||el.dataset.childid))return;
                 el=el.parentElement;
               }
               isDragging.current=true;

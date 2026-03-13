@@ -1633,51 +1633,48 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
 
     const nodeIds=new Set(nodes.map(n=>n.id));
     const roots=nodes.filter(n=>!n.parentId||n.parentId===""||!nodeIds.has(n.parentId));
-
     const JT_ORDER2=["건축","기계","전기","안전","품질","관리","토목","기타"];
     const managers=roots.filter(n=>n.role_group==="현장소장")
       .sort((a,b)=>positionSortKey(a.position)-positionSortKey(b.position));
     const others=roots.filter(n=>n.role_group!=="현장소장");
-
-    // job_type 섹션화
     const byJT2={};
     others.forEach(n=>{const jt=n.job_type||"기타";if(!byJT2[jt])byJT2[jt]=[];byJT2[jt].push(n);});
     const allJTs=[...new Set([...JT_ORDER2,...Object.keys(byJT2)])].filter(jt=>byJT2[jt]);
-
-    // sectionOrder로 순서 결정 (없으면 기본 순서)
     const orderedJTs=sectionOrder.length>0
-      ? [...sectionOrder.filter(jt=>allJTs.includes(jt)), ...allJTs.filter(jt=>!sectionOrder.includes(jt))]
-      : allJTs;
+      ?[...sectionOrder.filter(jt=>allJTs.includes(jt)),...allJTs.filter(jt=>!sectionOrder.includes(jt))]
+      :allJTs;
 
-    // 드래그 핸들러
+    // ── 섹션 드래그 핸들러 ──
+    // HTML5 drag & drop (캔버스 패닝과 분리)
     function onSecDragStart(e,jt){
+      e.stopPropagation();
       setDragSec(jt);
       e.dataTransfer.effectAllowed="move";
-      e.dataTransfer.setData("text/plain",jt);
+      e.dataTransfer.setData("text/jt",jt);
     }
     function onSecDragOver(e,jt){
       e.preventDefault();
-      e.dataTransfer.dropEffect="move";
+      e.stopPropagation();
       if(jt!==dragSec)setDragOverSec(jt);
     }
-    function onSecDragEnd(){
-      setDragSec(null);
-      setDragOverSec(null);
+    function onSecDragLeave(jt){
+      if(dragOverSec===jt)setDragOverSec(null);
     }
     function onSecDrop(e,targetJt){
       e.preventDefault();
-      if(!dragSec||dragSec===targetJt){setDragSec(null);setDragOverSec(null);return;}
-      const cur=orderedJTs.filter(jt=>allJTs.includes(jt));
-      const fromIdx=cur.indexOf(dragSec);
-      const toIdx=cur.indexOf(targetJt);
-      if(fromIdx<0||toIdx<0){setDragSec(null);setDragOverSec(null);return;}
-      const next=[...cur];
-      next.splice(fromIdx,1);
-      next.splice(toIdx,0,dragSec);
-      setSectionOrder(next);
-      setDragSec(null);
-      setDragOverSec(null);
+      e.stopPropagation();
+      const from=dragSec;
+      setDragSec(null);setDragOverSec(null);
+      if(!from||from===targetJt)return;
+      const cur=[...orderedJTs];
+      const fi=cur.indexOf(from);
+      const ti=cur.indexOf(targetJt);
+      if(fi<0||ti<0)return;
+      cur.splice(fi,1);
+      cur.splice(ti,0,from);
+      setSectionOrder(cur);
     }
+    function onSecDragEnd(){setDragSec(null);setDragOverSec(null);}
 
     return(
       <div style={{padding:"32px 40px",minWidth:"max-content",minHeight:"100%"}}
@@ -1696,20 +1693,19 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
         )}
 
         {managers.length>0&&orderedJTs.length>0&&(
-          <div style={{height:2,background:"linear-gradient(90deg,transparent,#CBD5E0,transparent)",marginBottom:24}}/>
+          <div style={{height:2,background:"linear-gradient(90deg,transparent,#CBD5E0,transparent)",marginBottom:20}}/>
         )}
 
-        {/* 드래그 순서변경 안내 */}
         {orderedJTs.length>1&&(
-          <div style={{textAlign:"center",marginBottom:12}}>
+          <div style={{textAlign:"center",marginBottom:14}}>
             <span style={{fontSize:10,color:"#A0AEC0",background:"#F8FAFC",
               border:"1px solid #E2E8F0",borderRadius:6,padding:"3px 10px"}}>
-              ☰ 직종 섹션 헤더를 드래그해서 순서를 바꿀 수 있습니다
+              ☰ 직종 헤더를 드래그하여 순서 변경
             </span>
           </div>
         )}
 
-        {/* 직종별 섹션 (드래그 가능) */}
+        {/* 직종별 섹션 */}
         <div style={{display:"flex",gap:24,alignItems:"flex-start",flexWrap:"wrap",justifyContent:"center"}}>
           {orderedJTs.map(jt=>{
             const jtNodes=byJT2[jt];
@@ -1717,42 +1713,48 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
             jtNodes.forEach(n=>{const rg=n.role_group||"기타";if(!byRG2[rg])byRG2[rg]=[];byRG2[rg].push(n);});
             const gcJT=getGroupColor(mapJobTypeToRoleGroup(jt,""));
             const isDraggingThis=dragSec===jt;
-            const isDropTarget=dragOverSec===jt;
+            const isDropTarget=dragOverSec===jt&&dragSec!==jt;
 
             return(
               <div key={jt}
-                draggable
-                onDragStart={e=>onSecDragStart(e,jt)}
                 onDragOver={e=>onSecDragOver(e,jt)}
-                onDragEnd={onSecDragEnd}
+                onDragLeave={()=>onSecDragLeave(jt)}
                 onDrop={e=>onSecDrop(e,jt)}
                 style={{
                   display:"flex",flexDirection:"column",alignItems:"center",
-                  opacity:isDraggingThis?0.45:1,
-                  transform:isDropTarget?"scale(1.03)":"scale(1)",
-                  transition:"transform 0.15s, opacity 0.15s",
-                  outline:isDropTarget?`2px dashed ${gcJT}`:"none",
-                  outlineOffset:8,
-                  borderRadius:12,
+                  opacity:isDraggingThis?0.4:1,
+                  outline:isDropTarget?`2px dashed ${gcJT}`:"2px solid transparent",
+                  outlineOffset:10,borderRadius:14,padding:4,
+                  transition:"opacity 0.15s",
                 }}>
-                {/* 직종 헤더 (드래그 핸들) */}
-                <div style={{fontSize:11,fontWeight:800,color:gcJT,marginBottom:10,
-                  padding:"5px 16px",borderRadius:12,background:gcJT+"18",border:`1px solid ${gcJT}55`,
-                  cursor:"grab",userSelect:"none",display:"flex",alignItems:"center",gap:5}}>
-                  <span style={{fontSize:12,opacity:0.5}}>⠿</span>
+                {/* 드래그 핸들 헤더 */}
+                <div
+                  draggable="true"
+                  onDragStart={e=>onSecDragStart(e,jt)}
+                  onDragEnd={onSecDragEnd}
+                  style={{fontSize:11,fontWeight:800,color:gcJT,marginBottom:10,
+                    padding:"5px 16px",borderRadius:12,background:gcJT+"18",
+                    border:`1px solid ${gcJT}55`,
+                    cursor:"grab",userSelect:"none",
+                    display:"flex",alignItems:"center",gap:6}}>
+                  <span style={{fontSize:13,opacity:0.6,letterSpacing:-1}}>⠿⠿</span>
                   {jt}직
                 </div>
-                <div style={{display:"flex",gap:14,alignItems:"flex-start",flexWrap:"wrap",justifyContent:"center"}}>
+                <div style={{display:"flex",gap:14,alignItems:"flex-start",
+                  flexWrap:"wrap",justifyContent:"center"}}>
                   {Object.entries(byRG2).map(([rg2,rgNodes])=>{
                     const gcRG=getGroupColor(rg2);
-                    const sortedRg=[...rgNodes].sort((a,b)=>positionSortKey(a.position)-positionSortKey(b.position));
+                    const sortedRg=[...rgNodes]
+                      .sort((a,b)=>positionSortKey(a.position)-positionSortKey(b.position));
                     return(
                       <div key={rg2} style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
                         <div style={{fontSize:10,fontWeight:700,color:gcRG,marginBottom:8,
-                          padding:"2px 10px",borderRadius:8,background:gcRG+"14",border:`1px solid ${gcRG}33`}}>
+                          padding:"2px 10px",borderRadius:8,
+                          background:gcRG+"14",border:`1px solid ${gcRG}33`}}>
                           {rg2}
                         </div>
-                        <div style={{display:"flex",gap:10,alignItems:"flex-start",flexWrap:"wrap",justifyContent:"center"}}>
+                        <div style={{display:"flex",gap:10,alignItems:"flex-start",
+                          flexWrap:"wrap",justifyContent:"center"}}>
                           {sortedRg.map(n=><NodeCard key={n.id} n={n} depth={0}/>)}
                         </div>
                       </div>
@@ -1774,7 +1776,7 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
             <button onClick={e=>{
               e.stopPropagation();
               const moving=nodes.find(n=>n.id===selectedId);
-              if(moving){onOrgSave({...moving,parentId:"",is_manual:"true"});}
+              if(moving)onOrgSave({...moving,parentId:"",is_manual:"true"});
               setSelectedId(null);
             }} style={{background:"#6C63FF",border:"none",borderRadius:8,
               padding:"4px 12px",color:"#fff",fontSize:11,cursor:"pointer",fontWeight:700}}>
@@ -1792,122 +1794,130 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
   }
 
 
+
   // ── 인원현황 패널 ──
   function StatsPanel(){
-    // 직종별 집계
+    // 집계
+    const reg=nodes.filter(n=>!n.emp_type||n.emp_type==="정규직").length;
+    const irr=nodes.filter(n=>n.emp_type==="비정규직").length;
     const byJT3={};
     nodes.forEach(n=>{const jt=n.job_type||"기타";byJT3[jt]=(byJT3[jt]||0)+1;});
-    // 직위별 집계
     const posMap3={};
     nodes.forEach(n=>{const pos=n.position||"미지정";posMap3[pos]=(posMap3[pos]||0)+1;});
     const sortedPos=Object.entries(posMap3).sort((a,b)=>positionSortKey(a[0])-positionSortKey(b[0]));
-    // 사원구분
-    const reg=nodes.filter(n=>!n.emp_type||n.emp_type==="정규직").length;
-    const irr=nodes.filter(n=>n.emp_type==="비정규직").length;
-    // 인력부족 직군 수
-    const shortCount=ORG_GROUPS.filter(g=>(minStaffMap[g.label]||0)>0&&byGroup[g.label]<(minStaffMap[g.label]||0)).length;
-    const totalMin=ORG_GROUPS.reduce((s,g)=>s+(minStaffMap[g.label]||0),0);
-    const totalShort=ORG_GROUPS.reduce((s,g)=>{
+
+    // 인력부족 종합
+    const totalShortage=ORG_GROUPS.reduce((s,g)=>{
       const min=minStaffMap[g.label]||0;
       const cur=byGroup[g.label]||0;
       return s+(min>cur?min-cur:0);
     },0);
+    const totalMin=ORG_GROUPS.reduce((s,g)=>s+(minStaffMap[g.label]||0),0);
+    const shortGroups=ORG_GROUPS.filter(g=>(minStaffMap[g.label]||0)>0&&(byGroup[g.label]||0)<(minStaffMap[g.label]||0));
 
     return(
-      <div style={{width:220,flexShrink:0,background:"#fff",borderRight:"1px solid #E2E8F0",
-        overflowY:"auto",padding:"14px 12px",display:"flex",flexDirection:"column",gap:10}}>
+      <div style={{width:210,flexShrink:0,background:"#fff",borderRight:"1px solid #E2E8F0",
+        overflowY:"auto",padding:"12px 10px",display:"flex",flexDirection:"column",gap:8}}>
 
-        {/* KPI 카드 */}
-        <div style={{background:"linear-gradient(135deg,#6C63FF,#9F7AEA)",borderRadius:12,padding:"12px 14px"}}>
-          <p style={{margin:0,fontSize:10,color:"rgba(255,255,255,0.8)",fontWeight:600}}>총 배치 인원</p>
-          <p style={{margin:"2px 0 0",fontSize:26,fontWeight:800,color:"#fff",lineHeight:1}}>
-            {nodes.length}<span style={{fontSize:12,fontWeight:600}}> 명</span>
-          </p>
-          {totalMin>0&&<p style={{margin:"4px 0 0",fontSize:10,color:"rgba(255,255,255,0.75)"}}>
-            목표 {totalMin}명 · {totalShort>0?`${totalShort}명 부족`:"충족"}
-          </p>}
+        {/* 총 인원 KPI */}
+        <div style={{background:"linear-gradient(135deg,#6C63FF,#9F7AEA)",borderRadius:10,padding:"10px 12px"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end"}}>
+            <div>
+              <p style={{margin:0,fontSize:9,color:"rgba(255,255,255,0.75)",fontWeight:600}}>총 배치 인원</p>
+              <p style={{margin:"1px 0 0",fontSize:24,fontWeight:800,color:"#fff",lineHeight:1}}>
+                {nodes.length}<span style={{fontSize:11}}> 명</span>
+              </p>
+            </div>
+            <div style={{textAlign:"right"}}>
+              <p style={{margin:0,fontSize:9,color:"rgba(255,255,255,0.7)"}}>정규 {reg} · 비정규 {irr}</p>
+              {totalMin>0&&<p style={{margin:"2px 0 0",fontSize:9,color:"rgba(255,255,255,0.85)",fontWeight:700}}>
+                목표 {totalMin}명
+              </p>}
+            </div>
+          </div>
         </div>
 
-        {/* ── 직군별 배치현황 (핵심 섹션) ── */}
-        <div style={{background:"#F8FAFC",borderRadius:10,padding:"10px 10px 6px"}}>
-          <p style={{margin:"0 0 8px",fontSize:11,fontWeight:800,color:"#2D3748",display:"flex",alignItems:"center",gap:6}}>
-            📂 직군별 배치현황
-            {shortCount>0&&<span style={{fontSize:9,padding:"1px 6px",borderRadius:10,
-              background:"#FEE2E2",color:"#DC2626",fontWeight:700}}>{shortCount}개 부족</span>}
-          </p>
-          {ORG_GROUPS.map(g=>{
-            const cur=byGroup[g.label]||0;
-            const min=minStaffMap[g.label]||0;
-            const short=min>0&&cur<min;
-            const ok=min>0&&cur>=min;
-            const noTarget=min===0;
-            const shortage=short?min-cur:0;
-            const barMax=Math.max(min,cur,1);
-            const curPct=Math.min(Math.round(cur/barMax*100),100);
-            const minPct=min>0?Math.min(Math.round(min/barMax*100),100):0;
-            if(cur===0&&min===0)return null; // 배치도 없고 목표도 없으면 숨김
-            return(
-              <div key={g.label} style={{marginBottom:8,
-                background:short?"#FFF5F5":ok?"#F0FDF4":"#fff",
-                borderRadius:8,padding:"6px 8px",
-                border:`1px solid ${short?"#FCA5A5":ok?"#86EFAC":"#E2E8F0"}`}}>
-                {/* 직군명 + 상태 */}
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
-                  <div style={{display:"flex",alignItems:"center",gap:5}}>
-                    <span style={{width:8,height:8,borderRadius:"50%",background:g.color,display:"inline-block",flexShrink:0}}/>
-                    <span style={{fontSize:11,fontWeight:800,color:g.color}}>{g.label}</span>
-                  </div>
-                  <div style={{display:"flex",alignItems:"center",gap:4}}>
-                    {short&&<span style={{fontSize:9,color:"#DC2626",fontWeight:700}}>▼{shortage}명</span>}
-                    {ok&&<span style={{fontSize:9,color:"#16A34A",fontWeight:700}}>✓</span>}
-                    {noTarget&&cur>0&&<span style={{fontSize:9,color:"#A0AEC0"}}>목표미설정</span>}
-                  </div>
-                </div>
-                {/* 인원 수치 */}
-                <div style={{display:"flex",alignItems:"baseline",gap:3,marginBottom:4}}>
-                  <span style={{fontSize:18,fontWeight:800,color:short?"#DC2626":ok?"#16A34A":"#2D3748",lineHeight:1}}>{cur}</span>
-                  <span style={{fontSize:11,color:"#718096"}}>명</span>
-                  {min>0&&<>
-                    <span style={{fontSize:10,color:"#A0AEC0",margin:"0 2px"}}>/</span>
-                    <span style={{fontSize:12,fontWeight:700,color:"#A0AEC0"}}>목표 {min}명</span>
-                  </>}
-                </div>
-                {/* 바 차트 */}
-                {min>0&&(
-                  <div style={{position:"relative",height:6,borderRadius:3,background:"#E2E8F0",overflow:"hidden"}}>
-                    {/* 현재 인원 바 */}
-                    <div style={{position:"absolute",top:0,left:0,height:"100%",
-                      width:`${curPct}%`,background:short?"#EF4444":ok?"#22C55E":g.color,
+        {/* 인력부족 종합 알림 */}
+        {totalShortage>0?(
+          <div style={{background:"#FEF2F2",border:"1px solid #FCA5A5",borderRadius:8,
+            padding:"7px 10px",display:"flex",alignItems:"center",gap:6}}>
+            <span style={{fontSize:14}}>⚠️</span>
+            <div>
+              <p style={{margin:0,fontSize:11,fontWeight:800,color:"#DC2626"}}>총 {totalShortage}명 부족</p>
+              <p style={{margin:"1px 0 0",fontSize:9,color:"#EF4444"}}>{shortGroups.length}개 직군 미달</p>
+            </div>
+          </div>
+        ):(totalMin>0&&(
+          <div style={{background:"#F0FDF4",border:"1px solid #86EFAC",borderRadius:8,
+            padding:"7px 10px",display:"flex",alignItems:"center",gap:6}}>
+            <span style={{fontSize:14}}>✅</span>
+            <p style={{margin:0,fontSize:11,fontWeight:700,color:"#16A34A"}}>인력 기준 충족</p>
+          </div>
+        ))}
+
+        {/* ── 직군별 배치현황 (핵심, 컴팩트) ── */}
+        <div>
+          <p style={{margin:"0 0 5px",fontSize:10,fontWeight:800,color:"#374151",
+            borderBottom:"1px solid #F3F4F6",paddingBottom:4}}>📂 직군별 배치현황</p>
+          <div style={{display:"flex",flexDirection:"column",gap:2}}>
+            {ORG_GROUPS.map(g=>{
+              const cur=byGroup[g.label]||0;
+              const min=minStaffMap[g.label]||0;
+              if(cur===0&&min===0)return null;
+              const short=min>0&&cur<min;
+              const ok=min>0&&cur>=min;
+              const shortage=short?min-cur:0;
+              const barPct=min>0?Math.min(Math.round(cur/min*100),100):(cur>0?100:0);
+              return(
+                <div key={g.label} style={{
+                  display:"flex",alignItems:"center",gap:6,
+                  padding:"4px 7px",borderRadius:6,
+                  background:short?"#FFF5F5":ok?"#F0FDF4":"#F9FAFB",
+                  border:`1px solid ${short?"#FECACA":ok?"#BBF7D0":"#F3F4F6"}`
+                }}>
+                  {/* 색상 도트 */}
+                  <span style={{width:7,height:7,borderRadius:"50%",background:g.color,
+                    flexShrink:0,display:"inline-block"}}/>
+                  {/* 직군명 */}
+                  <span style={{fontSize:10,fontWeight:700,color:g.color,width:40,flexShrink:0}}>{g.label}</span>
+                  {/* 바 */}
+                  <div style={{flex:1,height:5,background:"#E5E7EB",borderRadius:3,overflow:"hidden",position:"relative"}}>
+                    <div style={{height:"100%",width:`${barPct}%`,
+                      background:short?"#EF4444":ok?"#22C55E":g.color,
                       borderRadius:3,transition:"width 0.3s"}}/>
-                    {/* 목표 선 */}
-                    <div style={{position:"absolute",top:0,left:`${minPct}%`,
-                      width:2,height:"100%",background:"#374151",transform:"translateX(-1px)"}}/>
                   </div>
-                )}
-                {min===0&&cur>0&&(
-                  <div style={{height:4,borderRadius:3,background:g.color,opacity:0.3}}/>
-                )}
-              </div>
-            );
-          })}
+                  {/* 수치 */}
+                  <span style={{fontSize:10,fontWeight:800,
+                    color:short?"#DC2626":ok?"#16A34A":"#374151",
+                    minWidth:28,textAlign:"right",flexShrink:0}}>
+                    {cur}{min>0&&<span style={{fontSize:9,fontWeight:400,color:"#9CA3AF"}}>/{min}</span>}
+                  </span>
+                  {/* 부족 표시 */}
+                  {short&&<span style={{fontSize:9,color:"#DC2626",fontWeight:800,
+                    minWidth:22,flexShrink:0}}>▼{shortage}</span>}
+                  {ok&&<span style={{fontSize:10,color:"#16A34A",minWidth:22,flexShrink:0}}>✓</span>}
+                  {!short&&!ok&&min===0&&<span style={{minWidth:22,flexShrink:0}}/>}
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         {/* 직종별 */}
         {Object.keys(byJT3).length>0&&(
-          <div style={{background:"#F8FAFC",borderRadius:10,padding:"10px 10px 6px"}}>
-            <p style={{margin:"0 0 7px",fontSize:11,fontWeight:800,color:"#2D3748"}}>🔧 직종별</p>
+          <div>
+            <p style={{margin:"0 0 5px",fontSize:10,fontWeight:800,color:"#374151",
+              borderBottom:"1px solid #F3F4F6",paddingBottom:4}}>🔧 직종별</p>
             {Object.entries(byJT3).sort((a,b)=>b[1]-a[1]).map(([jt,cnt])=>{
               const pct=nodes.length?Math.round(cnt/nodes.length*100):0;
               const gcS=getGroupColor(mapJobTypeToRoleGroup(jt,""));
               return(
-                <div key={jt} style={{marginBottom:5}}>
-                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:2}}>
-                    <span style={{fontSize:10,fontWeight:700,color:gcS}}>{jt}</span>
-                    <span style={{fontSize:10,fontWeight:800,color:"#2D3748"}}>{cnt}명</span>
+                <div key={jt} style={{display:"flex",alignItems:"center",gap:5,marginBottom:3}}>
+                  <span style={{fontSize:9,fontWeight:700,color:gcS,width:26,flexShrink:0}}>{jt}</span>
+                  <div style={{flex:1,height:4,background:"#E5E7EB",borderRadius:2,overflow:"hidden"}}>
+                    <div style={{height:"100%",width:`${pct}%`,background:gcS,borderRadius:2}}/>
                   </div>
-                  <div style={{height:4,borderRadius:3,background:"#E2E8F0",overflow:"hidden"}}>
-                    <div style={{height:"100%",width:`${pct}%`,background:gcS,borderRadius:3}}/>
-                  </div>
+                  <span style={{fontSize:9,fontWeight:800,color:"#374151",width:22,textAlign:"right",flexShrink:0}}>{cnt}명</span>
                 </div>
               );
             })}
@@ -1916,35 +1926,24 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
 
         {/* 직위별 */}
         {sortedPos.length>0&&(
-          <div style={{background:"#F8FAFC",borderRadius:10,padding:"10px 10px 6px"}}>
-            <p style={{margin:"0 0 7px",fontSize:11,fontWeight:800,color:"#2D3748"}}>🏅 직위별</p>
-            {sortedPos.map(([pos,cnt])=>(
-              <div key={pos} style={{display:"flex",justifyContent:"space-between",
-                alignItems:"center",padding:"3px 6px",borderRadius:5,background:"#fff",marginBottom:2,
-                border:"1px solid #E2E8F0"}}>
-                <span style={{fontSize:10,color:"#4A5568",fontWeight:600}}>{pos}</span>
-                <span style={{fontSize:11,fontWeight:800,color:"#6C63FF"}}>{cnt}명</span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* 사원구분 */}
-        {nodes.length>0&&(
-          <div style={{display:"flex",gap:6}}>
-            <div style={{flex:1,background:"#EDE9FE",borderRadius:8,padding:"7px",textAlign:"center"}}>
-              <p style={{margin:0,fontSize:9,color:"#6C63FF",fontWeight:700}}>정규직</p>
-              <p style={{margin:"2px 0 0",fontSize:17,fontWeight:800,color:"#6C63FF"}}>{reg}</p>
-            </div>
-            <div style={{flex:1,background:"#FEF3C7",borderRadius:8,padding:"7px",textAlign:"center"}}>
-              <p style={{margin:0,fontSize:9,color:"#92400E",fontWeight:700}}>비정규직</p>
-              <p style={{margin:"2px 0 0",fontSize:17,fontWeight:800,color:"#92400E"}}>{irr}</p>
+          <div>
+            <p style={{margin:"0 0 5px",fontSize:10,fontWeight:800,color:"#374151",
+              borderBottom:"1px solid #F3F4F6",paddingBottom:4}}>🏅 직위별</p>
+            <div style={{display:"flex",flexWrap:"wrap",gap:3}}>
+              {sortedPos.map(([pos,cnt])=>(
+                <div key={pos} style={{display:"flex",alignItems:"center",gap:3,
+                  padding:"2px 7px",borderRadius:10,background:"#F3F4F6",border:"1px solid #E5E7EB"}}>
+                  <span style={{fontSize:9,color:"#4B5563",fontWeight:600}}>{pos}</span>
+                  <span style={{fontSize:10,fontWeight:800,color:"#6C63FF"}}>{cnt}</span>
+                </div>
+              ))}
             </div>
           </div>
         )}
       </div>
     );
   }
+
 
 
   return(
@@ -2045,6 +2044,12 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
           <div ref={canvasRef}
             onMouseDown={e=>{
               if(e.button!==0||selectedId||modalForm)return;
+              // draggable 요소(섹션 헤더) 위에서는 패닝 시작 안 함
+              let el=e.target;
+              while(el&&el!==canvasRef.current){
+                if(el.draggable)return;
+                el=el.parentElement;
+              }
               isDragging.current=true;
               dragStart.current={x:e.clientX,y:e.clientY,sl:canvasRef.current.scrollLeft,st:canvasRef.current.scrollTop};
               canvasRef.current.style.cursor="grabbing";

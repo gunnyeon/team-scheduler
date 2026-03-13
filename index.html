@@ -1461,15 +1461,15 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
     }
 
     // 인원 노드
-    const gc=getGroupColor(n.role_group||n.group||"기타");
-    const kids=nodes.filter(c=>c.parentId===n.id);
+    const gc2=getGroupColor(n.role_group||n.group||"기타");
+    const kids2=nodes.filter(c=>c.parentId===n.id);
     return <div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
       {depth>0&&<div style={{width:2,height:22,background:"#CBD5E0"}}/>}
-      <div style={{background:"#fff",border:`2px solid ${gc}`,borderRadius:14,padding:"12px 14px",minWidth:130,maxWidth:160,textAlign:"center",boxShadow:"0 2px 12px rgba(0,0,0,0.09)",position:"relative"}}>
-        <div style={{position:"absolute",top:-10,left:"50%",transform:"translateX(-50%)",background:gc,color:"#fff",fontSize:9,fontWeight:800,padding:"2px 8px",borderRadius:6,whiteSpace:"nowrap"}}>{n.role_group||n.group||"기타"}</div>
+      <div style={{background:"#fff",border:`2px solid ${gc2}`,borderRadius:14,padding:"12px 14px",minWidth:130,maxWidth:160,textAlign:"center",boxShadow:"0 2px 12px rgba(0,0,0,0.09)",position:"relative"}}>
+        <div style={{position:"absolute",top:-10,left:"50%",transform:"translateX(-50%)",background:gc2,color:"#fff",fontSize:9,fontWeight:800,padding:"2px 8px",borderRadius:6,whiteSpace:"nowrap"}}>{n.role_group||n.group||"기타"}</div>
         {n.job_type&&<div style={{position:"absolute",top:-10,right:8,background:"#94A3B8",color:"#fff",fontSize:8,fontWeight:700,padding:"1px 5px",borderRadius:5}}>{n.job_type}</div>}
-        <div style={{width:36,height:36,borderRadius:"50%",background:gc,display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,fontWeight:800,color:"#fff",margin:"6px auto 8px"}}>{(n.name||"?")[0]}</div>
-        {n.position&&<p style={{margin:"0 0 1px",fontSize:10,color:gc,fontWeight:800,letterSpacing:0.3}}>{n.position}</p>}
+        <div style={{width:36,height:36,borderRadius:"50%",background:gc2,display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,fontWeight:800,color:"#fff",margin:"6px auto 8px"}}>{(n.name||"?")[0]}</div>
+        {n.position&&<p style={{margin:"0 0 1px",fontSize:10,color:gc2,fontWeight:800,letterSpacing:0.3}}>{n.position}</p>}
         {n.rank&&<p style={{margin:"0 0 2px",fontSize:9,color:"#A0AEC0",fontWeight:600}}>{n.rank}</p>}
         <p style={{margin:"0 0 2px",fontSize:13,fontWeight:800,color:"#1A1A2E"}}>{n.name||"미지정"}</p>
         {n.emp_type&&<span style={{fontSize:8,padding:"1px 5px",borderRadius:4,background:n.emp_type==="정규직"?"#EDE9FE":"#FEF3C7",color:n.emp_type==="정규직"?"#6C63FF":"#92400E",fontWeight:700,display:"inline-block",marginBottom:2}}>{n.emp_type}</span>}
@@ -1482,11 +1482,11 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
           <button onClick={()=>delNode(n.id)} style={{fontSize:9,padding:"2px 6px",borderRadius:5,background:"#FFF5F5",color:"#F87171",border:"none",cursor:"pointer",fontWeight:700}}>✕</button>
         </div>
       </div>
-      {kids.length>0&&<>
+      {kids2.length>0&&<>
         <div style={{width:2,height:22,background:"#CBD5E0"}}/>
         <div style={{display:"flex",gap:20,alignItems:"flex-start",position:"relative"}}>
-          {kids.length>1&&<div style={{position:"absolute",top:0,left:"calc(50% - 1px)",width:"calc(100% - 130px)",height:2,background:"#CBD5E0",transform:"translateX(-50%)"}}/>}
-          {kids.map(k=><NodeCard key={k.id} n={k} depth={depth+1}/>)}
+          {kids2.length>1&&<div style={{position:"absolute",top:0,left:"calc(50% - 1px)",width:"calc(100% - 130px)",height:2,background:"#CBD5E0",transform:"translateX(-50%)"}}/>}
+          {kids2.map(k=><NodeCard key={k.id} n={k} depth={depth+1}/>)}
         </div>
       </>}
     </div>;
@@ -1757,7 +1757,7 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
 }
 
 
-function SitePMBoard({sites=[],onSave,onDelete,orgNodes=[],onOrgSave,onOrgDelete,onOrgSaveBump,personnel=[],onPersonnelSave,onPersonnelDelete}){
+function SitePMBoard({sites=[],onSave,onDelete,orgNodes=[],onOrgSave,onOrgDelete,onOrgSaveBump,personnel=[],onPersonnelSave,onPersonnelDelete,siteMinStaff=[],onMinStaffSave}){
   const [showModal,setShowModal]=useState(false);
   const [orgSite,setOrgSite]=useState(null);
   const [editing,setEditing]=useState(null);

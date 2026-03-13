@@ -1479,15 +1479,25 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
         });
       });
 
-      setGenStatus(`${newNodes.length}명 서버 저장 중...`);
+      // ── 4. 로컬 state 먼저 교체 (즉시 화면 반영) ──
+      if(onOrgReplaceForSite) onOrgReplaceForSite(site.id, newNodes);
 
-      // ── 4. 서버: 이 현장 노드만 교체 (다른 현장 보존) ──
-      const otherNodes=orgNodes.filter(n=>n.site_id!==site.id);
-      await apiReplaceAll("org_nodes", ORG_HEADERS, [...otherNodes,...newNodes]);
+      // ── 5. 서버: 기존 노드 삭제 후 새 노드 순차 저장 ──
+      // replace_all 대신 개별 upsert 사용 (URL 길이 제한 우회)
+      const existingIds=nodes.map(n=>n.id);
+      setGenStatus(`기존 ${existingIds.length}개 삭제 중...`);
 
-      // ── 5. 로컬 state 교체: App 레벨에서 setOrgNodes + 20초 폴링 차단 ──
-      if(onOrgReplaceForSite){
-        onOrgReplaceForSite(site.id, newNodes);
+      // 기존 노드 삭제 (병렬)
+      if(existingIds.length>0){
+        await Promise.all(existingIds.map(id=>apiDelete("org_nodes",id)));
+      }
+
+      // 새 노드 순차 저장 (500ms 간격으로 서버 부하 분산)
+      setGenStatus(`0 / ${newNodes.length}명 저장 중...`);
+      for(let i=0;i<newNodes.length;i++){
+        await apiUpsert("org_nodes", newNodes[i]);
+        setGenStatus(`${i+1} / ${newNodes.length}명 저장 중...`);
+        if(i<newNodes.length-1) await new Promise(r=>setTimeout(r,200));
       }
 
       setGenStatus("");

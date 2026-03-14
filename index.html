@@ -339,7 +339,7 @@ function App(){
   
   // 본사 조직도 전체 교체 (__hq__ 노드만)
   async function onHqOrgReplaceAll(newHqNodes){
-    // ① 폴링 완전 중단 (서버 응답이 로컬을 덮어쓰는 것 방지)
+    // ① 폴링 완전 중단
     clearInterval(polling.current);
     polling.current=null;
     setSyncStatus("저장중");
@@ -348,31 +348,39 @@ function App(){
       const others=prev.filter(n=>n.site_id!=="__hq__");
       return [...others,...newHqNodes];
     });
-    lastLocalChange.current=Date.now()+300000; // 5분 차단
+    lastLocalChange.current=Date.now()+600000; // 10분 차단
     try{
-      // ③ 기존 __hq__ 노드 삭제
+      // ③ 기존 __hq__ 노드 삭제 (순차, 재시도 포함)
       const r=await fetch(`${API_URL}?sheet=org_nodes`);
       const d=await r.json();
       const existHqIds=(d.ok&&d.data?d.data:[])
         .filter(n=>n.site_id==="__hq__").map(n=>n.id).filter(Boolean);
-      if(existHqIds.length>0){
-        for(let i=0;i<existHqIds.length;i+=30){
-          await Promise.all(existHqIds.slice(i,i+30).map(id=>apiDelete("org_nodes",id)));
-          if(i+30<existHqIds.length) await new Promise(r=>setTimeout(r,150));
+      for(const id of existHqIds){
+        let ok=false;
+        for(let t=0;t<3&&!ok;t++){
+          try{ await apiDelete("org_nodes",id); ok=true; }
+          catch(e){ await new Promise(r=>setTimeout(r,500)); }
         }
+        await new Promise(r=>setTimeout(r,80)); // Apps Script 호출 간격
       }
-      // ④ 새 노드 upsert
-      for(let i=0;i<newHqNodes.length;i+=20){
-        await Promise.all(newHqNodes.slice(i,i+20).map(n=>apiUpsert("org_nodes",n)));
-        if(i+20<newHqNodes.length) await new Promise(r=>setTimeout(r,250));
+      // ④ 새 노드 순차 upsert (재시도 포함)
+      let saved=0;
+      for(const node of newHqNodes){
+        let ok=false;
+        for(let t=0;t<3&&!ok;t++){
+          try{ await apiUpsert("org_nodes",node); ok=true; }
+          catch(e){ await new Promise(r=>setTimeout(r,500)); }
+        }
+        saved++;
+        if(saved%10===0) setSyncStatus(`저장중 (${saved}/${newHqNodes.length})`);
+        await new Promise(r=>setTimeout(r,80)); // Apps Script 호출 간격
       }
       setSyncStatus("동기화됨");
     }catch(e){
       setSyncStatus("오류");
       console.error("onHqOrgReplaceAll 오류:",e);
     }finally{
-      // ⑤ 저장 완료 후 폴링 재시작
-      lastLocalChange.current=Date.now()+5000; // 5초 후 폴링 허용
+      lastLocalChange.current=Date.now()+5000;
       polling.current=setInterval(loadData,3000);
     }
   }
@@ -2779,6 +2787,7 @@ function PersonnelDashboard({personnel=[],orgNodes=[],sites=[],onOrgSave,onOrgDe
   const [modalForm,setModalForm]=React.useState(null);
   const [nameSuggest,setNameSuggest]=React.useState([]);
   const [view,setView]=React.useState("dashboard");
+  const [isGenerating,setIsGenerating]=React.useState(false);
   const [search,setSearch]=React.useState("");
   const [searchResult,setSearchResult]=React.useState(null);
   const canvasRef=React.useRef(null);
@@ -2888,7 +2897,10 @@ function PersonnelDashboard({personnel=[],orgNodes=[],sites=[],onOrgSave,onOrgDe
   }
 
   async function autoGenHq(){
-    if(!window.confirm("본사 인원 DB로 자동 생성합니다.\n기존 데이터는 초기화됩니다."))return;
+    if(isGenerating){alert("저장 중입니다. 잠시 기다려주세요.");return;}
+    if(!window.confirm(`본사 인원 DB로 자동 생성합니다.\n대상: ${hqPersonnel.length}명 (dept_type=본사)\n기존 데이터는 초기화됩니다.`))return;
+    if(hqPersonnel.length===0){alert("personnel 시트에 dept_type=본사 인원이 없습니다.");return;}
+    setIsGenerating(true);
     const nodes2=hqPersonnel
       .sort((a,b)=>positionSortKey(a.position)-positionSortKey(b.position))
       .map(p=>({
@@ -2899,12 +2911,21 @@ function PersonnelDashboard({personnel=[],orgNodes=[],sites=[],onOrgSave,onOrgDe
         role_group:(p.department||"본사").trim(),
         department:(p.department||"").trim(),
         age:(p.age||"").toString(), phone:(p.phone||"").toString(),
-        memo:"", color:"#9B8FE8", is_manual:"true", emp_id:""
+        memo:"", color:"#9B8FE8", is_manual:"true", emp_id:(p.emp_id||"").trim()
       }));
-    if(nodes2.length===0){alert("본사 인원이 없습니다.");return;}
     setChildOrder({});
-    if(onHqOrgReplaceAll) await onHqOrgReplaceAll(nodes2);
-    alert(`✅ 본사 조직도 생성 완료!\n총 ${nodes2.length}명 저장`);
+    await onHqOrgReplaceAll(nodes2);
+    // 저장 완료 후 서버 검증
+    await new Promise(r=>setTimeout(r,2000));
+    const vr=await fetch(`${API_URL}?sheet=org_nodes`);
+    const vd=await vr.json();
+    const savedCount=(vd.ok&&vd.data?vd.data:[]).filter(n=>n.site_id==="__hq__").length;
+    if(savedCount===nodes2.length){
+      alert(`✅ 저장 완료!\n총 ${savedCount}명 저장됨`);
+    } else {
+      alert(`⚠️ 일부 저장 실패\n대상: ${nodes2.length}명 / 저장됨: ${savedCount}명\n다시 시도해주세요.`);
+    }
+    setIsGenerating(false);
   }
   
   function onNameChange(e){
@@ -3079,9 +3100,11 @@ function PersonnelDashboard({personnel=[],orgNodes=[],sites=[],onOrgSave,onOrgDe
           <span style={{fontSize:16,fontWeight:800,color:"#4A4570"}}>본사 조직도</span>
           <span style={{fontSize:13,color:"#7A8CA0",marginLeft:2}}>{hqNodes.length}명 저장됨</span>
           <div style={{marginLeft:"auto",display:"flex",gap:8}}>
-            <button onClick={autoGenHq}
-              style={{background:"#9B8FE8",border:"none",borderRadius:9,padding:"7px 16px",
-                fontSize:13,fontWeight:700,color:"#fff",cursor:"pointer"}}>🔄 자동생성</button>
+            <button onClick={autoGenHq} disabled={isGenerating}
+              style={{background:isGenerating?"#C4BAF0":"#9B8FE8",border:"none",borderRadius:9,padding:"7px 16px",
+                fontSize:13,fontWeight:700,color:"#fff",cursor:isGenerating?"not-allowed":"pointer"}}>
+              {isGenerating?"⏳ 저장 중...":"🔄 자동생성"}
+            </button>
             <button onClick={()=>openHqAdd("")}
               style={{background:"#9B8FE8",border:"none",borderRadius:9,padding:"7px 16px",
                 fontSize:13,fontWeight:700,color:"#fff",cursor:"pointer"}}>+ 최상위 추가</button>
@@ -3130,9 +3153,11 @@ function PersonnelDashboard({personnel=[],orgNodes=[],sites=[],onOrgSave,onOrgDe
               <p style={{fontSize:16,margin:0,fontWeight:700,color:"#6B7A8D"}}>본사 조직도가 비어있습니다.</p>
               <p style={{fontSize:13,margin:0,color:"#A8B5C2"}}>자동생성 또는 직접 추가하세요.</p>
               <div style={{display:"flex",gap:10,marginTop:8}}>
-                <button onClick={autoGenHq}
-                  style={{background:"#9B8FE8",color:"#fff",border:"none",borderRadius:10,
-                    padding:"10px 24px",fontWeight:700,fontSize:13,cursor:"pointer"}}>🔄 인원DB로 자동 생성</button>
+                <button onClick={autoGenHq} disabled={isGenerating}
+                  style={{background:isGenerating?"#C4BAF0":"#9B8FE8",color:"#fff",border:"none",borderRadius:10,
+                    padding:"10px 24px",fontWeight:700,fontSize:13,cursor:isGenerating?"not-allowed":"pointer"}}>
+                  {isGenerating?"⏳ 저장 중...":"🔄 인원DB로 자동 생성"}
+                </button>
                 <button onClick={()=>openHqAdd("")}
                   style={{background:"#F1F5F9",color:"#9B8FE8",border:"1.5px solid #C8BCEC",
                     borderRadius:10,padding:"10px 24px",fontWeight:700,fontSize:13,cursor:"pointer"}}>+ 직접 추가</button>

@@ -2870,6 +2870,108 @@ function SitePMBoard({sites=[],onSave,onDelete,orgNodes=[],onOrgSave,onOrgDelete
 }
 
 
+// ── 본사 조직도 부서별 인원 현황 패널 ──────────────────
+function HqDeptPanel({hqNodes=[]}){
+  const JOB_COLORS2={"건축":"#7BA8D9","기계":"#C8874A","전기":"#E8A45A","안전":"#4AAF82",
+    "품질":"#D4739A","관리":"#9B8FE8","토목":"#5BA8BE","기타":"#9AAAB8"};
+
+  // 부서별 집계
+  const deptMap={};
+  hqNodes.forEach(n=>{
+    const dept=(n.department||n.role_group||"미분류").trim();
+    if(!deptMap[dept]) deptMap[dept]={count:0,nodes:[]};
+    deptMap[dept].count++;
+    deptMap[dept].nodes.push(n);
+  });
+  const deptEntries=Object.entries(deptMap).sort((a,b)=>b[1].count-a[1].count);
+
+  // 직종별 집계
+  const jobMap={};
+  hqNodes.forEach(n=>{
+    const j=(n.job_type||"기타").trim();
+    jobMap[j]=(jobMap[j]||0)+1;
+  });
+  const jobEntries=Object.entries(jobMap).sort((a,b)=>b[1]-a[1]);
+
+  // 고용형태 집계
+  const reg=hqNodes.filter(n=>!n.emp_type||n.emp_type==="정규직").length;
+  const irr=hqNodes.filter(n=>n.emp_type==="비정규직").length;
+  const total=hqNodes.length;
+  if(total===0) return null;
+
+  return(
+    <div style={{
+      width:200,flexShrink:0,
+      background:"#FEFEFF",
+      borderRight:"1.5px solid #EAE4F5",
+      overflowY:"auto",
+      display:"flex",flexDirection:"column",gap:0,
+      fontSize:12,
+    }}>
+      {/* 헤더 */}
+      <div style={{
+        padding:"12px 14px 10px",
+        background:"linear-gradient(135deg,#9B8FE8,#B8AEED)",
+        flexShrink:0,
+      }}>
+        <p style={{margin:0,fontSize:10,color:"rgba(255,255,255,0.8)",fontWeight:600,letterSpacing:0.5}}>부서별 인원 현황</p>
+        <p style={{margin:"3px 0 0",fontSize:22,fontWeight:800,color:"#fff",lineHeight:1}}>
+          {total}<span style={{fontSize:12,fontWeight:500,marginLeft:3}}>명</span>
+        </p>
+        <div style={{display:"flex",gap:8,marginTop:6}}>
+          <span style={{fontSize:10,color:"rgba(255,255,255,0.85)",fontWeight:600}}>정규 {reg}</span>
+          <span style={{fontSize:10,color:"rgba(255,255,255,0.65)"}}>|</span>
+          <span style={{fontSize:10,color:"rgba(255,255,255,0.85)",fontWeight:600}}>비정규 {irr}</span>
+        </div>
+      </div>
+
+      {/* 부서별 */}
+      <div style={{padding:"10px 12px 6px",flexShrink:0}}>
+        <p style={{margin:"0 0 7px",fontSize:10,fontWeight:800,color:"#7A8CA0",
+          letterSpacing:0.5,textTransform:"uppercase"}}>📂 부서별</p>
+        <div style={{display:"flex",flexDirection:"column",gap:4}}>
+          {deptEntries.map(([dept,{count,nodes}])=>{
+            const repColor=JOB_COLORS2[nodes[0]?.job_type]||"#9B8FE8";
+            return(
+              <div key={dept} style={{display:"flex",alignItems:"center",gap:6,padding:"3px 0",
+                borderBottom:"1px solid #F3F0FF"}}>
+                <span style={{width:7,height:7,borderRadius:2,background:repColor,
+                  flexShrink:0,display:"inline-block"}}/>
+                <span style={{fontSize:11,fontWeight:700,color:"#4A4570",
+                  flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}
+                  title={dept}>{dept}</span>
+                <span style={{fontSize:12,fontWeight:800,color:"#9B8FE8",flexShrink:0}}>{count}명</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 구분선 */}
+      <div style={{height:1,background:"#EDE8FB",margin:"4px 12px"}}/>
+
+      {/* 직종별 */}
+      <div style={{padding:"6px 12px 10px",flexShrink:0}}>
+        <p style={{margin:"0 0 7px",fontSize:10,fontWeight:800,color:"#7A8CA0",
+          letterSpacing:0.5,textTransform:"uppercase"}}>🔧 직종별</p>
+        <div style={{display:"flex",flexDirection:"column",gap:3}}>
+          {jobEntries.map(([jt,cnt])=>{
+            const col=JOB_COLORS2[jt]||"#9AAAB8";
+            return(
+              <div key={jt} style={{display:"flex",alignItems:"center",gap:8,
+                padding:"3px 0",borderBottom:"1px solid #F3F0FF"}}>
+                <span style={{fontSize:11,fontWeight:700,color:col,width:30,flexShrink:0}}>{jt}</span>
+                <span style={{fontSize:12,fontWeight:800,color:"#4A4570",marginLeft:"auto"}}>{cnt}명</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 // ── 리포트 ────────────────────────────────────────────
 function PersonnelDashboard({personnel=[],orgNodes=[],sites=[],onOrgSave,onOrgDelete,onHqOrgReplaceAll}){
   // ── hqNodes: org_nodes에서 site_id="__hq__" 행을 실시간으로 가져옴 ──
@@ -2885,8 +2987,11 @@ function PersonnelDashboard({personnel=[],orgNodes=[],sites=[],onOrgSave,onOrgDe
   const [isGenerating,setIsGenerating]=React.useState(false);
   const [search,setSearch]=React.useState("");
   const [searchResult,setSearchResult]=React.useState(null);
+  const [hqSearch,setHqSearch]=React.useState("");         // 본사 조직도 인원 검색어
+  const [hqSearchResult,setHqSearchResult]=React.useState(null); // 검색 결과 노드 id Set
   const canvasRef=React.useRef(null);
   const isDragging=React.useRef(false);
+  const dragMoved=React.useRef(false); // 드래그 이동 여부 (클릭 vs 패닝 구분)
   const dragStart=React.useRef({x:0,y:0,sl:0,st:0});
 
   const hqPersonnel=personnel.filter(p=>(p.dept_type||"").includes("본사"));
@@ -2974,6 +3079,7 @@ function PersonnelDashboard({personnel=[],orgNodes=[],sites=[],onOrgSave,onOrgDe
   function handleHqNodeClick(e,id){
     e.stopPropagation();
     if(modalForm)return;
+    if(dragMoved.current){dragMoved.current=false;return;} // 드래그 중엔 클릭 무시
     if(selectedId===id){ setSelectedId(null); return; }
     if(selectedId){
       const moving=hqNodes.find(n=>n.id===selectedId);
@@ -3062,6 +3168,10 @@ function PersonnelDashboard({personnel=[],orgNodes=[],sites=[],onOrgSave,onOrgDe
     const gc=getHqGc(n);
     const isSelected=selectedId===n.id;
     const isMoveTarget=!!selectedId&&selectedId!==n.id&&!modalForm;
+    // 검색 하이라이트
+    const isSearchActive=hqSearchResult!==null;
+    const isMatched=isSearchActive&&hqSearchResult.has(n.id);
+    const isDimmed=isSearchActive&&!isMatched;
 
     function handleChildDragDown(e,childId){
       if(selectedId)return;
@@ -3090,12 +3200,13 @@ function PersonnelDashboard({personnel=[],orgNodes=[],sites=[],onOrgSave,onOrgDe
       <div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
         {depth>0&&<div style={{width:2,height:20,background:isSelected?"#9B8FE8":"#A8B5C2"}}/>}
         <div onClick={e=>handleHqNodeClick(e,n.id)}
-          style={{background:isSelected?"#EDE8FB":"#fff",
-            border:`2px solid ${isSelected?"#9B8FE8":isMoveTarget?"#86EFAC":gc}`,
+          style={{background:isSelected?"#EDE8FB":isMatched?"#F3F0FF":"#fff",
+            border:`2px solid ${isSelected?"#9B8FE8":isMatched?"#9B8FE8":isMoveTarget?"#86EFAC":gc}`,
             borderRadius:14,padding:"11px 14px",minWidth:122,maxWidth:158,textAlign:"center",
             cursor:isMoveTarget?"copy":"pointer",position:"relative",userSelect:"none",
-            boxShadow:isSelected?"0 0 0 3px rgba(108,99,255,0.25)":"0 2px 12px rgba(0,0,0,0.09)",
-            transition:"border 0.15s,box-shadow 0.15s"}}>
+            opacity:isDimmed?0.25:1,
+            boxShadow:isSelected?"0 0 0 3px rgba(108,99,255,0.25)":isMatched?"0 0 0 3px rgba(155,143,232,0.35),0 4px 16px rgba(155,143,232,0.25)":"0 2px 12px rgba(0,0,0,0.09)",
+            transition:"opacity 0.2s,border 0.15s,box-shadow 0.15s"}}>
           <div style={{position:"absolute",top:-11,left:"50%",transform:"translateX(-50%)",
             background:gc,color:"#fff",fontSize:9,fontWeight:800,padding:"2px 9px",
             borderRadius:6,whiteSpace:"nowrap",letterSpacing:0.3,pointerEvents:"none"}}>
@@ -3179,13 +3290,46 @@ function PersonnelDashboard({personnel=[],orgNodes=[],sites=[],onOrgSave,onOrgDe
         {/* 헤더 */}
         <div style={{display:"flex",alignItems:"center",gap:12,padding:"14px 22px",
           background:"#fff",borderBottom:"1.5px solid #E2E8F0",flexShrink:0}}>
-          <button onClick={()=>{setView("dashboard");setSelectedId(null);setModalForm(null);}}
+          <button onClick={()=>{setView("dashboard");setSelectedId(null);setModalForm(null);setHqSearch("");setHqSearchResult(null);}}
             style={{background:"#F1F5F9",border:"none",borderRadius:9,padding:"7px 15px",
               fontSize:13,fontWeight:700,color:"#374151",cursor:"pointer"}}>← 대시보드</button>
           <span style={{fontSize:17}}>🏛</span>
           <span style={{fontSize:16,fontWeight:800,color:"#4A4570"}}>본사 조직도</span>
           <span style={{fontSize:13,color:"#7A8CA0",marginLeft:2}}>{hqNodes.length}명 저장됨</span>
-          <div style={{marginLeft:"auto",display:"flex",gap:8}}>
+          <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center"}}>
+            {/* 인원 검색창 */}
+            <div style={{position:"relative",display:"flex",alignItems:"center"}}>
+              <input
+                value={hqSearch}
+                onChange={e=>{
+                  const v=e.target.value;
+                  setHqSearch(v);
+                  if(!v.trim()){setHqSearchResult(null);return;}
+                  const q=v.trim().toLowerCase();
+                  const matched=new Set(
+                    hqNodes.filter(n=>
+                      (n.name||"").toLowerCase().includes(q)||
+                      (n.position||"").toLowerCase().includes(q)||
+                      (n.department||"").toLowerCase().includes(q)||
+                      (n.job_type||"").toLowerCase().includes(q)
+                    ).map(n=>n.id)
+                  );
+                  setHqSearchResult(matched.size>0?matched:new Set(["__no_result__"]));
+                }}
+                placeholder="이름·직위·부서 검색"
+                style={{
+                  border:"1.5px solid #C8BCEC",borderRadius:9,
+                  padding:"7px 32px 7px 12px",fontSize:13,
+                  outline:"none",width:180,background:"#F8F7FF",color:"#4A4570"
+                }}
+              />
+              {hqSearch
+                ? <button onClick={()=>{setHqSearch("");setHqSearchResult(null);}}
+                    style={{position:"absolute",right:6,background:"none",border:"none",
+                      color:"#B0A7E0",cursor:"pointer",fontSize:16,lineHeight:1,padding:0}}>×</button>
+                : <span style={{position:"absolute",right:9,color:"#C8BCEC",fontSize:14,pointerEvents:"none"}}>🔍</span>
+              }
+            </div>
             <button onClick={autoGenHq} disabled={isGenerating}
               style={{background:isGenerating?"#C4BAF0":"#9B8FE8",border:"none",borderRadius:9,padding:"7px 16px",
                 fontSize:13,fontWeight:700,color:"#fff",cursor:isGenerating?"not-allowed":"pointer"}}>
@@ -3197,41 +3341,71 @@ function PersonnelDashboard({personnel=[],orgNodes=[],sites=[],onOrgSave,onOrgDe
           </div>
         </div>
 
-        {/* 안내 배너 */}
-        <div style={{background:"#EDE8FB",borderBottom:"1px solid #C7D2FE",
+        {/* 안내 배너 / 검색 결과 */}
+        <div style={{background:hqSearchResult?"#EDE8FB":"#EDE8FB",borderBottom:"1px solid #C7D2FE",
           padding:"7px 22px",flexShrink:0,display:"flex",alignItems:"center",gap:12}}>
-          <span style={{fontSize:11,color:"#9B8FE8",fontWeight:600}}>
-            ✅ 모든 변경사항은 즉시 저장 | ✏ 수정으로 상위노드 변경 | ⠿⠿ 드래그로 형제 순서 변경
-          </span>
-          <span style={{fontSize:10,color:"#B0A7E0",marginLeft:"auto"}}>
-            
-          </span>
+          {hqSearchResult?(
+            hqSearchResult.has("__no_result__")?(
+              <span style={{fontSize:12,color:"#F87171",fontWeight:700}}>🔍 검색 결과 없음 — "{hqSearch}"</span>
+            ):(
+              <span style={{fontSize:12,color:"#9B8FE8",fontWeight:700}}>
+                🔍 "{hqSearch}" — {hqSearchResult.size}명 매칭
+                <span style={{fontSize:11,color:"#B0A7E0",fontWeight:400,marginLeft:8}}>나머지 노드는 흐리게 표시됩니다</span>
+              </span>
+            )
+          ):(
+            <span style={{fontSize:11,color:"#9B8FE8",fontWeight:600}}>
+              ✅ 모든 변경사항은 즉시 저장 | ✏ 수정으로 상위노드 변경 | ⠿⠿ 드래그로 형제 순서 변경
+            </span>
+          )}
         </div>
 
+        {/* 본문: 부서현황 패널 + 캔버스 */}
+        <div style={{flex:1,overflow:"hidden",display:"flex"}}>
+        {/* 부서별 인원 현황 패널 */}
+        <HqDeptPanel hqNodes={hqNodes}/>
         {/* 캔버스 */}
         <div ref={canvasRef}
           style={{flex:1,overflow:"auto",padding:"32px 40px",cursor:selectedId?"default":"grab"}}
           onClick={e=>{if(selectedId&&e.target===canvasRef.current)setSelectedId(null);}}
           onMouseDown={e=>{
-            if(selectedId)return;
+            // 버튼(button,select) 클릭은 패닝 차단
+            if(["BUTTON","SELECT","INPUT"].includes(e.target.tagName))return;
+            // 형제 드래그 핸들(hqchild)에서는 패닝 차단
             let el=e.target;
             while(el&&el!==canvasRef.current){
               if(el.dataset&&el.dataset.hqchild)return;
               el=el.parentElement;
             }
             isDragging.current=true;
+            dragMoved.current=false;
             dragStart.current={x:e.clientX,y:e.clientY,
               sl:canvasRef.current.scrollLeft,st:canvasRef.current.scrollTop};
             canvasRef.current.style.cursor="grabbing";
+            canvasRef.current.style.userSelect="none";
           }}
           onMouseMove={e=>{
             if(!isDragging.current)return;
             const dx=e.clientX-dragStart.current.x,dy=e.clientY-dragStart.current.y;
+            if(Math.abs(dx)>4||Math.abs(dy)>4) dragMoved.current=true;
             canvasRef.current.scrollLeft=dragStart.current.sl-dx;
             canvasRef.current.scrollTop=dragStart.current.st-dy;
           }}
-          onMouseUp={()=>{isDragging.current=false;if(canvasRef.current)canvasRef.current.style.cursor=selectedId?"default":"grab";}}
-          onMouseLeave={()=>{isDragging.current=false;if(canvasRef.current)canvasRef.current.style.cursor=selectedId?"default":"grab";}}>
+          onMouseUp={()=>{
+            if(!isDragging.current)return;
+            isDragging.current=false;
+            if(canvasRef.current){
+              canvasRef.current.style.cursor=selectedId?"default":"grab";
+              canvasRef.current.style.userSelect="";
+            }
+          }}
+          onMouseLeave={()=>{
+            isDragging.current=false;
+            if(canvasRef.current){
+              canvasRef.current.style.cursor=selectedId?"default":"grab";
+              canvasRef.current.style.userSelect="";
+            }
+          }}>
           {hqRoots.length===0?(
             <div style={{textAlign:"center",padding:"60px 0",color:"#A8B5C2",
               display:"flex",flexDirection:"column",alignItems:"center",gap:14}}>
@@ -3258,6 +3432,8 @@ function PersonnelDashboard({personnel=[],orgNodes=[],sites=[],onOrgSave,onOrgDe
 
 
 
+        </div>{/* 캔버스 끝 */}
+        </div>{/* 본문 flex wrapper 끝 */}
         {/* 이동 모드 안내바 */}
         {selectedId&&(
           <div style={{position:"fixed",bottom:28,left:"50%",transform:"translateX(-50%)",

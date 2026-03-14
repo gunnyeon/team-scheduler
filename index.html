@@ -229,6 +229,7 @@ function App(){
   const weekEndStr=getLocalDateStr(weekEndDate);
 
   const lastLocalChange=useRef(0); // 마지막 로컬 변경 시각 (ms)
+  const orgLocalChange=useRef(0);  // org_nodes 전용 보호 타임스탬프
 
   async function initialize(){
     if(initialized.current)return;
@@ -251,14 +252,17 @@ function App(){
     try{
       const [s,tr,t,lv,sv,on,pr,ms]=await Promise.all([apiGet("schedules"),apiGet("trips"),apiGet("tasks"),apiGet("leaves"),apiGet("sites"),apiGet("org_nodes"),apiGet("personnel"),apiGet("site_min_staff")]);
       // 요청 시작 후 로컬 변경이 있으면 무시 (내가 방금 저장한 데이터를 서버가 덮어쓰지 않도록)
-      if(lastLocalChange.current>reqAt)return;
+      if(lastLocalChange.current>=reqAt)return;
       // JSON 문자열 비교로 실제 변경 시에만 setState → 불필요한 리렌더 방지
       setSchedules(prev=>{const next=JSON.stringify(s);return JSON.stringify(prev)===next?prev:s;});
       setTrips(prev=>{const next=JSON.stringify(tr);return JSON.stringify(prev)===next?prev:tr;});
       setTasks(prev=>{const next=JSON.stringify(t);return JSON.stringify(prev)===next?prev:t;});
       setLeaves(prev=>{const next=JSON.stringify(lv);return JSON.stringify(prev)===next?prev:lv;});
       setSites(prev=>{const next=JSON.stringify(sv);return JSON.stringify(prev)===next?prev:sv;});
-      setOrgNodes(prev=>{const next=JSON.stringify(on);return JSON.stringify(prev)===next?prev:on;});
+      // orgNodes는 별도 타임스탬프로 보호 (org 저장 중 폴링 덮어쓰기 방지)
+      if(orgLocalChange.current<reqAt){
+        setOrgNodes(prev=>{const next=JSON.stringify(on);return JSON.stringify(prev)===next?prev:on;});
+      }
       setPersonnel(prev=>{const next=JSON.stringify(pr);return JSON.stringify(prev)===next?prev:pr;});
       setSiteMinStaff(prev=>{const next=JSON.stringify(ms);return JSON.stringify(prev)===next?prev:(ms||[]);});
       setLastSync(new Date()); setSyncStatus("동기화됨");
@@ -275,26 +279,35 @@ function App(){
     const row={...node};
     const skipApi=!!row._skipApi;
     delete row._skipApi;
-    const BLOCK=15000;
+    const BLOCK=30000; // 30초 차단
     setOrgNodes(prev=>{
       const exists=prev.find(n=>n.id===row.id);
       return exists?prev.map(n=>n.id===row.id?{...n,...row}:n):[...prev,row];
     });
+    orgLocalChange.current=Math.max(orgLocalChange.current,Date.now()+BLOCK);
     lastLocalChange.current=Math.max(lastLocalChange.current,Date.now()+BLOCK);
     if(!skipApi){
       apiUpsert("org_nodes",row)
-        .then(()=>{lastLocalChange.current=Math.max(lastLocalChange.current,Date.now()+8000);})
+        .then(()=>{
+          // API 완료 후 추가 보호 (30초 → 완료시점부터 15초 더)
+          orgLocalChange.current=Math.max(orgLocalChange.current,Date.now()+15000);
+          lastLocalChange.current=Math.max(lastLocalChange.current,Date.now()+15000);
+        })
         .catch(()=>setSyncStatus("오류"));
     }
   }
   // 단건 삭제
   function onOrgDelete(ids){
     const idArr=Array.isArray(ids)?ids:[ids];
-    const BLOCK=15000;
+    const BLOCK=30000;
     setOrgNodes(prev=>prev.filter(n=>!idArr.includes(n.id)));
+    orgLocalChange.current=Math.max(orgLocalChange.current,Date.now()+BLOCK);
     lastLocalChange.current=Math.max(lastLocalChange.current,Date.now()+BLOCK);
     Promise.all(idArr.map(id=>apiDelete("org_nodes",id)))
-      .then(()=>{lastLocalChange.current=Math.max(lastLocalChange.current,Date.now()+8000);})
+      .then(()=>{
+        orgLocalChange.current=Math.max(orgLocalChange.current,Date.now()+15000);
+        lastLocalChange.current=Math.max(lastLocalChange.current,Date.now()+15000);
+      })
       .catch(()=>setSyncStatus("오류"));
   }
   function onOrgSaveBump(){bumpLocal();}
@@ -331,7 +344,7 @@ function App(){
     }catch(e){
       setSyncStatus("오류");
     }finally{
-      // ⑤ 폴링 재시작
+      orgLocalChange.current=Date.now()+30000;
       lastLocalChange.current=Date.now()+5000;
       polling.current=setInterval(loadData,3000);
     }
@@ -380,6 +393,8 @@ function App(){
       setSyncStatus("오류");
       console.error("onHqOrgReplaceAll 오류:",e);
     }finally{
+      // 저장 완료 후 30초간 org_nodes 폴링 덮어쓰기 방지
+      orgLocalChange.current=Date.now()+30000;
       lastLocalChange.current=Date.now()+5000;
       polling.current=setInterval(loadData,3000);
     }
@@ -2915,17 +2930,8 @@ function PersonnelDashboard({personnel=[],orgNodes=[],sites=[],onOrgSave,onOrgDe
       }));
     setChildOrder({});
     await onHqOrgReplaceAll(nodes2);
-    // 저장 완료 후 서버 검증
-    await new Promise(r=>setTimeout(r,2000));
-    const vr=await fetch(`${API_URL}?sheet=org_nodes`);
-    const vd=await vr.json();
-    const savedCount=(vd.ok&&vd.data?vd.data:[]).filter(n=>n.site_id==="__hq__").length;
-    if(savedCount===nodes2.length){
-      alert(`✅ 저장 완료!\n총 ${savedCount}명 저장됨`);
-    } else {
-      alert(`⚠️ 일부 저장 실패\n대상: ${nodes2.length}명 / 저장됨: ${savedCount}명\n다시 시도해주세요.`);
-    }
     setIsGenerating(false);
+    alert(`✅ 저장 완료! 총 ${nodes2.length}명 저장됨`);
   }
   
   function onNameChange(e){

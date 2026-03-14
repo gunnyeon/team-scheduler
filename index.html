@@ -50,7 +50,7 @@
 const {useState,useEffect,useRef,useCallback}=React;
 
 // ── API 설정 ───────────────────────────────────────────
-const API_URL = "https://script.google.com/macros/s/AKfycbw7eUItMTAzOxRdZjhp5H2B05UR1Gjo5b-HnR4Kc4Jm_1WlMgrSVxmSCaTV2Ttkkfpk9w/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbwtmAJ3bspSZWb1UM-uDvyFMiS7FKos5x7ZXlaIbQe59BNmUp2-WvXOznD18e1Nb0Dx/exec";
 const SCHED_HEADERS = ["id","title","description","owner_name","owner_email","start_date","start_time","end_date","end_time","priority"];
 const TASK_HEADERS  = ["id","title","owner_name","part","start_date","due_date","progress","status"];
 const TRIP_HEADERS  = ["id","title","description","owner_name","owner_email","start_date","start_time","end_date","end_time","priority","part"];
@@ -368,25 +368,24 @@ function App(){
     lastLocalChange.current=Date.now()+600000;
     orgLocalChange.current=Date.now()+600000;
     try{
-      // ③ 서버 전체 org_nodes 읽기
-      const r=await fetch(`${API_URL}?sheet=org_nodes`);
-      const d=await r.json();
-      const serverAll=d.ok&&d.data?d.data:[];
-      // ④ 해당 site_id만 새 데이터로 교체
-      const others=serverAll.filter(n=>n.site_id!==siteId);
-      const combined=[...others,...newSiteNodes];
-      // ⑤ POST replaceAll 한번에 전송 (서버측 원자적 처리)
+      // ③ 로컬 state에서 다른 현장/본사 노드 가져오기 (서버 재조회 불필요)
+      // orgNodes는 이미 최신 상태 (폴링으로 동기화됨)
+      let otherNodes=[];
+      setOrgNodes(prev=>{ otherNodes=prev.filter(n=>n.site_id!==siteId); return prev; });
+      await new Promise(r=>setTimeout(r,0)); // React 배치 플러시
+      const combined=[...otherNodes,...newSiteNodes];
+      // ④ POST replaceAll 한번에 전송 (서버측 setValues 원자적 처리)
       const res=await fetch(API_URL,{
         method:"POST",
         headers:{"Content-Type":"text/plain;charset=utf-8"},
         body:JSON.stringify({sheet:"org_nodes",action:"replace_all",headers:ORG_HEADERS,rows:combined})
       });
       const result=await res.json().catch(()=>({ok:false}));
-      if(!result.ok){throw new Error("replace_all 실패");}
+      if(!result.ok) throw new Error("replace_all 실패");
       setSyncStatus("동기화됨");
     }catch(e){
       // POST 실패 시 순차 upsert fallback
-      console.warn("POST replaceAll 실패, 순차 upsert로 fallback:",e);
+      console.warn("POST replaceAll 실패, fallback:", e.message);
       try{
         const r2=await fetch(`${API_URL}?sheet=org_nodes`);
         const d2=await r2.json();
@@ -409,7 +408,6 @@ function App(){
         setSyncStatus("동기화됨");
       }catch(e2){
         setSyncStatus("오류");
-        console.error("onOrgReplaceForSite fallback 오류:",e2);
       }
     }finally{
       pendingOrgIds.current.clear();
@@ -431,19 +429,18 @@ function App(){
     lastLocalChange.current=Date.now()+600000;
     orgLocalChange.current=Date.now()+600000;
     try{
-      // 서버 전체 읽어서 __hq__만 교체 후 POST replaceAll
-      const r=await fetch(`${API_URL}?sheet=org_nodes`);
-      const d=await r.json();
-      const serverAll=d.ok&&d.data?d.data:[];
-      const others=serverAll.filter(n=>n.site_id!=="__hq__");
-      const combined=[...others,...newHqNodes];
+      // 로컬 state에서 현장 노드 가져오기 (서버 재조회 불필요)
+      let otherNodes=[];
+      setOrgNodes(prev=>{ otherNodes=prev.filter(n=>n.site_id!=="__hq__"); return prev; });
+      await new Promise(r=>setTimeout(r,0));
+      const combined=[...otherNodes,...newHqNodes];
       const res=await fetch(API_URL,{
         method:"POST",
         headers:{"Content-Type":"text/plain;charset=utf-8"},
         body:JSON.stringify({sheet:"org_nodes",action:"replace_all",headers:ORG_HEADERS,rows:combined})
       });
       const result=await res.json().catch(()=>({ok:false}));
-      if(!result.ok){throw new Error("replace_all 실패");}
+      if(!result.ok) throw new Error("replace_all 실패");
       setSyncStatus("동기화됨");
     }catch(e){
       // fallback: 순차 삭제 + upsert

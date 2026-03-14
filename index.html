@@ -104,7 +104,30 @@ async function apiPost(payload){
 async function apiInit(sheet,headers){await apiPost({sheet,action:"init",headers});}
 async function apiUpsert(sheet,row){await apiPost({sheet,action:"upsert",row});}
 async function apiDelete(sheet,id){await apiPost({sheet,action:"delete",id});}
-async function apiReplaceAll(sheet,headers,rows){await apiPost({sheet,action:"replace_all",headers,rows});}
+// replace_all: GET 방식 유지 (Apps Script CORS 안정)
+// 방식: ①기존 행 개별 삭제 → ②새 행 순차 upsert (URL 길이 무관)
+async function apiReplaceAll(sheet,headers,rows){
+  // 1단계: 시트의 기존 데이터 조회 → id 목록 추출
+  try{
+    const r=await fetch(`${API_URL}?sheet=${sheet}`);
+    const d=await r.json();
+    if(d.ok&&d.data&&d.data.length>0){
+      const existIds=d.data.map(row=>row.id).filter(Boolean);
+      // 병렬 삭제 (30개씩 배치)
+      const BATCH=30;
+      for(let i=0;i<existIds.length;i+=BATCH){
+        await Promise.all(existIds.slice(i,i+BATCH).map(id=>apiDelete(sheet,id)));
+        if(i+BATCH<existIds.length) await new Promise(r=>setTimeout(r,200));
+      }
+    }
+  }catch(e){console.warn("apiReplaceAll 삭제 단계 오류",e);}
+  // 2단계: 새 행 순차 upsert (20개씩 배치)
+  const BATCH2=20;
+  for(let i=0;i<rows.length;i+=BATCH2){
+    await Promise.all(rows.slice(i,i+BATCH2).map(row=>apiUpsert(sheet,row)));
+    if(i+BATCH2<rows.length) await new Promise(r=>setTimeout(r,300));
+  }
+}
 
 // ── 상수 ──────────────────────────────────────────────
 const AVATAR_COLORS=["#6C63FF","#FF6B9D","#2EC4B6","#FB923C","#4ADE80","#F9A8D4","#60A5FA","#FBBF24"];
@@ -277,47 +300,72 @@ function App(){
   function onOrgSaveBump(){bumpLocal();}
   // 현장 조직도 전체 교체 - replace_all 단일 API 호출 (안정적)
   async function onOrgReplaceForSite(siteId,newSiteNodes){
-    const BLOCK=60000;
-    let capturedAll=null;
+    const BLOCK=120000;
+    // 1. 로컬 state 즉시 교체
     setOrgNodes(prev=>{
       const others=prev.filter(n=>n.site_id!==siteId);
-      capturedAll=[...others,...newSiteNodes];
-      return capturedAll;
+      return [...others,...newSiteNodes];
     });
     lastLocalChange.current=Math.max(lastLocalChange.current,Date.now()+BLOCK);
-    await new Promise(r=>setTimeout(r,100));
-    if(!capturedAll)return;
+    setSyncStatus("저장중");
     try{
-      await apiReplaceAll("org_nodes",ORG_HEADERS,capturedAll);
+      // 2. 서버에서 해당 현장 노드 id 조회
+      const r=await fetch(`${API_URL}?sheet=org_nodes`);
+      const d=await r.json();
+      const existIds=(d.ok&&d.data?d.data:[])
+        .filter(n=>n.site_id===siteId).map(n=>n.id).filter(Boolean);
+      // 3. 기존 노드 삭제
+      if(existIds.length>0){
+        const BATCH=30;
+        for(let i=0;i<existIds.length;i+=BATCH){
+          await Promise.all(existIds.slice(i,i+BATCH).map(id=>apiDelete("org_nodes",id)));
+          if(i+BATCH<existIds.length) await new Promise(r=>setTimeout(r,200));
+        }
+      }
+      // 4. 새 노드 순차 upsert
+      const BATCH2=20;
+      for(let i=0;i<newSiteNodes.length;i+=BATCH2){
+        await Promise.all(newSiteNodes.slice(i,i+BATCH2).map(n=>apiUpsert("org_nodes",n)));
+        if(i+BATCH2<newSiteNodes.length) await new Promise(r=>setTimeout(r,300));
+      }
       lastLocalChange.current=Math.max(lastLocalChange.current,Date.now()+10000);
       setSyncStatus("동기화됨");
     }catch(e){
       setSyncStatus("오류");
     }
   }
+  
   // 본사 조직도 전체 교체 - replace_all 단일 API 호출
+  // 본사 조직도 전체 교체 (__hq__ 노드만, 현장노드 간섭 없음)
   async function onHqOrgReplaceAll(newHqNodes){
-    // stale closure 완전 방지: setOrgNodes 콜백에서 allNodes 계산
-    // React의 setState 콜백은 동기적으로 최신 prev를 받음
-    const BLOCK=60000;
-    let capturedAll=null;
-    // 1단계: 로컬 state 즉시 업데이트 + allNodes 캡처
+    const BLOCK=120000; // 대용량 처리 동안 폴링 2분 차단
+    // 1. 로컬 state 즉시 교체
     setOrgNodes(prev=>{
       const others=prev.filter(n=>n.site_id!=="__hq__");
-      capturedAll=[...others,...newHqNodes];
-      return capturedAll;
+      return [...others,...newHqNodes];
     });
     lastLocalChange.current=Math.max(lastLocalChange.current,Date.now()+BLOCK);
-    // 2단계: React 배치 플러시 대기
-    await new Promise(r=>setTimeout(r,100));
-    // capturedAll이 null이면 (setState 아직 미처리) fallback
-    if(!capturedAll){
-      console.warn("capturedAll null - using orgNodes directly");
-      return;
-    }
-    // 3단계: 서버에 단일 replace_all 호출
+    setSyncStatus("저장중");
     try{
-      await apiReplaceAll("org_nodes",ORG_HEADERS,capturedAll);
+      // 2. 서버에서 기존 __hq__ 노드 id 조회
+      const r=await fetch(`${API_URL}?sheet=org_nodes`);
+      const d=await r.json();
+      const existHqIds=(d.ok&&d.data?d.data:[])
+        .filter(n=>n.site_id==="__hq__").map(n=>n.id).filter(Boolean);
+      // 3. 기존 __hq__ 노드 삭제 (30개씩 병렬)
+      if(existHqIds.length>0){
+        const BATCH=30;
+        for(let i=0;i<existHqIds.length;i+=BATCH){
+          await Promise.all(existHqIds.slice(i,i+BATCH).map(id=>apiDelete("org_nodes",id)));
+          if(i+BATCH<existHqIds.length) await new Promise(r=>setTimeout(r,200));
+        }
+      }
+      // 4. 새 노드 순차 upsert (20개씩 병렬)
+      const BATCH2=20;
+      for(let i=0;i<newHqNodes.length;i+=BATCH2){
+        await Promise.all(newHqNodes.slice(i,i+BATCH2).map(n=>apiUpsert("org_nodes",n)));
+        if(i+BATCH2<newHqNodes.length) await new Promise(r=>setTimeout(r,300));
+      }
       lastLocalChange.current=Math.max(lastLocalChange.current,Date.now()+10000);
       setSyncStatus("동기화됨");
     }catch(e){
@@ -1579,7 +1627,7 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
     const isMoveTarget=!!selectedId&&selectedId!==n.id&&!modalForm;
 
     // 같은 직군 하위만 (다른 직군 하위는 해당 섹션에서 별도 표시)
-    const rawChildren=nodes.filter(ch=>ch.parentId===n.id&&(ch.role_group||"기타")===(n.role_group||"기타"));
+    const rawChildren=nodes.filter(ch=>ch.parentId===n.id); // 직종 무관 모든 하위
     const orderList=childOrder[n.id]||[];
     const children=[
       ...orderList.map(id=>rawChildren.find(ch=>ch.id===id)).filter(Boolean),
@@ -1639,13 +1687,13 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
             color:"#fff",fontSize:8,fontWeight:700,padding:"1px 4px",borderRadius:4,pointerEvents:"none"}}>
             {n.job_type}
           </div>}
-          {/* 타직군 종속 아이콘 */}
+          {/* 상위 노드 표시 */}
           {n.parentId&&n.parentId!==""&&(()=>{
             const par=nodes.find(p=>p.id===n.parentId);
-            if(par&&(par.role_group||"기타")!==(n.role_group||"기타")){
-              return<div style={{position:"absolute",top:4,left:4,fontSize:8,color:"#A0AEC0",pointerEvents:"none"}}
-                title={`상위: ${par.name}`}>🔗</div>;
-            }return null;
+            if(!par)return null;
+            return<div style={{position:"absolute",top:3,left:4,fontSize:8,color:"#A0AEC0",
+              pointerEvents:"none",maxWidth:60,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}
+              title={`상위: ${par.name}`}>↑{par.name}</div>;
           })()}
           {/* 선택 체크 뱃지 */}
           {isSelected&&<div style={{position:"absolute",top:-8,right:-8,width:18,height:18,
@@ -1879,13 +1927,11 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
     // - 부모가 다른 직군 → 이 직군에서 루트 (🔗 아이콘 표시)
     // - 부모가 같은 직군 → NodeCard 재귀로 처리 (여기서 표시 안 함)
     function renderRgNodes(rgNodes){
+      // 이미 다른 노드의 하위인 노드는 루트에서 제외 (NodeCard 재귀로 표시됨)
       const rgRoots=rgNodes.filter(n=>{
-        if(!n.parentId||n.parentId==="")return true;       // 부모 없음
-        if(!nodeIds.has(n.parentId))return true;            // 부모가 이 현장에 없음
-        const parent=nodes.find(p=>p.id===n.parentId);
-        if(!parent)return true;
-        // 부모가 다른 직군이면 이 직군의 루트로 표시
-        return (parent.role_group||"기타")!==(n.role_group||"기타");
+        if(!n.parentId||n.parentId==="")return true;  // 부모 없음 → 루트
+        if(!nodeIds.has(n.parentId))return true;       // 부모가 이 현장에 없음 → 루트
+        return false; // 부모가 있으면 NodeCard 재귀에서 표시
       }).sort((a,b)=>positionSortKey(a.position)-positionSortKey(b.position));
 
       return rgRoots.map(n=><NodeCard key={n.id} n={n} depth={0}/>);

@@ -3430,10 +3430,6 @@ function PersonnelDashboard({personnel=[],orgNodes=[],sites=[],onOrgSave,onOrgDe
               {hqRoots.map(n=><HqNodeCard key={n.id} n={n} depth={0}/>)}
             </div>
           )}
-        </div>
-
-
-
         </div>{/* 캔버스 끝 */}
         </div>{/* 본문 flex wrapper 끝 */}
         {/* 이동 모드 안내바 */}
@@ -3573,6 +3569,7 @@ function PersonnelDashboard({personnel=[],orgNodes=[],sites=[],onOrgSave,onOrgDe
             </div>
           </div>
         )}
+      </div>
     );
   }
 

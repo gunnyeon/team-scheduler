@@ -230,6 +230,7 @@ function App(){
 
   const lastLocalChange=useRef(0); // 마지막 로컬 변경 시각 (ms)
   const orgLocalChange=useRef(0);  // org_nodes 전용 보호 타임스탬프
+  const pendingOrgIds=useRef(new Set()); // 서버 저장 중인 노드 id (폴링 덮어쓰기 방지)
 
   async function initialize(){
     if(initialized.current)return;
@@ -259,11 +260,34 @@ function App(){
       setTasks(prev=>{const next=JSON.stringify(t);return JSON.stringify(prev)===next?prev:t;});
       setLeaves(prev=>{const next=JSON.stringify(lv);return JSON.stringify(prev)===next?prev:lv;});
       setSites(prev=>{const next=JSON.stringify(sv);return JSON.stringify(prev)===next?prev:sv;});
-      // orgNodes는 별도 타임스탬프로 보호 (org 저장 중 폴링 덮어쓰기 방지)
-      if(orgLocalChange.current<reqAt){
-        // 서버 데이터 중복 id 제거
+      // orgNodes: pendingOrgIds에 없는 노드만 서버 데이터로 업데이트
+      // pendingOrgIds = 현재 API 저장 중인 노드 → 로컬 값 보존
+      {
         const deduped=on.filter((n,i,arr)=>arr.findIndex(x=>x.id===n.id)===i);
-        setOrgNodes(prev=>{const next=JSON.stringify(deduped);return JSON.stringify(prev)===next?prev:deduped;});
+        if(orgLocalChange.current<reqAt){
+          setOrgNodes(prev=>{
+            if(pendingOrgIds.current.size===0){
+              // 저장 중인 노드 없음 → 서버 데이터 그대로 사용
+              const next=JSON.stringify(deduped);
+              return JSON.stringify(prev)===next?prev:deduped;
+            }
+            // 저장 중인 노드는 로컬 값 유지, 나머지는 서버 값 사용
+            const serverMap=new Map(deduped.map(n=>[n.id,n]));
+            const merged=deduped.map(n=>
+              pendingOrgIds.current.has(n.id)
+                ? (prev.find(p=>p.id===n.id)||n)  // 로컬 값 유지
+                : n                                // 서버 값 사용
+            );
+            // 서버에 없지만 pending 중인 노드(새로 추가된 노드) 보존
+            prev.forEach(p=>{
+              if(pendingOrgIds.current.has(p.id)&&!serverMap.has(p.id)){
+                merged.push(p);
+              }
+            });
+            const next=JSON.stringify(merged);
+            return JSON.stringify(prev)===next?prev:merged;
+          });
+        }
       }
       setPersonnel(prev=>{const next=JSON.stringify(pr);return JSON.stringify(prev)===next?prev:pr;});
       setSiteMinStaff(prev=>{const next=JSON.stringify(ms);return JSON.stringify(prev)===next?prev:(ms||[]);});
@@ -291,13 +315,18 @@ function App(){
     orgLocalChange.current=Math.max(orgLocalChange.current,Date.now()+BLOCK);
     lastLocalChange.current=Math.max(lastLocalChange.current,Date.now()+BLOCK);
     if(!skipApi){
+      pendingOrgIds.current.add(row.id); // 저장 시작 → pending 등록
       apiUpsert("org_nodes",row)
         .then(()=>{
-          // API 완료 후 추가 보호 (완료시점부터 60초)
-          orgLocalChange.current=Math.max(orgLocalChange.current,Date.now()+60000);
-          lastLocalChange.current=Math.max(lastLocalChange.current,Date.now()+60000);
+          pendingOrgIds.current.delete(row.id); // 저장 완료 → pending 해제
+          // API 완료 후 추가 보호 (완료시점부터 30초)
+          orgLocalChange.current=Math.max(orgLocalChange.current,Date.now()+30000);
+          lastLocalChange.current=Math.max(lastLocalChange.current,Date.now()+30000);
         })
-        .catch(()=>setSyncStatus("오류"));
+        .catch(()=>{
+          pendingOrgIds.current.delete(row.id);
+          setSyncStatus("오류");
+        });
     }
   }
   // 단건 삭제
@@ -359,7 +388,8 @@ function App(){
       setSyncStatus("오류");
       console.error("onOrgReplaceForSite 오류:",e);
     }finally{
-      orgLocalChange.current=Date.now()+60000; // 완료 후 60초 추가 보호
+      pendingOrgIds.current.clear(); // 자동생성 완료 → 모든 pending 해제
+      orgLocalChange.current=Date.now()+30000; // 완료 후 30초 추가 보호
       lastLocalChange.current=Date.now()+5000;
       polling.current=setInterval(loadData,3000);
     }
@@ -408,7 +438,7 @@ function App(){
       setSyncStatus("오류");
       console.error("onHqOrgReplaceAll 오류:",e);
     }finally{
-      // 저장 완료 후 30초간 org_nodes 폴링 덮어쓰기 방지
+      pendingOrgIds.current.clear(); // 자동생성 완료 → 모든 pending 해제
       orgLocalChange.current=Date.now()+30000;
       lastLocalChange.current=Date.now()+5000;
       polling.current=setInterval(loadData,3000);

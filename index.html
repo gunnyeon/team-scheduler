@@ -281,7 +281,7 @@ function App(){
     const row={...node};
     const skipApi=!!row._skipApi;
     delete row._skipApi;
-    const BLOCK=30000; // 30초 차단
+    const BLOCK=60000; // 60초 차단 (API완료 후 추가 60초와 합산 → 충분한 보호)
     setOrgNodes(prev=>{
       const exists=prev.find(n=>n.id===row.id);
       const updated=exists?prev.map(n=>n.id===row.id?{...n,...row}:n):[...prev,row];
@@ -293,9 +293,9 @@ function App(){
     if(!skipApi){
       apiUpsert("org_nodes",row)
         .then(()=>{
-          // API 완료 후 추가 보호 (30초 → 완료시점부터 15초 더)
-          orgLocalChange.current=Math.max(orgLocalChange.current,Date.now()+15000);
-          lastLocalChange.current=Math.max(lastLocalChange.current,Date.now()+15000);
+          // API 완료 후 추가 보호 (완료시점부터 60초)
+          orgLocalChange.current=Math.max(orgLocalChange.current,Date.now()+60000);
+          lastLocalChange.current=Math.max(lastLocalChange.current,Date.now()+60000);
         })
         .catch(()=>setSyncStatus("오류"));
     }
@@ -303,14 +303,14 @@ function App(){
   // 단건 삭제
   function onOrgDelete(ids){
     const idArr=Array.isArray(ids)?ids:[ids];
-    const BLOCK=30000;
+    const BLOCK=60000;
     setOrgNodes(prev=>prev.filter(n=>!idArr.includes(n.id)));
     orgLocalChange.current=Math.max(orgLocalChange.current,Date.now()+BLOCK);
     lastLocalChange.current=Math.max(lastLocalChange.current,Date.now()+BLOCK);
     Promise.all(idArr.map(id=>apiDelete("org_nodes",id)))
       .then(()=>{
-        orgLocalChange.current=Math.max(orgLocalChange.current,Date.now()+15000);
-        lastLocalChange.current=Math.max(lastLocalChange.current,Date.now()+15000);
+        orgLocalChange.current=Math.max(orgLocalChange.current,Date.now()+60000);
+        lastLocalChange.current=Math.max(lastLocalChange.current,Date.now()+60000);
       })
       .catch(()=>setSyncStatus("오류"));
   }

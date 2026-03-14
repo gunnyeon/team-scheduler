@@ -261,7 +261,9 @@ function App(){
       setSites(prev=>{const next=JSON.stringify(sv);return JSON.stringify(prev)===next?prev:sv;});
       // orgNodes는 별도 타임스탬프로 보호 (org 저장 중 폴링 덮어쓰기 방지)
       if(orgLocalChange.current<reqAt){
-        setOrgNodes(prev=>{const next=JSON.stringify(on);return JSON.stringify(prev)===next?prev:on;});
+        // 서버 데이터 중복 id 제거
+        const deduped=on.filter((n,i,arr)=>arr.findIndex(x=>x.id===n.id)===i);
+        setOrgNodes(prev=>{const next=JSON.stringify(deduped);return JSON.stringify(prev)===next?prev:deduped;});
       }
       setPersonnel(prev=>{const next=JSON.stringify(pr);return JSON.stringify(prev)===next?prev:pr;});
       setSiteMinStaff(prev=>{const next=JSON.stringify(ms);return JSON.stringify(prev)===next?prev:(ms||[]);});
@@ -282,7 +284,9 @@ function App(){
     const BLOCK=30000; // 30초 차단
     setOrgNodes(prev=>{
       const exists=prev.find(n=>n.id===row.id);
-      return exists?prev.map(n=>n.id===row.id?{...n,...row}:n):[...prev,row];
+      const updated=exists?prev.map(n=>n.id===row.id?{...n,...row}:n):[...prev,row];
+      // 최종 중복 방어
+      return updated.filter((n,i,arr)=>arr.findIndex(x=>x.id===n.id)===i);
     });
     orgLocalChange.current=Math.max(orgLocalChange.current,Date.now()+BLOCK);
     lastLocalChange.current=Math.max(lastLocalChange.current,Date.now()+BLOCK);
@@ -317,34 +321,45 @@ function App(){
     clearInterval(polling.current);
     polling.current=null;
     setSyncStatus("저장중");
-    // ② 로컬 state 즉시 교체
+    // ② 로컬 state 즉시 교체 (중복 없이)
     setOrgNodes(prev=>{
       const others=prev.filter(n=>n.site_id!==siteId);
       return [...others,...newSiteNodes];
     });
-    lastLocalChange.current=Date.now()+300000;
+    lastLocalChange.current=Date.now()+600000;
+    orgLocalChange.current=Date.now()+600000;
     try{
-      // ③ 기존 노드 삭제
+      // ③ 기존 노드 삭제 (순차, 재시도 포함)
       const r=await fetch(`${API_URL}?sheet=org_nodes`);
       const d=await r.json();
       const existIds=(d.ok&&d.data?d.data:[])
         .filter(n=>n.site_id===siteId).map(n=>n.id).filter(Boolean);
-      if(existIds.length>0){
-        for(let i=0;i<existIds.length;i+=30){
-          await Promise.all(existIds.slice(i,i+30).map(id=>apiDelete("org_nodes",id)));
-          if(i+30<existIds.length) await new Promise(r=>setTimeout(r,150));
+      for(const id of existIds){
+        let ok=false;
+        for(let t=0;t<3&&!ok;t++){
+          try{ await apiDelete("org_nodes",id); ok=true; }
+          catch(e){ await new Promise(r=>setTimeout(r,300)); }
         }
+        await new Promise(r=>setTimeout(r,80));
       }
-      // ④ 새 노드 upsert
-      for(let i=0;i<newSiteNodes.length;i+=20){
-        await Promise.all(newSiteNodes.slice(i,i+20).map(n=>apiUpsert("org_nodes",n)));
-        if(i+20<newSiteNodes.length) await new Promise(r=>setTimeout(r,250));
+      // ④ 새 노드 순차 upsert (재시도 포함)
+      let saved=0;
+      for(const node of newSiteNodes){
+        let ok=false;
+        for(let t=0;t<3&&!ok;t++){
+          try{ await apiUpsert("org_nodes",node); ok=true; }
+          catch(e){ await new Promise(r=>setTimeout(r,300)); }
+        }
+        saved++;
+        if(saved%10===0) setSyncStatus(`저장중 (${saved}/${newSiteNodes.length})`);
+        await new Promise(r=>setTimeout(r,80));
       }
       setSyncStatus("동기화됨");
     }catch(e){
       setSyncStatus("오류");
+      console.error("onOrgReplaceForSite 오류:",e);
     }finally{
-      orgLocalChange.current=Date.now()+30000;
+      orgLocalChange.current=Date.now()+60000; // 완료 후 60초 추가 보호
       lastLocalChange.current=Date.now()+5000;
       polling.current=setInterval(loadData,3000);
     }

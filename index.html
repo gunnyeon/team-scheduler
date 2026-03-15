@@ -3009,6 +3009,7 @@ function PersonnelDashboard({personnel=[],orgNodes=[],sites=[],onOrgSave,onOrgDe
   const [searchResult,setSearchResult]=React.useState(null);
   const [hqSearch,setHqSearch]=React.useState("");         // 본사 조직도 인원 검색어
   const [hqSearchResult,setHqSearchResult]=React.useState(null); // 검색 결과 노드 id Set
+  const [licensePopup,setLicensePopup]=React.useState(null); // 자격증 보유자 팝업 {lic, holders}
   const canvasRef=React.useRef(null);
   const isDragging=React.useRef(false);
   const dragMoved=React.useRef(false); // 드래그 이동 여부 (클릭 vs 패닝 구분)
@@ -3889,8 +3890,101 @@ function PersonnelDashboard({personnel=[],orgNodes=[],sites=[],onOrgSave,onOrgDe
             </div>
             <span style={{fontSize:22,color:"#B0A7E0"}}>→</span>
           </button>
+          {/* 자격증 현황 */}
+          {(()=>{
+            // license 필드에서 자격증 파싱 (쉼표/슬래시/줄바꿈 구분)
+            const licMap={};
+            personnel.forEach(p=>{
+              if(!p.license||!String(p.license).trim())return;
+              String(p.license).split(/[,\/\n]+/).map(s=>s.trim()).filter(Boolean).forEach(lic=>{
+                if(!licMap[lic])licMap[lic]=[];
+                licMap[lic].push(p);
+              });
+            });
+            const licEntries=Object.entries(licMap).sort((a,b)=>b[1].length-a[1].length);
+            if(licEntries.length===0)return null;
+            return(
+              <div style={{...CARD,marginTop:16}}>
+                <SecHead icon="🏆" label="자격증 현황" right={`총 ${licEntries.length}종`}/>
+                <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+                  {licEntries.map(([lic,holders])=>(
+                    <div key={lic}
+                      onClick={()=>setLicensePopup({lic,holders})}
+                      style={{display:"flex",alignItems:"center",gap:7,
+                        padding:"7px 13px",borderRadius:20,cursor:"pointer",
+                        background:"#F3F0FF",border:"1.5px solid #C8BCEC",
+                        transition:"all 0.15s"}}
+                      onMouseEnter={e=>{e.currentTarget.style.background="#EDE8FB";e.currentTarget.style.borderColor="#9B8FE8";}}
+                      onMouseLeave={e=>{e.currentTarget.style.background="#F3F0FF";e.currentTarget.style.borderColor="#C8BCEC";}}>
+                      <span style={{fontSize:12,fontWeight:700,color:"#4A4570"}}>{lic}</span>
+                      <span style={{fontSize:12,fontWeight:800,color:"#fff",
+                        background:"#9B8FE8",borderRadius:10,padding:"1px 7px",minWidth:20,textAlign:"center"}}>
+                        {holders.length}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
         </div>
       </div>
+
+      {/* 자격증 보유자 팝업 */}
+      {licensePopup&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(30,20,60,0.45)",zIndex:300,
+          display:"flex",alignItems:"center",justifyContent:"center",padding:16}}
+          onClick={()=>setLicensePopup(null)}>
+          <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:18,
+            width:"100%",maxWidth:560,boxShadow:"0 8px 40px rgba(0,0,0,0.18)",overflow:"hidden"}}>
+            <div style={{height:5,background:"linear-gradient(90deg,#9B8FE8,#B8AEED)"}}/>
+            <div style={{padding:"20px 24px"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+                <div>
+                  <p style={{margin:0,fontSize:11,color:"#B0A7E0",fontWeight:600}}>자격증 보유자</p>
+                  <h3 style={{margin:"3px 0 0",fontSize:17,fontWeight:800,color:"#4A4570"}}>🏆 {licensePopup.lic}</h3>
+                </div>
+                <div style={{display:"flex",alignItems:"center",gap:10}}>
+                  <span style={{fontSize:13,fontWeight:700,color:"#9B8FE8",
+                    background:"#EDE8FB",borderRadius:10,padding:"4px 12px"}}>
+                    {licensePopup.holders.length}명 보유
+                  </span>
+                  <button onClick={()=>setLicensePopup(null)}
+                    style={{background:"none",border:"none",fontSize:22,color:"#A0AEC0",cursor:"pointer",lineHeight:1}}>×</button>
+                </div>
+              </div>
+              <div style={{display:"flex",flexDirection:"column",gap:6,maxHeight:400,overflowY:"auto"}}>
+                {licensePopup.holders.map((p,i)=>(
+                  <div key={p.id||i} style={{display:"flex",alignItems:"center",gap:12,
+                    padding:"10px 14px",borderRadius:10,background:i%2===0?"#F8F7FF":"#fff",
+                    border:"1px solid #EAE4F5"}}>
+                    <div style={{width:34,height:34,borderRadius:"50%",
+                      background:"linear-gradient(135deg,#9B8FE8,#B8AEED)",
+                      display:"flex",alignItems:"center",justifyContent:"center",
+                      fontSize:14,fontWeight:800,color:"#fff",flexShrink:0}}>
+                      {(p.name||"?")[0]}
+                    </div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <p style={{margin:0,fontSize:14,fontWeight:800,color:"#1A1A2E"}}>{p.name}</p>
+                      <p style={{margin:"2px 0 0",fontSize:11,color:"#7A8CA0"}}>
+                        {[p.department,p.position,p.job_type].filter(Boolean).join(" · ")}
+                      </p>
+                    </div>
+                    <div style={{textAlign:"right",flexShrink:0}}>
+                      <span style={{fontSize:10,padding:"2px 8px",borderRadius:6,
+                        background:p.dept_type==="본사"?"#EDE9FE":"#DCFCE7",
+                        color:p.dept_type==="본사"?"#6C63FF":"#15803D",fontWeight:700}}>
+                        {p.dept_type||"현장"}
+                      </span>
+                      {p.emp_type&&<p style={{margin:"3px 0 0",fontSize:10,color:"#A0AEC0"}}>{p.emp_type}</p>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

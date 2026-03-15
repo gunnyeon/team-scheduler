@@ -3408,9 +3408,13 @@ function PersonnelDashboard({personnel=[],orgNodes=[],sites=[],onOrgSave,onOrgDe
         {/* 캔버스 */}
         <div ref={canvasRef}
           style={{flex:1,overflow:"auto",padding:"32px 40px",cursor:selectedId?"default":"grab"}}
-          onClick={e=>{if(selectedId&&e.target===canvasRef.current)setSelectedId(null);}}
+          onClick={e=>{
+            if(dragMoved.current)return; // 패닝 후 클릭 무시
+            if(selectedId&&e.target===canvasRef.current)setSelectedId(null);
+          }}
           onMouseDown={e=>{
-            // 버튼(button,select) 클릭은 패닝 차단
+            if(e.button!==0)return;
+            // BUTTON/SELECT/INPUT 위에서는 패닝 차단
             if(["BUTTON","SELECT","INPUT"].includes(e.target.tagName))return;
             // 형제 드래그 핸들(hqchild)에서는 패닝 차단
             let el=e.target;
@@ -3424,28 +3428,26 @@ function PersonnelDashboard({personnel=[],orgNodes=[],sites=[],onOrgSave,onOrgDe
               sl:canvasRef.current.scrollLeft,st:canvasRef.current.scrollTop};
             canvasRef.current.style.cursor="grabbing";
             canvasRef.current.style.userSelect="none";
-          }}
-          onMouseMove={e=>{
-            if(!isDragging.current)return;
-            const dx=e.clientX-dragStart.current.x,dy=e.clientY-dragStart.current.y;
-            if(Math.abs(dx)>4||Math.abs(dy)>4) dragMoved.current=true;
-            canvasRef.current.scrollLeft=dragStart.current.sl-dx;
-            canvasRef.current.scrollTop=dragStart.current.st-dy;
-          }}
-          onMouseUp={()=>{
-            if(!isDragging.current)return;
-            isDragging.current=false;
-            if(canvasRef.current){
-              canvasRef.current.style.cursor=selectedId?"default":"grab";
-              canvasRef.current.style.userSelect="";
+            // document 레벨 이벤트로 캔버스 밖 나가도 패닝 유지
+            function onDocMove(ev){
+              if(!isDragging.current)return;
+              const dx=ev.clientX-dragStart.current.x;
+              const dy=ev.clientY-dragStart.current.y;
+              if(Math.abs(dx)>3||Math.abs(dy)>3) dragMoved.current=true;
+              canvasRef.current.scrollLeft=dragStart.current.sl-dx;
+              canvasRef.current.scrollTop=dragStart.current.st-dy;
             }
-          }}
-          onMouseLeave={()=>{
-            isDragging.current=false;
-            if(canvasRef.current){
-              canvasRef.current.style.cursor=selectedId?"default":"grab";
-              canvasRef.current.style.userSelect="";
+            function onDocUp(){
+              isDragging.current=false;
+              document.removeEventListener("mousemove",onDocMove);
+              document.removeEventListener("mouseup",onDocUp);
+              if(canvasRef.current){
+                canvasRef.current.style.cursor=selectedId?"default":"grab";
+                canvasRef.current.style.userSelect="";
+              }
             }
+            document.addEventListener("mousemove",onDocMove);
+            document.addEventListener("mouseup",onDocUp);
           }}>
           {hqRoots.length===0?(
             <div style={{textAlign:"center",padding:"60px 0",color:"#A8B5C2",

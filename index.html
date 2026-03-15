@@ -58,7 +58,7 @@ const LEAVE_HEADERS = ["id","title","description","owner_name","owner_email","st
 const SITE_HEADERS  = ["id","name","pm","start_date","completion","location","scale","client","contract_amount","cost_rate","order_type","equity_rate","memo"];
 const ORG_HEADERS       = ["id","site_id","emp_id","job_type","role_group","position","rank","emp_type","name","age","phone","color","parentId","memo","is_manual"];
 const MIN_STAFF_HEADERS = ["site_id","role_group","min_count"];
-const PERSONNEL_HEADERS = ["id","emp_id","name","department","dept_type","emp_type","position","rank","job_type","hire_date","age","phone"];
+const PERSONNEL_HEADERS = ["id","emp_id","name","department","dept_type","emp_type","position","rank","job_type","hire_date","age","phone","license"];
 
 async function apiGet(sheet){
   const r=await fetch(`${API_URL}?sheet=${sheet}`);
@@ -1394,12 +1394,12 @@ function PersonnelMgrModal({personnel,onSave,onDelete,onClose}){
   const JOB_TYPES=["건축","기계","전기","안전","품질","관리","토목","기타"];
   const DEPT_TYPES=["본사","현장"];
   const EMP_TYPES=["정규직","비정규직"];
-  const emptyF={id:"",emp_id:"",name:"",department:"",dept_type:"현장",emp_type:"정규직",position:"",rank:"",job_type:"건축",hire_date:"",age:"",phone:""};
+  const emptyF={id:"",emp_id:"",name:"",department:"",dept_type:"현장",emp_type:"정규직",position:"",rank:"",job_type:"건축",hire_date:"",age:"",phone:"",license:""};
   const [form,setForm]=useState(emptyF);
   const [editing,setEditing]=useState(null);
   const [search,setSearch]=useState("");
   const sf=k=>e=>setForm(f=>({...f,[k]:e.target.value}));
-  function startEdit(p){setEditing(p.id);setForm({emp_id:p.emp_id||"",name:p.name||"",department:p.department||"",dept_type:p.dept_type||"현장",emp_type:p.emp_type||"정규직",position:p.position||"",rank:p.rank||"",job_type:p.job_type||"건축",hire_date:p.hire_date||"",age:p.age||"",phone:p.phone||""});}
+  function startEdit(p){setEditing(p.id);setForm({emp_id:p.emp_id||"",name:p.name||"",department:p.department||"",dept_type:p.dept_type||"현장",emp_type:p.emp_type||"정규직",position:p.position||"",rank:p.rank||"",job_type:p.job_type||"건축",hire_date:p.hire_date||"",age:p.age||"",phone:p.phone||"",license:p.license||""});}
   function reset(){setEditing(null);setForm(emptyF);}
   function save(){
     if(!form.name.trim()){alert("성명을 입력하세요.");return;}
@@ -1407,7 +1407,7 @@ function PersonnelMgrModal({personnel,onSave,onDelete,onClose}){
     onSave(row); reset();
   }
   const inpS={width:"100%",border:"1px solid #CBD5E0",borderRadius:7,padding:"7px 10px",fontSize:13,color:"#2D3748",outline:"none",boxSizing:"border-box",background:"#fff"};
-  const filtered=personnel.filter(p=>!search||p.name?.includes(search)||p.emp_id?.includes(search)||p.department?.includes(search)||p.job_type?.includes(search));
+  const filtered=personnel.filter(p=>!search||p.name?.includes(search)||p.emp_id?.includes(search)||p.department?.includes(search)||p.job_type?.includes(search)||(p.license||'').includes(search));
   return <div style={{position:"fixed",inset:0,background:"rgba(30,30,60,0.55)",zIndex:600,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={onClose}>
     <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:18,width:"100%",maxWidth:900,maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 8px 40px rgba(0,0,0,0.2)",overflow:"hidden"}}>
       <div style={{padding:"16px 22px",borderBottom:"1px solid #E2E8F0",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
@@ -1449,6 +1449,7 @@ function PersonnelMgrModal({personnel,onSave,onDelete,onClose}){
           <div><label style={{fontSize:10,fontWeight:700,color:"#4A5568",display:"block",marginBottom:3}}>입사일</label><input type="date" value={form.hire_date} onChange={sf("hire_date")} style={inpS}/></div>
           <div><label style={{fontSize:10,fontWeight:700,color:"#4A5568",display:"block",marginBottom:3}}>나이(만)</label><input type="number" value={form.age} onChange={sf("age")} placeholder="45" style={inpS}/></div>
           <div><label style={{fontSize:10,fontWeight:700,color:"#4A5568",display:"block",marginBottom:3}}>전화번호</label><input value={form.phone} onChange={sf("phone")} placeholder="010-0000-0000" style={inpS}/></div>
+          <div style={{gridColumn:"1/-1"}}><label style={{fontSize:10,fontWeight:700,color:"#4A5568",display:"block",marginBottom:3}}>자격증</label><input value={form.license||""} onChange={sf("license")} placeholder="건축기사, 토목기사 등 (복수 입력 가능)" style={inpS}/></div>
         </div>
         <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
           {editing&&<button onClick={reset} style={{background:"#F7FAFC",border:"1px solid #CBD5E0",borderRadius:7,padding:"7px 14px",fontSize:12,color:"#718096",cursor:"pointer",fontWeight:600}}>취소</button>}
@@ -1463,8 +1464,8 @@ function PersonnelMgrModal({personnel,onSave,onDelete,onClose}){
         <span style={{fontSize:12,color:"#718096",whiteSpace:"nowrap"}}>{filtered.length}명</span>
       </div>
       {/* 목록 헤더 */}
-      <div style={{padding:"6px 22px",background:"#F7FAFC",borderBottom:"1px solid #EEF2F7",flexShrink:0,display:"grid",gridTemplateColumns:"80px 90px 100px 80px 80px 70px 70px 60px 80px 70px 80px 80px",gap:6,alignItems:"center"}}>
-        {["사번","성명","부서명","부서구분","사원구분","직위","직급","직종","입사일","나이","전화번호",""].map((h,i)=><span key={i} style={{fontSize:10,fontWeight:700,color:"#718096"}}>{h}</span>)}
+      <div style={{padding:"6px 22px",background:"#F7FAFC",borderBottom:"1px solid #EEF2F7",flexShrink:0,display:"grid",gridTemplateColumns:"80px 90px 100px 80px 80px 70px 70px 60px 80px 70px 80px 120px 80px",gap:6,alignItems:"center"}}>
+        {["사번","성명","부서명","부서구분","사원구분","직위","직급","직종","입사일","나이","전화번호","자격증",""].map((h,i)=><span key={i} style={{fontSize:10,fontWeight:700,color:"#718096"}}>{h}</span>)}
       </div>
       {/* 목록 */}
       <div style={{flex:1,overflow:"auto"}}>
@@ -1472,7 +1473,7 @@ function PersonnelMgrModal({personnel,onSave,onDelete,onClose}){
         {filtered.map(p=>{
           const isRegular=!p.emp_type||p.emp_type==="정규직";
           const jc=getGroupColor(mapJobTypeToRoleGroup(p.job_type,p.position));
-          return <div key={p.id} style={{padding:"7px 22px",borderBottom:"1px solid #EEF2F7",display:"grid",gridTemplateColumns:"80px 90px 100px 80px 80px 70px 70px 60px 80px 70px 80px 80px",gap:6,alignItems:"center",background:"#fff"}}
+          return <div key={p.id} style={{padding:"7px 22px",borderBottom:"1px solid #EEF2F7",display:"grid",gridTemplateColumns:"80px 90px 100px 80px 80px 70px 70px 60px 80px 70px 80px 120px 80px",gap:6,alignItems:"center",background:"#fff"}}
             onMouseEnter={e=>e.currentTarget.style.background="#F8F7FF"} onMouseLeave={e=>e.currentTarget.style.background="#fff"}>
             <span style={{fontSize:11,color:"#718096"}}>{p.emp_id||"-"}</span>
             <span style={{fontSize:13,fontWeight:800,color:"#1A1A2E"}}>{p.name}</span>
@@ -1485,6 +1486,7 @@ function PersonnelMgrModal({personnel,onSave,onDelete,onClose}){
             <span style={{fontSize:10,color:"#718096"}}>{p.hire_date||"-"}</span>
             <span style={{fontSize:11,color:"#718096"}}>{p.age?"만 "+p.age:"−"}</span>
             <span style={{fontSize:10,color:"#718096"}}>{p.phone||"-"}</span>
+            <span style={{fontSize:10,color:"#4A90E2",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={p.license||""}>{p.license||"-"}</span>
             <div style={{display:"flex",gap:3}}>
               <button onClick={()=>startEdit(p)} style={{fontSize:10,padding:"2px 7px",borderRadius:5,background:"#EEF2F7",color:"#6C63FF",border:"none",cursor:"pointer",fontWeight:700}}>수정</button>
               <button onClick={()=>onDelete(p.id)} style={{fontSize:10,padding:"2px 7px",borderRadius:5,background:"#FFF5F5",color:"#F87171",border:"none",cursor:"pointer",fontWeight:700}}>삭제</button>
@@ -3038,7 +3040,7 @@ function PersonnelDashboard({personnel=[],orgNodes=[],sites=[],onOrgSave,onOrgDe
   function doSearch(){
     const q=search.trim();
     if(!q){setSearchResult(null);return;}
-    setSearchResult(personnel.filter(p=>(p.name||"").includes(q)||(p.emp_id||"").includes(q)||(p.department||"").includes(q)));
+    setSearchResult(personnel.filter(p=>(p.name||"").includes(q)||(p.emp_id||"").includes(q)||(p.department||"").includes(q)||(p.license||"").includes(q)));
   }
 
   // ── 본사 조직도: org_nodes 시트(site_id="__hq__")에 실시간 저장 ──
@@ -3678,7 +3680,7 @@ function PersonnelDashboard({personnel=[],orgNodes=[],sites=[],onOrgSave,onOrgDe
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
                 <thead>
                   <tr style={{background:"#F8FAFC"}}>
-                    {["사번","성명","부서","구분","직종","직위","직급","고용형태","나이","연락처"].map(h=>(
+                    {["사번","성명","부서","구분","직종","직위","직급","고용형태","나이","연락처","자격증"].map(h=>(
                       <th key={h} style={{padding:"10px 12px",textAlign:"left",fontWeight:700,
                         color:"#374151",borderBottom:"2px solid #E2E8F0",whiteSpace:"nowrap",fontSize:12}}>{h}</th>
                     ))}
@@ -3689,7 +3691,7 @@ function PersonnelDashboard({personnel=[],orgNodes=[],sites=[],onOrgSave,onOrgDe
                     <tr key={p.id||i} style={{borderBottom:"1px solid #F1F5F9",
                       background:i%2===0?"#fff":"#F8FAFC"}}>
                       {[p.emp_id,p.name,p.department,p.dept_type,p.job_type,
-                        p.position,p.rank,p.emp_type,p.age?`만 ${p.age}세`:"",p.phone].map((v,j)=>(
+                        p.position,p.rank,p.emp_type,p.age?`만 ${p.age}세`:"",p.phone,p.license].map((v,j)=>(
                         <td key={j} style={{padding:"9px 12px",color:"#4A4570",whiteSpace:"nowrap",fontSize:12}}>
                           {v||<span style={{color:"#CBD5E0"}}>—</span>}
                         </td>

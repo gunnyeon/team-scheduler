@@ -2875,29 +2875,47 @@ function HqDeptPanel({hqNodes=[]}){
   const JOB_COLORS2={"건축":"#7BA8D9","기계":"#C8874A","전기":"#E8A45A","안전":"#4AAF82",
     "품질":"#D4739A","관리":"#9B8FE8","토목":"#5BA8BE","기타":"#9AAAB8"};
 
-  // 부서별 집계
+  // 부서별 고정 순서
+  const DEPT_ORDER=[
+    "건축사업본부","건축영업실","건축공사관리담당","기전담당",
+    "건축공공영업담당임원1","건축공공영업담당임원2",
+    "건축민간영업담당임원1","건축민간영업담당임원2",
+    "건축공사팀","건축견적팀","건축공공영업1팀","건축공공영업2팀",
+    "건축민간영업1팀","건축민간영업2팀","기전팀","건축CS팀",
+    "건축견적담당(공석)","건축CS담당(공석)"
+  ];
+
+  // 나이가 입력된 노드만 집계 대상
+  const countableNodes=hqNodes.filter(n=>n.age&&String(n.age).trim()!==""&&String(n.age).trim()!=="0");
+
+  // 부서별 집계 (나이 있는 노드만)
   const deptMap={};
-  hqNodes.forEach(n=>{
+  countableNodes.forEach(n=>{
     const dept=(n.department||n.role_group||"미분류").trim();
     if(!deptMap[dept]) deptMap[dept]={count:0,nodes:[]};
     deptMap[dept].count++;
     deptMap[dept].nodes.push(n);
   });
-  const deptEntries=Object.entries(deptMap).sort((a,b)=>b[1].count-a[1].count);
+  // 고정 순서 우선, 나머지는 인원 많은 순
+  const allDepts=Object.keys(deptMap);
+  const deptEntries=[
+    ...DEPT_ORDER.filter(d=>deptMap[d]),
+    ...allDepts.filter(d=>!DEPT_ORDER.includes(d)).sort((a,b)=>deptMap[b].count-deptMap[a].count)
+  ].map(d=>[d,deptMap[d]]);
 
-  // 직종별 집계
+  // 직종별 집계 (나이 있는 노드만)
   const jobMap={};
-  hqNodes.forEach(n=>{
+  countableNodes.forEach(n=>{
     const j=(n.job_type||"기타").trim();
     jobMap[j]=(jobMap[j]||0)+1;
   });
   const jobEntries=Object.entries(jobMap).sort((a,b)=>b[1]-a[1]);
 
-  // 고용형태 집계
-  const reg=hqNodes.filter(n=>!n.emp_type||n.emp_type==="정규직").length;
-  const irr=hqNodes.filter(n=>n.emp_type==="비정규직").length;
-  const total=hqNodes.length;
-  if(total===0) return null;
+  // 고용형태 집계 (나이 있는 노드만)
+  const reg=countableNodes.filter(n=>!n.emp_type||n.emp_type==="정규직").length;
+  const irr=countableNodes.filter(n=>n.emp_type==="비정규직").length;
+  const total=countableNodes.length;
+  if(hqNodes.length===0) return null;
 
   return(
     <div style={{
@@ -3307,29 +3325,50 @@ function PersonnelDashboard({personnel=[],orgNodes=[],sites=[],onOrgSave,onOrgDe
                 onChange={e=>{
                   const v=e.target.value;
                   setHqSearch(v);
-                  if(!v.trim()){setHqSearchResult(null);return;}
-                  const q=v.trim().toLowerCase();
-                  const matchedIds=hqNodes
-                    .filter(n=>
-                      (n.name||"").toLowerCase().includes(q)||
-                      (n.position||"").toLowerCase().includes(q)||
-                      (n.department||"").toLowerCase().includes(q)||
-                      (n.job_type||"").toLowerCase().includes(q)
-                    ).map(n=>n.id);
-                  setHqSearchResult(matchedIds.length>0?matchedIds:["__no_result__"]);
+                  // 입력값이 비면 즉시 검색 초기화
+                  if(!v.trim()) setHqSearchResult(null);
                 }}
-                placeholder="이름·직위·부서 검색"
+                onKeyDown={e=>{
+                  if(e.key==="Enter"){
+                    const q=hqSearch.trim();
+                    if(!q){setHqSearchResult(null);return;}
+                    const ql=q.toLowerCase();
+                    const matchedIds=hqNodes.filter(n=>
+                      (n.name||"").toLowerCase().includes(ql)||
+                      (n.position||"").toLowerCase().includes(ql)||
+                      (n.department||n.role_group||"").toLowerCase().includes(ql)
+                    ).map(n=>n.id);
+                    setHqSearchResult(matchedIds.length>0?matchedIds:["__no_result__"]);
+                  }
+                  if(e.key==="Escape"){setHqSearch("");setHqSearchResult(null);}
+                }}
+                placeholder="이름·직위·부서 검색 후 Enter"
                 style={{
                   border:"1.5px solid #C8BCEC",borderRadius:9,
-                  padding:"7px 32px 7px 12px",fontSize:13,
-                  outline:"none",width:180,background:"#F8F7FF",color:"#4A4570"
+                  padding:"7px 64px 7px 12px",fontSize:13,
+                  outline:"none",width:210,background:"#F8F7FF",color:"#4A4570"
                 }}
               />
+              <button
+                onClick={()=>{
+                  const q=hqSearch.trim();
+                  if(!q){setHqSearchResult(null);return;}
+                  const ql=q.toLowerCase();
+                  const matchedIds=hqNodes.filter(n=>
+                    (n.name||"").toLowerCase().includes(ql)||
+                    (n.position||"").toLowerCase().includes(ql)||
+                    (n.department||n.role_group||"").toLowerCase().includes(ql)
+                  ).map(n=>n.id);
+                  setHqSearchResult(matchedIds.length>0?matchedIds:["__no_result__"]);
+                }}
+                style={{position:"absolute",right:hqSearch?26:4,background:"#9B8FE8",border:"none",
+                  borderRadius:6,padding:"3px 8px",color:"#fff",fontSize:11,fontWeight:700,
+                  cursor:"pointer",lineHeight:"18px"}}>검색</button>
               {hqSearch
                 ? <button onClick={()=>{setHqSearch("");setHqSearchResult(null);}}
-                    style={{position:"absolute",right:6,background:"none",border:"none",
-                      color:"#B0A7E0",cursor:"pointer",fontSize:16,lineHeight:1,padding:0}}>×</button>
-                : <span style={{position:"absolute",right:9,color:"#C8BCEC",fontSize:14,pointerEvents:"none"}}>🔍</span>
+                    style={{position:"absolute",right:4,background:"none",border:"none",
+                      color:"#B0A7E0",cursor:"pointer",fontSize:16,lineHeight:1,padding:"0 2px"}}>×</button>
+                : null
               }
             </div>
             <button onClick={autoGenHq} disabled={isGenerating}

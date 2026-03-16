@@ -2826,7 +2826,7 @@ function SitePMBoard({sites=[],onSave,onDelete,orgNodes=[],onOrgSave,onOrgDelete
                 <p style={{margin:0,fontSize:12,fontWeight:700,color}}>{value}</p>
               </div>)}
             </div>
-            {s.memo&&<p style={{margin:0,fontSize:12,color:"#718096",background:"#FFFBEB",borderRadius:8,padding:"8px 10px",lineHeight:1.5,borderLeft:"3px solid #FBBF24"}}>📌 {s.memo}</p>}
+            {s.memo&&<p style={{margin:0,fontSize:12,color:"#718096",background:"#FFFBEB",borderRadius:8,padding:"8px 10px",lineHeight:1.5,borderLeft:"3px solid #FBBF24",whiteSpace:"pre-wrap"}}>📌 {s.memo}</p>}
           </div>
           {/* 액션 버튼 */}
           <div style={{padding:"10px 20px 14px",display:"flex",gap:8,borderTop:"1px solid #F0F4F8"}}>

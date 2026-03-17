@@ -56,7 +56,7 @@ const TASK_HEADERS  = ["id","title","owner_name","part","start_date","due_date",
 const TRIP_HEADERS  = ["id","title","description","owner_name","owner_email","start_date","start_time","end_date","end_time","priority","part"];
 const LEAVE_HEADERS = ["id","title","description","owner_name","owner_email","start_date","start_time","end_date","end_time","priority"];
 const SITE_HEADERS  = ["id","name","pm","start_date","completion","location","scale","client","contract_amount","cost_rate","order_type","equity_rate","memo"];
-const ORG_HEADERS       = ["id","site_id","emp_id","job_type","role_group","position","rank","emp_type","name","age","phone","color","parentId","memo","is_manual"];
+const ORG_HEADERS       = ["id","site_id","emp_id","job_type","role_group","position","rank","emp_type","name","age","phone","color","parentId","memo","is_manual","sort_order"];
 const MIN_STAFF_HEADERS = ["site_id","role_group","min_count"];
 const PERSONNEL_HEADERS = ["id","emp_id","name","department","dept_type","emp_type","position","rank","job_type","hire_date","age","phone","license","leave_status","leave_start","leave_end"];
 
@@ -1532,13 +1532,65 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
   // ── State ──
   const [modalForm,setModalForm]=useState(null);
   const [selectedId,setSelectedId]=useState(null);
-  const [sectionOrder,setSectionOrder]=useState([]); // 직종 순서
+  const [sectionOrder,setSectionOrder]=useState([]); // 직종 순서 (sort_order로 초기화)
   const [dragSec,setDragSec]=useState(null);
   const [dragOverSec,setDragOverSec]=useState(null);
   const [rgOrder,setRgOrder]=useState({});
   const [dragRg,setDragRg]=useState(null);
   const [dragOverRg,setDragOverRg]=useState(null);
   const [childOrder,setChildOrder]=useState({}); // 형제 노드 순서: {parentId: [nodeId,...]}
+
+  // nodes 로드 시 sort_order 필드에서 순서 복원
+  useEffect(()=>{
+    if(nodes.length===0)return;
+    // ── 직종(sectionOrder) 복원 ──
+    // 각 직종 대표 sort_order: 해당 직종 노드 중 가장 작은 값
+    const jtOrderMap={};
+    nodes.forEach(n=>{
+      const jt=n.job_type||"기타";
+      const so=n.sort_order?parseInt(String(n.sort_order).split("_")[0])||999:999;
+      if(jtOrderMap[jt]===undefined||so<jtOrderMap[jt]) jtOrderMap[jt]=so;
+    });
+    const sortedJTs=Object.keys(jtOrderMap).sort((a,b)=>jtOrderMap[a]-jtOrderMap[b]);
+    if(sortedJTs.length>0) setSectionOrder(sortedJTs);
+    // ── 직군(rgOrder) 복원 ──
+    const rgOrderMap={};
+    nodes.forEach(n=>{
+      const jt=n.job_type||"기타", rg=n.role_group||"기타";
+      if(!rgOrderMap[jt]) rgOrderMap[jt]={};
+      const so=n.sort_order?parseInt(String(n.sort_order).split("_")[1])||999:999;
+      if(rgOrderMap[jt][rg]===undefined||so<rgOrderMap[jt][rg]) rgOrderMap[jt][rg]=so;
+    });
+    const newRgOrder={};
+    Object.keys(rgOrderMap).forEach(jt=>{
+      newRgOrder[jt]=Object.keys(rgOrderMap[jt]).sort((a,b)=>rgOrderMap[jt][a]-rgOrderMap[jt][b]);
+    });
+    setRgOrder(newRgOrder);
+    // ── 형제(childOrder) 복원 ──
+    const childMap={};
+    nodes.forEach(n=>{
+      const pid=n.parentId||"";
+      if(!childMap[pid]) childMap[pid]=[];
+      childMap[pid].push(n);
+    });
+    const newChildOrder={};
+    Object.keys(childMap).forEach(pid=>{
+      if(!pid) return;
+      const sorted=childMap[pid].filter(n=>n.sort_order).sort((a,b)=>{
+        const sa=parseInt(String(a.sort_order).split("_")[2])||999;
+        const sb=parseInt(String(b.sort_order).split("_")[2])||999;
+        return sa-sb;
+      });
+      if(sorted.length>0) newChildOrder[pid]=sorted.map(n=>n.id);
+    });
+    setChildOrder(newChildOrder);
+  // eslint-disable-next-line
+  },[nodes.length]);
+
+  // 순서를 서버에 저장하는 헬퍼: 영향받은 노드들에 sort_order 값 부여 후 upsert
+  function saveNodeOrders(updatedNodes){
+    updatedNodes.forEach(n=>{ onOrgSave({...n,_skipApi:false}); });
+  }
   const [dragChild,setDragChild]=useState(null); // 드래그 중인 노드 ID
   const [dragOverChild,setDragOverChild]=useState(null); // 드롭 대상 노드 ID
   const [showPersonnelMgr,setShowPersonnelMgr]=useState(false);
@@ -1770,6 +1822,16 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
           const fi=base.indexOf(childId),ti=base.indexOf(t);
           if(fi<0||ti<0)return prev;
           const nx=[...base]; nx.splice(fi,1); nx.splice(ti,0,childId);
+          // 서버 저장: 형제 순서를 각 노드의 sort_order 마지막 자리에 기록
+          setTimeout(()=>{
+            nx.forEach((childNodeId,childIdx)=>{
+              const nd=nodes.find(x=>x.id===childNodeId);
+              if(!nd)return;
+              const parts=(nd.sort_order||"999_999_999").split("_");
+              const newOrder=`${parts[0]||999}_${parts[1]||999}_${childIdx}`;
+              if(nd.sort_order!==newOrder) onOrgSave({...nd,sort_order:newOrder});
+            });
+          },0);
           return {...prev,[n.id]:nx};
         });
       }
@@ -1979,7 +2041,19 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
           const next=[...base];
           next.splice(fi,1);
           next.splice(ti,0,rg);
-          return {...prev,[jt]:next};
+          const newPrev={...prev,[jt]:next};
+          // 서버 저장: 직군 순서를 각 노드의 sort_order 중간자리에 기록
+          setTimeout(()=>{
+            const jtIdx=sectionOrder.indexOf(jt);
+            next.forEach((rgKey,rgIdx)=>{
+              nodes.filter(nd=>nd.job_type===jt&&nd.role_group===rgKey).forEach(nd=>{
+                const parts=(nd.sort_order||"999_999_999").split("_");
+                const newOrder=`${jtIdx>=0?jtIdx:parts[0]}_${rgIdx}_${parts[2]||999}`;
+                if(nd.sort_order!==newOrder) onOrgSave({...nd,sort_order:newOrder});
+              });
+            });
+          },0);
+          return newPrev;
         });
       }
 
@@ -2027,6 +2101,16 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
           const next=[...base];
           next.splice(fi,1);
           next.splice(ti,0,jt);
+          // 서버 저장: 직종 순서를 각 노드의 sort_order 앞자리에 기록
+          setTimeout(()=>{
+            next.forEach((jtKey,jtIdx)=>{
+              nodes.filter(nd=>nd.job_type===jtKey).forEach(nd=>{
+                const parts=(nd.sort_order||"999_999_999").split("_");
+                const newOrder=`${jtIdx}_${parts[1]||999}_${parts[2]||999}`;
+                if(nd.sort_order!==newOrder) onOrgSave({...nd,sort_order:newOrder});
+              });
+            });
+          },0);
           return next;
         });
       }
@@ -4060,7 +4144,10 @@ function PersonnelDashboard({personnel=[],orgNodes=[],sites=[],onOrgSave,onOrgDe
                 </div>
               </div>
               <div style={{display:"flex",flexDirection:"column",gap:6,maxHeight:400,overflowY:"auto"}}>
-                {leavePopup.holders.map((p,i)=>(
+                {[...leavePopup.holders].sort((a,b)=>{
+                  const ea=a.leave_end||"9999-99-99", eb=b.leave_end||"9999-99-99";
+                  return ea.localeCompare(eb);
+                }).map((p,i)=>(
                   <div key={p.id||i} style={{display:"flex",alignItems:"center",gap:12,
                     padding:"10px 14px",borderRadius:10,background:i%2===0?"#FFF9F9":"#fff",
                     border:"1px solid #FEE2E2"}}>

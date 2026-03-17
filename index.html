@@ -58,7 +58,7 @@ const LEAVE_HEADERS = ["id","title","description","owner_name","owner_email","st
 const SITE_HEADERS  = ["id","name","pm","start_date","completion","location","scale","client","contract_amount","cost_rate","order_type","equity_rate","memo"];
 const ORG_HEADERS       = ["id","site_id","emp_id","job_type","role_group","position","rank","emp_type","name","age","phone","color","parentId","memo","is_manual"];
 const MIN_STAFF_HEADERS = ["site_id","role_group","min_count"];
-const PERSONNEL_HEADERS = ["id","emp_id","name","department","dept_type","emp_type","position","rank","job_type","hire_date","age","phone","license","leave_status"];
+const PERSONNEL_HEADERS = ["id","emp_id","name","department","dept_type","emp_type","position","rank","job_type","hire_date","age","phone","license","leave_status","leave_start","leave_end"];
 
 async function apiGet(sheet){
   const r=await fetch(`${API_URL}?sheet=${sheet}`);
@@ -1394,12 +1394,12 @@ function PersonnelMgrModal({personnel,onSave,onDelete,onClose}){
   const JOB_TYPES=["건축","기계","전기","안전","품질","관리","토목","기타"];
   const DEPT_TYPES=["본사","현장"];
   const EMP_TYPES=["정규직","비정규직"];
-  const emptyF={id:"",emp_id:"",name:"",department:"",dept_type:"현장",emp_type:"정규직",position:"",rank:"",job_type:"건축",hire_date:"",age:"",phone:"",license:"",leave_status:""};
+  const emptyF={id:"",emp_id:"",name:"",department:"",dept_type:"현장",emp_type:"정규직",position:"",rank:"",job_type:"건축",hire_date:"",age:"",phone:"",license:"",leave_status:"",leave_start:"",leave_end:""};
   const [form,setForm]=useState(emptyF);
   const [editing,setEditing]=useState(null);
   const [search,setSearch]=useState("");
   const sf=k=>e=>setForm(f=>({...f,[k]:e.target.value}));
-  function startEdit(p){setEditing(p.id);setForm({emp_id:p.emp_id||"",name:p.name||"",department:p.department||"",dept_type:p.dept_type||"현장",emp_type:p.emp_type||"정규직",position:p.position||"",rank:p.rank||"",job_type:p.job_type||"건축",hire_date:p.hire_date||"",age:p.age||"",phone:p.phone||"",license:p.license||"",leave_status:p.leave_status||""});}
+  function startEdit(p){setEditing(p.id);setForm({emp_id:p.emp_id||"",name:p.name||"",department:p.department||"",dept_type:p.dept_type||"현장",emp_type:p.emp_type||"정규직",position:p.position||"",rank:p.rank||"",job_type:p.job_type||"건축",hire_date:p.hire_date||"",age:p.age||"",phone:p.phone||"",license:p.license||"",leave_status:p.leave_status||"",leave_start:p.leave_start||"",leave_end:p.leave_end||""});}
   function reset(){setEditing(null);setForm(emptyF);}
   function save(){
     if(!form.name.trim()){alert("성명을 입력하세요.");return;}
@@ -1450,7 +1450,9 @@ function PersonnelMgrModal({personnel,onSave,onDelete,onClose}){
           <div><label style={{fontSize:10,fontWeight:700,color:"#4A5568",display:"block",marginBottom:3}}>나이(만)</label><input type="number" value={form.age} onChange={sf("age")} placeholder="45" style={inpS}/></div>
           <div><label style={{fontSize:10,fontWeight:700,color:"#4A5568",display:"block",marginBottom:3}}>전화번호</label><input value={form.phone} onChange={sf("phone")} placeholder="010-0000-0000" style={inpS}/></div>
           <div style={{gridColumn:"1/-1"}}><label style={{fontSize:10,fontWeight:700,color:"#4A5568",display:"block",marginBottom:3}}>자격증</label><input value={form.license||""} onChange={sf("license")} placeholder="건축기사, 토목기사 등 (복수 입력 가능)" style={inpS}/></div>
-          <div><label style={{fontSize:10,fontWeight:700,color:"#4A5568",display:"block",marginBottom:3}}>휴직상태</label><input value={form.leave_status||""} onChange={sf("leave_status")} placeholder="육아휴직, 병가 등 (휴직 중인 경우만 입력)" style={inpS}/></div>
+          <div><label style={{fontSize:10,fontWeight:700,color:"#4A5568",display:"block",marginBottom:3}}>기타인원 구분</label><input value={form.leave_status||""} onChange={sf("leave_status")} placeholder="육아휴직, 파견 등 (해당자만 입력)" style={inpS}/></div>
+          <div><label style={{fontSize:10,fontWeight:700,color:"#4A5568",display:"block",marginBottom:3}}>시작일</label><input type="date" value={form.leave_start||""} onChange={sf("leave_start")} style={inpS}/></div>
+          <div><label style={{fontSize:10,fontWeight:700,color:"#4A5568",display:"block",marginBottom:3}}>종료일</label><input type="date" value={form.leave_end||""} onChange={sf("leave_end")} style={inpS}/></div>
         </div>
         <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
           {editing&&<button onClick={reset} style={{background:"#F7FAFC",border:"1px solid #CBD5E0",borderRadius:7,padding:"7px 14px",fontSize:12,color:"#718096",cursor:"pointer",fontWeight:600}}>취소</button>}
@@ -1465,8 +1467,8 @@ function PersonnelMgrModal({personnel,onSave,onDelete,onClose}){
         <span style={{fontSize:12,color:"#718096",whiteSpace:"nowrap"}}>{filtered.length}명</span>
       </div>
       {/* 목록 헤더 */}
-      <div style={{padding:"6px 22px",background:"#F7FAFC",borderBottom:"1px solid #EEF2F7",flexShrink:0,display:"grid",gridTemplateColumns:"80px 90px 100px 80px 80px 70px 70px 60px 80px 70px 80px 120px 90px 80px",gap:6,alignItems:"center"}}>
-        {["사번","성명","부서명","부서구분","사원구분","직위","직급","직종","입사일","나이","전화번호","자격증","휴직상태",""].map((h,i)=><span key={i} style={{fontSize:10,fontWeight:700,color:"#718096"}}>{h}</span>)}
+      <div style={{padding:"6px 22px",background:"#F7FAFC",borderBottom:"1px solid #EEF2F7",flexShrink:0,display:"grid",gridTemplateColumns:"80px 90px 100px 80px 80px 70px 70px 60px 80px 70px 80px 120px 90px 90px 90px 80px",gap:6,alignItems:"center"}}>
+        {["사번","성명","부서명","부서구분","사원구분","직위","직급","직종","입사일","나이","전화번호","자격증","기타인원구분","시작일","종료일",""].map((h,i)=><span key={i} style={{fontSize:10,fontWeight:700,color:"#718096"}}>{h}</span>)}
       </div>
       {/* 목록 */}
       <div style={{flex:1,overflow:"auto"}}>
@@ -1474,7 +1476,7 @@ function PersonnelMgrModal({personnel,onSave,onDelete,onClose}){
         {filtered.map(p=>{
           const isRegular=!p.emp_type||p.emp_type==="정규직";
           const jc=getGroupColor(mapJobTypeToRoleGroup(p.job_type,p.position));
-          return <div key={p.id} style={{padding:"7px 22px",borderBottom:"1px solid #EEF2F7",display:"grid",gridTemplateColumns:"80px 90px 100px 80px 80px 70px 70px 60px 80px 70px 80px 120px 90px 80px",gap:6,alignItems:"center",background:"#fff"}}
+          return <div key={p.id} style={{padding:"7px 22px",borderBottom:"1px solid #EEF2F7",display:"grid",gridTemplateColumns:"80px 90px 100px 80px 80px 70px 70px 60px 80px 70px 80px 120px 90px 90px 90px 80px",gap:6,alignItems:"center",background:"#fff"}}
             onMouseEnter={e=>e.currentTarget.style.background="#F8F7FF"} onMouseLeave={e=>e.currentTarget.style.background="#fff"}>
             <span style={{fontSize:11,color:"#718096"}}>{p.emp_id||"-"}</span>
             <span style={{fontSize:13,fontWeight:800,color:"#1A1A2E"}}>{p.name}</span>
@@ -1489,6 +1491,8 @@ function PersonnelMgrModal({personnel,onSave,onDelete,onClose}){
             <span style={{fontSize:10,color:"#718096"}}>{p.phone||"-"}</span>
             <span style={{fontSize:10,color:"#4A90E2",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={p.license||""}>{p.license||"-"}</span>
             <span style={{fontSize:10,color:p.leave_status?"#F87171":"#A0AEC0",fontWeight:p.leave_status?700:400,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.leave_status||"-"}</span>
+            <span style={{fontSize:10,color:"#718096"}}>{p.leave_start||"-"}</span>
+            <span style={{fontSize:10,color:"#718096"}}>{p.leave_end||"-"}</span>
             <div style={{display:"flex",gap:3}}>
               <button onClick={()=>startEdit(p)} style={{fontSize:10,padding:"2px 7px",borderRadius:5,background:"#EEF2F7",color:"#6C63FF",border:"none",cursor:"pointer",fontWeight:700}}>수정</button>
               <button onClick={()=>onDelete(p.id)} style={{fontSize:10,padding:"2px 7px",borderRadius:5,background:"#FFF5F5",color:"#F87171",border:"none",cursor:"pointer",fontWeight:700}}>삭제</button>
@@ -3852,14 +3856,14 @@ function PersonnelDashboard({personnel=[],orgNodes=[],sites=[],onOrgSave,onOrgDe
         </div>
 
         {/* 고용형태 + 본사조직도 */}
-        <div style={{display:"flex",flexDirection:"column",gap:16}}>
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
           <div style={CARD}>
             <SecHead icon="📋" label="고용 형태"/>
             <div style={{display:"flex",gap:10,marginBottom:14}}>
               {[["정규직",regular,"#4AAF82","#DCF2E8","#52B788"],
                 ["비정규직",irregular,"#C4895A","#FDF1D6","#E8A45A"]].map(([lb,cnt,tc,bg,bc])=>(
-                <div key={lb} style={{flex:1,background:bg,borderRadius:12,
-                  padding:"13px 10px",textAlign:"center",border:`1.5px solid ${bc}33`}}>
+                <div key={lb} style={{flex:1,background:bg,borderRadius:10,
+                  padding:"10px 8px",textAlign:"center",border:`1.5px solid ${bc}33`}}>
                   <p style={{margin:0,fontSize:11,fontWeight:700,color:tc}}>{lb}</p>
                   <p style={{margin:"6px 0 3px",fontSize:28,fontWeight:800,color:tc,lineHeight:1}}>{cnt}</p>
                   <p style={{margin:0,fontSize:13,color:tc,fontWeight:600}}>
@@ -3877,7 +3881,7 @@ function PersonnelDashboard({personnel=[],orgNodes=[],sites=[],onOrgSave,onOrgDe
           {/* 본사 조직도 버튼 */}
           <button onClick={()=>setView("hqorg")}
             style={{background:"#fff",border:"1.5px solid #C8BCEC",borderRadius:16,
-              padding:"18px 20px",cursor:"pointer",textAlign:"left",
+              padding:"12px 16px",cursor:"pointer",textAlign:"left",
               boxShadow:"0 2px 12px rgba(67,56,202,0.09)",
               display:"flex",alignItems:"center",gap:14,
               transition:"box-shadow 0.2s,border-color 0.2s"}}
@@ -3907,7 +3911,7 @@ function PersonnelDashboard({personnel=[],orgNodes=[],sites=[],onOrgSave,onOrgDe
             const licEntries=Object.entries(licMap).sort((a,b)=>b[1].length-a[1].length);
             if(licEntries.length===0)return null;
             return(
-              <div style={{...CARD,marginTop:16}}>
+              <div style={{...CARD,marginTop:10}}>
                 <SecHead icon="🏆" label="자격증 현황" right={`총 ${licEntries.length}종`}/>
                 <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
                   {licEntries.map(([lic,holders])=>(
@@ -3930,7 +3934,7 @@ function PersonnelDashboard({personnel=[],orgNodes=[],sites=[],onOrgSave,onOrgDe
               </div>
             );
           })()}
-          {/* 휴직 현황 */}
+          {/* 기타인원 현황 */}
           {(()=>{
             const leaveMap={};
             personnel.forEach(p=>{
@@ -3944,7 +3948,7 @@ function PersonnelDashboard({personnel=[],orgNodes=[],sites=[],onOrgSave,onOrgDe
             if(leaveEntries.length===0)return null;
             return(
               <div style={{...CARD,marginTop:16}}>
-                <SecHead icon="🏥" label="휴직 현황" right={`총 ${totalLeave}명`}/>
+                <SecHead icon="🏥" label="기타인원 현황" right={`총 ${totalLeave}명`}/>
                 <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
                   {leaveEntries.map(([status,holders])=>(
                     <div key={status}
@@ -4016,6 +4020,13 @@ function PersonnelDashboard({personnel=[],orgNodes=[],sites=[],onOrgSave,onOrgDe
                         {p.dept_type||"현장"}
                       </span>
                       {p.emp_type&&<p style={{margin:"3px 0 0",fontSize:10,color:"#A0AEC0"}}>{p.emp_type}</p>}
+                      {(p.leave_start||p.leave_end)&&(
+                        <p style={{margin:"4px 0 0",fontSize:11,fontWeight:700,color:"#F87171",
+                          background:"#FFF5F5",borderRadius:5,padding:"2px 6px",
+                          border:"1px solid #FCA5A5",whiteSpace:"nowrap"}}>
+                          {p.leave_start||"?"} ~ {p.leave_end||"미정"}
+                        </p>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -4025,7 +4036,7 @@ function PersonnelDashboard({personnel=[],orgNodes=[],sites=[],onOrgSave,onOrgDe
         </div>
       )}
 
-      {/* 휴직 현황 팝업 */}
+      {/* 기타인원 현황 팝업 */}
       {leavePopup&&(
         <div style={{position:"fixed",inset:0,background:"rgba(30,20,60,0.45)",zIndex:300,
           display:"flex",alignItems:"center",justifyContent:"center",padding:16}}
@@ -4036,8 +4047,8 @@ function PersonnelDashboard({personnel=[],orgNodes=[],sites=[],onOrgSave,onOrgDe
             <div style={{padding:"20px 24px"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
                 <div>
-                  <p style={{margin:0,fontSize:11,color:"#FCA5A5",fontWeight:600}}>휴직 인원</p>
-                  <h3 style={{margin:"3px 0 0",fontSize:17,fontWeight:800,color:"#991B1B"}}>🏥 {leavePopup.status}</h3>
+                  <p style={{margin:0,fontSize:11,color:"#FCA5A5",fontWeight:600}}>기타인원</p>
+                  <h3 style={{margin:"3px 0 0",fontSize:17,fontWeight:800,color:"#991B1B"}}>🔖 {leavePopup.status}</h3>
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:10}}>
                   <span style={{fontSize:13,fontWeight:700,color:"#F87171",
@@ -4072,6 +4083,13 @@ function PersonnelDashboard({personnel=[],orgNodes=[],sites=[],onOrgSave,onOrgDe
                         {p.dept_type||"현장"}
                       </span>
                       {p.emp_type&&<p style={{margin:"3px 0 0",fontSize:10,color:"#A0AEC0"}}>{p.emp_type}</p>}
+                      {(p.leave_start||p.leave_end)&&(
+                        <p style={{margin:"4px 0 0",fontSize:11,fontWeight:700,color:"#F87171",
+                          background:"#FFF5F5",borderRadius:5,padding:"2px 6px",
+                          border:"1px solid #FCA5A5",whiteSpace:"nowrap"}}>
+                          {p.leave_start||"?"} ~ {p.leave_end||"미정"}
+                        </p>
+                      )}
                     </div>
                   </div>
                 ))}

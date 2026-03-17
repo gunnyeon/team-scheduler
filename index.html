@@ -1541,15 +1541,17 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
   const [childOrder,setChildOrder]=useState({}); // 형제 노드 순서: {parentId: [nodeId,...]}
 
   // nodes 로드 시 sort_order 필드에서 순서 복원
+  const isOrderDragging=useRef(false); // 드래그 중에는 복원 차단
   useEffect(()=>{
-    if(nodes.length===0)return;
+    if(nodes.length===0||isOrderDragging.current)return;
+    const hasSortOrder=nodes.some(n=>n.sort_order&&String(n.sort_order).trim()!=="");
+    if(!hasSortOrder)return;
     // ── 직종(sectionOrder) 복원 ──
-    // 각 직종 대표 sort_order: 해당 직종 노드 중 가장 작은 값
     const jtOrderMap={};
     nodes.forEach(n=>{
       const jt=n.job_type||"기타";
-      const so=n.sort_order?parseInt(String(n.sort_order).split("_")[0])||999:999;
-      if(jtOrderMap[jt]===undefined||so<jtOrderMap[jt]) jtOrderMap[jt]=so;
+      const so=parseInt(String(n.sort_order||"").split("_")[0]);
+      if(!isNaN(so)&&(jtOrderMap[jt]===undefined||so<jtOrderMap[jt])) jtOrderMap[jt]=so;
     });
     const sortedJTs=Object.keys(jtOrderMap).sort((a,b)=>jtOrderMap[a]-jtOrderMap[b]);
     if(sortedJTs.length>0) setSectionOrder(sortedJTs);
@@ -1558,8 +1560,8 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
     nodes.forEach(n=>{
       const jt=n.job_type||"기타", rg=n.role_group||"기타";
       if(!rgOrderMap[jt]) rgOrderMap[jt]={};
-      const so=n.sort_order?parseInt(String(n.sort_order).split("_")[1])||999:999;
-      if(rgOrderMap[jt][rg]===undefined||so<rgOrderMap[jt][rg]) rgOrderMap[jt][rg]=so;
+      const so=parseInt(String(n.sort_order||"").split("_")[1]);
+      if(!isNaN(so)&&(rgOrderMap[jt][rg]===undefined||so<rgOrderMap[jt][rg])) rgOrderMap[jt][rg]=so;
     });
     const newRgOrder={};
     Object.keys(rgOrderMap).forEach(jt=>{
@@ -1569,23 +1571,25 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
     // ── 형제(childOrder) 복원 ──
     const childMap={};
     nodes.forEach(n=>{
-      const pid=n.parentId||"";
+      const pid=n.parentId||"__root__";
       if(!childMap[pid]) childMap[pid]=[];
       childMap[pid].push(n);
     });
     const newChildOrder={};
     Object.keys(childMap).forEach(pid=>{
-      if(!pid) return;
-      const sorted=childMap[pid].filter(n=>n.sort_order).sort((a,b)=>{
-        const sa=parseInt(String(a.sort_order).split("_")[2])||999;
-        const sb=parseInt(String(b.sort_order).split("_")[2])||999;
+      if(pid==="__root__")return;
+      const arr=childMap[pid];
+      const withOrder=arr.filter(n=>n.sort_order&&!isNaN(parseInt(String(n.sort_order).split("_")[2])));
+      if(withOrder.length===0)return;
+      const sorted=[...arr].sort((a,b)=>{
+        const sa=isNaN(parseInt(String(a.sort_order||"").split("_")[2]))?999:parseInt(String(a.sort_order).split("_")[2]);
+        const sb=isNaN(parseInt(String(b.sort_order||"").split("_")[2]))?999:parseInt(String(b.sort_order).split("_")[2]);
         return sa-sb;
       });
-      if(sorted.length>0) newChildOrder[pid]=sorted.map(n=>n.id);
+      newChildOrder[pid]=sorted.map(n=>n.id);
     });
     setChildOrder(newChildOrder);
-  // eslint-disable-next-line
-  },[nodes.length]);
+  },[nodes]);
 
   // 순서를 서버에 저장하는 헬퍼: 영향받은 노드들에 sort_order 값 부여 후 upsert
   function saveNodeOrders(updatedNodes){
@@ -1805,6 +1809,7 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
     function handleChildDragMouseDown(e,childId){
       if(selectedId)return;
       e.stopPropagation(); e.preventDefault();
+      isOrderDragging.current=true;
       setDragChild(childId); let cur=null;
       function mv(ev){
         const els=document.elementsFromPoint(ev.clientX,ev.clientY); let f=null;
@@ -1814,6 +1819,7 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
       function up(){
         document.removeEventListener("mousemove",mv);document.removeEventListener("mouseup",up);
         const t=cur; setDragChild(null); setDragOverChild(null);
+        isOrderDragging.current=false;
         if(!t||t===childId)return;
         setChildOrder(prev=>{
           const sIds=children.map(ch=>ch.id);
@@ -2002,6 +2008,7 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
       if(selectedId)return;
       e.stopPropagation();
       e.preventDefault();
+      isOrderDragging.current=true;
       setDragRg({jt,rg});
       let currentOverRg=null;
 
@@ -2028,6 +2035,7 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
         const target=currentOverRg;
         setDragRg(null);
         setDragOverRg(null);
+        isOrderDragging.current=false;
         if(!target||target.rg===rg||target.jt!==jt)return;
         setRgOrder(prev=>{
           const allRgs=Object.keys(byJT2[jt]||{});
@@ -2066,6 +2074,7 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
       if(selectedId)return;
       e.stopPropagation();
       e.preventDefault();
+      isOrderDragging.current=true;
       setDragSec(jt);
       let currentOverSec=null;
 
@@ -2090,6 +2099,7 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
         const target=currentOverSec;
         setDragSec(null);
         setDragOverSec(null);
+        isOrderDragging.current=false;
         if(!target||target===jt)return;
         setSectionOrder(prev=>{
           const base=prev.length>0

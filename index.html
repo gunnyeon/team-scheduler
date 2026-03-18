@@ -2891,6 +2891,21 @@ function SitePMBoard({sites=[],onSave,onDelete,orgNodes=[],onOrgSave,onOrgDelete
                 <p style={{margin:0,fontSize:11,color:"#A0AEC0",fontWeight:600}}>담당 PM</p>
                 <p style={{margin:0,fontSize:15,fontWeight:800,color:"#2D3748"}}>{s.pm||"미지정"}</p>
               </div>
+              {s.location&&s.location!=="-"&&(
+                <a href={`https://map.naver.com/p/search/${encodeURIComponent(s.location)}`}
+                  target="_blank" rel="noopener noreferrer"
+                  title={`${s.location} 길찾기`}
+                  style={{display:"flex",alignItems:"center",justifyContent:"center",
+                    width:34,height:34,borderRadius:10,
+                    background:"#03C75A",flexShrink:0,textDecoration:"none",
+                    boxShadow:"0 2px 6px rgba(3,199,90,0.35)"}}
+                  onClick={e=>e.stopPropagation()}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="white"/>
+                    <circle cx="12" cy="9" r="2.5" fill="#03C75A"/>
+                  </svg>
+                </a>
+              )}
             </div>
             {/* 공정율 바 */}
             {progress!==null&&<div style={{marginBottom:14}}>
@@ -2924,22 +2939,19 @@ function SitePMBoard({sites=[],onSave,onDelete,orgNodes=[],onOrgSave,onOrgDelete
                 <p style={{margin:"0 0 2px",fontSize:10,color:"#A0AEC0",fontWeight:600}}>{label}</p>
                 <p style={{margin:0,fontSize:12,fontWeight:700,color}}>{value}</p>
               </div>)}
-              {/* 현장 위치 - 네이버 지도 연결 */}
-              <div style={{background:"#F8FAFC",borderRadius:8,padding:"8px 10px",gridColumn:"1/-1"}}>
-                <p style={{margin:"0 0 2px",fontSize:10,color:"#A0AEC0",fontWeight:600}}>현장 위치</p>
-                {s.location&&s.location!=="-"?(
-                  <a href={`https://map.naver.com/p/search/${encodeURIComponent(s.location)}`}
-                    target="_blank" rel="noopener noreferrer"
-                    style={{display:"inline-flex",alignItems:"center",gap:4,
-                      fontSize:12,fontWeight:700,color:"#03C75A",textDecoration:"none"}}>
-                    📍 {s.location}
-                    <span style={{fontSize:10,background:"#03C75A",color:"#fff",
-                      borderRadius:4,padding:"1px 5px",fontWeight:600}}>길찾기</span>
-                  </a>
-                ):(
+              {/* 현장 위치 */}
+              {s.location&&s.location!=="-"&&(
+                <div style={{background:"#F8FAFC",borderRadius:8,padding:"8px 10px"}}>
+                  <p style={{margin:"0 0 2px",fontSize:10,color:"#A0AEC0",fontWeight:600}}>현장 위치</p>
+                  <p style={{margin:0,fontSize:12,fontWeight:700,color:"#4A5568"}}>{s.location}</p>
+                </div>
+              )}
+              {(!s.location||s.location==="-")&&(
+                <div style={{background:"#F8FAFC",borderRadius:8,padding:"8px 10px"}}>
+                  <p style={{margin:"0 0 2px",fontSize:10,color:"#A0AEC0",fontWeight:600}}>현장 위치</p>
                   <p style={{margin:0,fontSize:12,fontWeight:700,color:"#A0AEC0"}}>-</p>
-                )}
-              </div>
+                </div>
+              )}
             </div>
             {s.memo&&<p style={{margin:0,fontSize:12,color:"#718096",background:"#FFFBEB",borderRadius:8,padding:"8px 10px",lineHeight:1.5,borderLeft:"3px solid #FBBF24",whiteSpace:"pre-wrap"}}>{s.memo}</p>}
           </div>

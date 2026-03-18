@@ -841,7 +841,7 @@ function App(){
                 입력
               </button>
             </div>
-          ):<PersonnelDashboard personnel={personnel} orgNodes={orgNodes} sites={sites} siteMinStaff={siteMinStaff} onOrgSave={onOrgSave} onOrgDelete={onOrgDelete} onHqOrgReplaceAll={onHqOrgReplaceAll}/>)}
+          ):<PersonnelDashboard personnel={personnel} orgNodes={orgNodes} sites={sites} siteMinStaff={siteMinStaff} onOrgSave={onOrgSave} onOrgDelete={onOrgDelete} onHqOrgReplaceAll={onHqOrgReplaceAll} isMobile={isMobile}/>)}
           {activeMenu==="일정 관리"&&<ScheduleBoard schedules={schedules} onEdit={s=>{setEditingSched(s);setShowSchedModal(true);}} onDelete={deleteSched} isMobile={isMobile}/>}
           {activeMenu==="업무 관리"&&<TaskBoard tasks={tasks} onEdit={t=>{setEditingTask(t);setShowTaskModal(true);}} onDelete={deleteTask} onStatusChange={updateTaskStatus} isMobile={isMobile}/>}
           {activeMenu==="캘린더(주요일정)"&&<CalendarView schedules={schedules} currentMonth={currentMonth} setCurrentMonth={setCurrentMonth} todayStr={todayStr} selectedSched={selectedSched} setSelectedSched={setSelectedSched} onDateClick={d=>{setEditingSched(null);setShowSchedModal({prefillDate:d});}} onEditSched={s=>{setEditingSched(s);setShowSchedModal(true);}} onDeleteSched={deleteSched} isMobile={isMobile}/>}
@@ -871,7 +871,7 @@ function App(){
   :<SitePMBoard sites={sites} onSave={saveSite} onDelete={deleteSite} orgNodes={orgNodes}
   onOrgSave={onOrgSave} onOrgDelete={onOrgDelete} onOrgSaveBump={onOrgSaveBump} onOrgReplaceForSite={onOrgReplaceForSite}
   personnel={personnel} onPersonnelSave={onPersonnelSave} onPersonnelDelete={onPersonnelDelete}
-  siteMinStaff={siteMinStaff} onMinStaffSave={onMinStaffSave}
+  siteMinStaff={siteMinStaff} onMinStaffSave={onMinStaffSave} isMobile={isMobile}
 />
 )}
 
@@ -896,7 +896,7 @@ function App(){
         </div>
       )}
     {/* 모바일 하단 내비 */}
-      <div className="mobile-nav" style={{display:isMobile?"flex":"none",position:"fixed",bottom:0,left:0,right:0,background:"#FFFFFF",borderTop:"1px solid #CBD5E0",zIndex:50,padding:"6px 0",justifyContent:"space-around",alignItems:"center"}}>
+      <div className="mobile-nav" style={{display:isMobile?"flex":"none",position:"fixed",bottom:0,left:0,right:0,background:"#FFFFFF",borderTop:"1px solid #CBD5E0",zIndex:50,padding:"6px 0 calc(6px + env(safe-area-inset-bottom))",justifyContent:"space-around",alignItems:"center"}}>
         {[
           {key:"대시보드(건축공사팀)",icon:"▦",label:"대시보드"},
           {key:"캘린더(주요일정)",icon:"🗓",label:"일정"},
@@ -1161,7 +1161,7 @@ function TaskBoard({tasks,onEdit,onDelete,onStatusChange,isMobile=false}){
         return <button key={p} onClick={()=>setActivePart(p)} style={{padding:"6px 14px",borderRadius:20,cursor:"pointer",fontSize:12,fontWeight:600,border:`1px solid ${activePart===p?(pc?.border||"#6C63FF"):"#CBD5E0"}`,background:activePart===p?(pc?.bg||"rgba(108,99,255,0.3)"):"#EEF2F7",color:activePart===p?(pc?.text||"#fff"):"#4A5568",display:"flex",alignItems:"center",gap:5}}>{p}<span style={{fontSize:10,opacity:0.7}}>({count})</span></button>;
       })}
     </div>
-    <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
+    <div style={{display:"flex",gap:isMobile?6:8,marginBottom:isMobile?12:16,flexWrap:"wrap",alignItems:"center"}}>
       {["전체",...TASK_STATUSES].map(s=>{
         const c=STATUS_COLORS[s];
         return <button key={s} onClick={()=>setStatusFilter(s)} style={{padding:"5px 12px",borderRadius:20,cursor:"pointer",fontSize:11,fontWeight:600,border:"none",background:statusFilter===s?(c?.border||"#6C63FF"):"#EEF2F7",color:statusFilter===s?"#fff":"#4A5568"}}>{s}</button>;
@@ -2753,7 +2753,7 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
 }
 
 
-function SitePMBoard({sites=[],onSave,onDelete,orgNodes=[],onOrgSave,onOrgDelete,onOrgSaveBump,onOrgReplaceForSite,personnel=[],onPersonnelSave,onPersonnelDelete,siteMinStaff=[],onMinStaffSave}){
+function SitePMBoard({sites=[],onSave,onDelete,orgNodes=[],onOrgSave,onOrgDelete,onOrgSaveBump,onOrgReplaceForSite,personnel=[],onPersonnelSave,onPersonnelDelete,siteMinStaff=[],onMinStaffSave,isMobile=false}){
   const [showModal,setShowModal]=useState(false);
   const [orgSite,setOrgSite]=useState(null);
   const [editing,setEditing]=useState(null);
@@ -2828,7 +2828,7 @@ function SitePMBoard({sites=[],onSave,onDelete,orgNodes=[],onOrgSave,onOrgDelete
       <div style={{flex:1,minWidth:200,position:"relative"}}>
         <span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",color:"#A0AEC0",fontSize:16,pointerEvents:"none"}}>🔍</span>
         <input value={searchQ} onChange={e=>setSearchQ(e.target.value)} placeholder="현장명, PM, 위치, 발주처 검색..."
-          style={{width:"100%",border:"1px solid #CBD5E0",borderRadius:10,padding:"10px 12px 10px 38px",fontSize:14,color:"#2D3748",outline:"none",boxSizing:"border-box",background:"#fff"}}/>
+          style={{width:"100%",border:"1px solid #CBD5E0",borderRadius:10,padding:isMobile?"8px 10px 8px 34px":"10px 12px 10px 38px",fontSize:isMobile?13:14,color:"#2D3748",outline:"none",boxSizing:"border-box",background:"#fff"}}/>
         {searchQ&&<button onClick={()=>setSearchQ("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#A0AEC0",cursor:"pointer",fontSize:18,lineHeight:1}}>×</button>}
       </div>
       <span style={{fontSize:13,color:"#718096",whiteSpace:"nowrap"}}>{filtered.length}개 현장</span>
@@ -2861,7 +2861,7 @@ function SitePMBoard({sites=[],onSave,onDelete,orgNodes=[],onOrgSave,onOrgDelete
       {q||activeFilterCount>0?"조건에 맞는 현장이 없습니다.":"등록된 현장이 없습니다."}
     </div>}
     {/* 카드 그리드 */}
-    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))",gap:18}}>
+    <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(auto-fill,minmax(320px,1fr))",gap:isMobile?12:18}}>
       {filtered.map(s=>{
         const days=daysLeft(s.completion);
         const urgent=days!==null&&days>=0&&days<=30;
@@ -2875,12 +2875,12 @@ function SitePMBoard({sites=[],onSave,onDelete,orgNodes=[],onOrgSave,onOrgDelete
         return <div key={s.id} style={{background:"#fff",border:`1px solid ${urgent?"#FBBF24":done?"#E2E8F0":"#E2E8F0"}`,borderRadius:16,boxShadow:`0 2px 10px rgba(0,0,0,0.07)`,overflow:"hidden",display:"flex",flexDirection:"column"}}>
           {/* 상단 컬러바 */}
           <div style={{height:5,background:done?"#CBD5E0":urgent?"linear-gradient(90deg,#FBBF24,#F87171)":"linear-gradient(90deg,#6C63FF,#9F7AEA)"}}/>
-          <div style={{padding:"18px 20px",flex:1}}>
+          <div style={{padding:isMobile?"14px 14px":"18px 20px",flex:1}}>
             {/* 헤더 행: 현장명 + D-태그 */}
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14}}>
               <div style={{flex:1,paddingRight:8}}>
                 <p style={{margin:"0 0 3px",fontSize:11,color:"#A0AEC0",fontWeight:600,letterSpacing:0.5}}>현장명</p>
-                <h3 style={{margin:0,fontSize:16,fontWeight:800,color:"#1A1A2E",lineHeight:1.35}}>{s.name}</h3>
+                <h3 style={{margin:0,fontSize:isMobile?14:16,fontWeight:800,color:"#1A1A2E",lineHeight:1.35}}>{s.name}</h3>
               </div>
               {dTag}
             </div>
@@ -2914,7 +2914,6 @@ function SitePMBoard({sites=[],onSave,onDelete,orgNodes=[],onOrgSave,onOrgDelete
               {[
                 {label:"착공일자",value:s.start_date?`${s.start_date} (${getDayOfWeek(s.start_date)})`:"-",color:"#4A5568"},
                 {label:"준공일자",value:s.completion?`${s.completion} (${getDayOfWeek(s.completion)})`:"-",color:done?"#A0AEC0":urgent?"#D97706":"#2D3748"},
-                {label:"현장 위치",value:s.location||"-",color:"#4A5568"},
                 {label:"규모",value:s.scale||"-",color:"#4A5568"},
                 {label:"도급액(당사분)",value:s.contract_amount||"-",color:"#2D3748"},
                 {label:"원가율",value:s.cost_rate?`${s.cost_rate}%`:"-",color:s.cost_rate&&Number(s.cost_rate)>=100?"#DC2626":s.cost_rate&&Number(s.cost_rate)>=90?"#D97706":"#2D3748"},
@@ -2925,11 +2924,27 @@ function SitePMBoard({sites=[],onSave,onDelete,orgNodes=[],onOrgSave,onOrgDelete
                 <p style={{margin:"0 0 2px",fontSize:10,color:"#A0AEC0",fontWeight:600}}>{label}</p>
                 <p style={{margin:0,fontSize:12,fontWeight:700,color}}>{value}</p>
               </div>)}
+              {/* 현장 위치 - 네이버 지도 연결 */}
+              <div style={{background:"#F8FAFC",borderRadius:8,padding:"8px 10px",gridColumn:"1/-1"}}>
+                <p style={{margin:"0 0 2px",fontSize:10,color:"#A0AEC0",fontWeight:600}}>현장 위치</p>
+                {s.location&&s.location!=="-"?(
+                  <a href={`https://map.naver.com/p/search/${encodeURIComponent(s.location)}`}
+                    target="_blank" rel="noopener noreferrer"
+                    style={{display:"inline-flex",alignItems:"center",gap:4,
+                      fontSize:12,fontWeight:700,color:"#03C75A",textDecoration:"none"}}>
+                    📍 {s.location}
+                    <span style={{fontSize:10,background:"#03C75A",color:"#fff",
+                      borderRadius:4,padding:"1px 5px",fontWeight:600}}>길찾기</span>
+                  </a>
+                ):(
+                  <p style={{margin:0,fontSize:12,fontWeight:700,color:"#A0AEC0"}}>-</p>
+                )}
+              </div>
             </div>
             {s.memo&&<p style={{margin:0,fontSize:12,color:"#718096",background:"#FFFBEB",borderRadius:8,padding:"8px 10px",lineHeight:1.5,borderLeft:"3px solid #FBBF24",whiteSpace:"pre-wrap"}}>{s.memo}</p>}
           </div>
           {/* 액션 버튼 */}
-          <div style={{padding:"10px 20px 14px",display:"flex",gap:8,borderTop:"1px solid #F0F4F8"}}>
+          <div style={{padding:isMobile?"8px 14px 12px":"10px 20px 14px",display:"flex",gap:isMobile?6:8,borderTop:"1px solid #F0F4F8"}}>
             <button onClick={()=>setOrgSite(s)} style={{flex:1,...btn("#F0FDF4","#15803D"),fontSize:12,padding:"7px 0"}}>🏢 조직도</button>
             <button onClick={()=>openEdit(s)} style={{flex:1,...btn("#EEF2F7","#6C63FF"),fontSize:12,padding:"7px 0"}}>✏ 수정</button>
             <button onClick={()=>del(s.id)} style={{flex:1,...btn("#FFF5F5","#F87171"),fontSize:12,padding:"7px 0"}}>🗑 삭제</button>
@@ -3093,7 +3108,7 @@ function HqDeptPanel({hqNodes=[]}){
 
 
 // ── 리포트 ────────────────────────────────────────────
-function PersonnelDashboard({personnel=[],orgNodes=[],sites=[],onOrgSave,onOrgDelete,onHqOrgReplaceAll}){
+function PersonnelDashboard({personnel=[],orgNodes=[],sites=[],onOrgSave,onOrgDelete,onHqOrgReplaceAll,isMobile=false}){
   // ── hqNodes: org_nodes에서 site_id="__hq__" 행을 실시간으로 가져옴 ──
   const hqNodes=React.useMemo(()=>orgNodes.filter(n=>n.site_id==="__hq__"),[orgNodes]);
 
@@ -3749,25 +3764,25 @@ function PersonnelDashboard({personnel=[],orgNodes=[],sites=[],onOrgSave,onOrgDe
     <div style={{padding:"24px 28px 40px",background:"#F7F5FD",minHeight:"100%",overflowY:"auto"}}>
 
       {/* 헤더 + 검색 */}
-      <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:24}}>
+      <div style={{display:"flex",alignItems:"center",gap:isMobile?10:16,marginBottom:isMobile?16:24,flexWrap:isMobile?"wrap":"nowrap"}}>
         <div style={{width:46,height:46,borderRadius:13,background:"linear-gradient(135deg,#9B8FE8,#B8AEED)",
           display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0}}>👥</div>
         <div style={{flex:1}}>
           <p style={{margin:0,fontSize:11,color:"#B0A7E0",fontWeight:700,letterSpacing:1}}>PERSONNEL DASHBOARD</p>
           <h2 style={{margin:0,fontSize:22,fontWeight:800,color:"#4A4570",letterSpacing:-0.3}}>인원현황 대시보드</h2>
         </div>
-        <div style={{display:"flex",gap:7,alignItems:"center"}}>
+        <div style={{display:"flex",gap:7,alignItems:"center",width:isMobile?"100%":"auto"}}>
           <input value={search} onChange={e=>setSearch(e.target.value)}
             onKeyDown={e=>e.key==="Enter"&&doSearch()}
             placeholder="이름 · 사번 · 부서 검색"
-            style={{border:"1.5px solid #C8BCEC",borderRadius:10,padding:"10px 15px",
-              fontSize:13,outline:"none",width:205,background:"#fff",color:"#4A4570"}}/>
+            style={{border:"1.5px solid #C8BCEC",borderRadius:10,padding:isMobile?"8px 12px":"10px 15px",
+              fontSize:13,outline:"none",width:isMobile?"100%":205,background:"#fff",color:"#4A4570",flex:isMobile?1:"auto"}}/>
           <button onClick={doSearch}
             style={{background:"#9B8FE8",color:"#fff",border:"none",borderRadius:10,
-              padding:"10px 18px",fontWeight:700,fontSize:13,cursor:"pointer"}}>검색</button>
+              padding:isMobile?"8px 14px":"10px 18px",fontWeight:700,fontSize:13,cursor:"pointer",flexShrink:0}}>검색</button>
           {searchResult&&<button onClick={()=>{setSearchResult(null);setSearch("");}}
             style={{background:"#EEEBF7",color:"#6B7A8D",border:"none",borderRadius:10,
-              padding:"10px 12px",fontWeight:700,fontSize:13,cursor:"pointer"}}>✕</button>}
+              padding:isMobile?"8px 10px":"10px 12px",fontWeight:700,fontSize:13,cursor:"pointer",flexShrink:0}}>✕</button>}
         </div>
       </div>
 
@@ -3808,7 +3823,7 @@ function PersonnelDashboard({personnel=[],orgNodes=[],sites=[],onOrgSave,onOrgDe
       )}
 
       {/* KPI 4개 */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginBottom:20}}>
+      <div style={{display:"grid",gridTemplateColumns:isMobile?"repeat(2,1fr)":"repeat(4,1fr)",gap:isMobile?10:14,marginBottom:isMobile?16:20}}>
         {/* 전체 인원 */}
         <div style={{...CARD,padding:"18px 20px"}}>
           <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}>
@@ -3816,7 +3831,7 @@ function PersonnelDashboard({personnel=[],orgNodes=[],sites=[],onOrgSave,onOrgDe
               display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>👥</div>
             <div>
               <p style={{margin:0,fontSize:12,color:"#7A8CA0",fontWeight:600}}>전체 인원</p>
-              <p style={{margin:"2px 0 0",fontSize:28,fontWeight:800,color:"#9B8FE8",lineHeight:1}}>
+              <p style={{margin:"2px 0 0",fontSize:isMobile?22:28,fontWeight:800,color:"#9B8FE8",lineHeight:1}}>
                 {total}<span style={{fontSize:14,fontWeight:600,marginLeft:2}}>명</span>
               </p>
             </div>
@@ -3837,7 +3852,7 @@ function PersonnelDashboard({personnel=[],orgNodes=[],sites=[],onOrgSave,onOrgDe
               display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>🏢</div>
             <div>
               <p style={{margin:0,fontSize:12,color:"#7A8CA0",fontWeight:600}}>본사 인원</p>
-              <p style={{margin:"2px 0 0",fontSize:28,fontWeight:800,color:"#4AAF82",lineHeight:1}}>
+              <p style={{margin:"2px 0 0",fontSize:isMobile?22:28,fontWeight:800,color:"#4AAF82",lineHeight:1}}>
                 {headCount}<span style={{fontSize:14,fontWeight:600,marginLeft:2}}>명</span>
               </p>
             </div>
@@ -3856,7 +3871,7 @@ function PersonnelDashboard({personnel=[],orgNodes=[],sites=[],onOrgSave,onOrgDe
               display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>🏗</div>
             <div>
               <p style={{margin:0,fontSize:12,color:"#7A8CA0",fontWeight:600}}>현장 인원</p>
-              <p style={{margin:"2px 0 0",fontSize:28,fontWeight:800,color:"#D4818A",lineHeight:1}}>
+              <p style={{margin:"2px 0 0",fontSize:isMobile?22:28,fontWeight:800,color:"#D4818A",lineHeight:1}}>
                 {siteCount}<span style={{fontSize:14,fontWeight:600,marginLeft:2}}>명</span>
               </p>
             </div>
@@ -3875,7 +3890,7 @@ function PersonnelDashboard({personnel=[],orgNodes=[],sites=[],onOrgSave,onOrgDe
               display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>✅</div>
             <div>
               <p style={{margin:0,fontSize:12,color:"#7A8CA0",fontWeight:600}}>정규직 비율</p>
-              <p style={{margin:"2px 0 0",fontSize:28,fontWeight:800,color:"#4AAF82",lineHeight:1}}>
+              <p style={{margin:"2px 0 0",fontSize:isMobile?22:28,fontWeight:800,color:"#4AAF82",lineHeight:1}}>
                 {total?Math.round(regular/total*100):0}<span style={{fontSize:14,fontWeight:600}}>%</span>
               </p>
             </div>
@@ -3892,7 +3907,7 @@ function PersonnelDashboard({personnel=[],orgNodes=[],sites=[],onOrgSave,onOrgDe
       </div>
 
       {/* 3단 그리드 */}
-      <div style={{display:"grid",gridTemplateColumns:"1.15fr 1fr 0.85fr",gap:16,alignItems:"stretch"}}>
+      <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1.15fr 1fr 0.85fr",gap:isMobile?12:16,alignItems:"stretch"}}>
 
         {/* 직종별 */}
         <div style={{...CARD,display:"flex",flexDirection:"column"}}>

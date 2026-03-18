@@ -50,7 +50,7 @@
 const {useState,useEffect,useRef,useCallback}=React;
 
 // ── API 설정 ───────────────────────────────────────────
-const API_URL = "https://script.google.com/macros/s/AKfycbxALPpNhet-7pZ7hpSXsFwlxYj-WzHly8MpOm741dCe-1Y-fKkjWk_Zx9_dUYBieV0/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbyPS-flBKUF7iIV6aoMi2dBWaf8-tRqlgf81bQXrp1HVPtBJxsJAEZMYxJ1Gm1x-rAwaw/exec";
 const SCHED_HEADERS = ["id","title","description","owner_name","owner_email","start_date","start_time","end_date","end_time","priority"];
 const TASK_HEADERS  = ["id","title","owner_name","part","start_date","due_date","progress","status"];
 const TRIP_HEADERS  = ["id","title","description","owner_name","owner_email","start_date","start_time","end_date","end_time","priority","part"];
@@ -315,13 +315,14 @@ function App(){
     const row={...node};
     const skipApi=!!row._skipApi;
     const skipBlock=!!row._skipBlock; // sort_order 저장 시 BLOCK 없음
+    const skipPending=!!row._skipPending; // sort_order 저장 시 pending/30초보호 없음
     delete row._skipApi;
     delete row._skipBlock;
-    const BLOCK=skipBlock?0:60000; // sort_order 저장은 BLOCK 없음
+    delete row._skipPending;
+    const BLOCK=skipBlock?0:60000;
     setOrgNodes(prev=>{
       const exists=prev.find(n=>n.id===row.id);
       const updated=exists?prev.map(n=>n.id===row.id?{...n,...row}:n):[...prev,row];
-      // 최종 중복 방어
       return updated.filter((n,i,arr)=>arr.findIndex(x=>x.id===n.id)===i);
     });
     if(!skipBlock){
@@ -329,16 +330,18 @@ function App(){
       lastLocalChange.current=Math.max(lastLocalChange.current,Date.now()+BLOCK);
     }
     if(!skipApi){
-      pendingOrgIds.current.add(row.id); // 저장 시작 → pending 등록
+      if(!skipPending) pendingOrgIds.current.add(row.id);
       apiUpsert("org_nodes",row)
         .then(()=>{
-          pendingOrgIds.current.delete(row.id); // 저장 완료 → pending 해제
-          // API 완료 후 추가 보호 (완료시점부터 30초)
-          orgLocalChange.current=Math.max(orgLocalChange.current,Date.now()+30000);
-          lastLocalChange.current=Math.max(lastLocalChange.current,Date.now()+30000);
+          if(!skipPending){
+            pendingOrgIds.current.delete(row.id);
+            // sort_order 저장이 아닐 때만 30초 추가 보호
+            orgLocalChange.current=Math.max(orgLocalChange.current,Date.now()+30000);
+            lastLocalChange.current=Math.max(lastLocalChange.current,Date.now()+30000);
+          }
         })
         .catch(()=>{
-          pendingOrgIds.current.delete(row.id);
+          if(!skipPending) pendingOrgIds.current.delete(row.id);
           setSyncStatus("오류");
         });
     }
@@ -1603,10 +1606,9 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
   // sort_order 전용 저장: BLOCK 없이 API만 직접 호출
   function saveSortOrder(nodesWithOrder){
     if(!nodesWithOrder||nodesWithOrder.length===0)return;
-    // onOrgSave 대신 apiUpsert 직접 호출 (BLOCK 없음)
-    // 로컬 노드 반영은 onOrgSave의 낙관적 업데이트를 우회해서 부모에 위임
+    // onOrgSave/_skipBlock/_skipPending 플래그로 BLOCK/pending/30초보호 완전 스킵
     nodesWithOrder.forEach(row=>{
-      onOrgSave({...row,_skipBlock:true});
+      onOrgSave({...row,_skipBlock:true,_skipPending:true});
     });
   }
   const [dragChild,setDragChild]=useState(null); // 드래그 중인 노드 ID

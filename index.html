@@ -2929,6 +2929,7 @@ function SitePMBoard({sites=[],onSave,onDelete,orgNodes=[],onOrgSave,onOrgDelete
               {[
                 {label:"착공일자",value:s.start_date?`${s.start_date} (${getDayOfWeek(s.start_date)})`:"-",color:"#4A5568"},
                 {label:"준공일자",value:s.completion?`${s.completion} (${getDayOfWeek(s.completion)})`:"-",color:done?"#A0AEC0":urgent?"#D97706":"#2D3748"},
+                {label:"현장 위치",value:s.location||"-",color:"#4A5568"},
                 {label:"규모",value:s.scale||"-",color:"#4A5568"},
                 {label:"도급액(당사분)",value:s.contract_amount||"-",color:"#2D3748"},
                 {label:"원가율",value:s.cost_rate?`${s.cost_rate}%`:"-",color:s.cost_rate&&Number(s.cost_rate)>=100?"#DC2626":s.cost_rate&&Number(s.cost_rate)>=90?"#D97706":"#2D3748"},
@@ -2939,19 +2940,6 @@ function SitePMBoard({sites=[],onSave,onDelete,orgNodes=[],onOrgSave,onOrgDelete
                 <p style={{margin:"0 0 2px",fontSize:10,color:"#A0AEC0",fontWeight:600}}>{label}</p>
                 <p style={{margin:0,fontSize:12,fontWeight:700,color}}>{value}</p>
               </div>)}
-              {/* 현장 위치 */}
-              {s.location&&s.location!=="-"&&(
-                <div style={{background:"#F8FAFC",borderRadius:8,padding:"8px 10px"}}>
-                  <p style={{margin:"0 0 2px",fontSize:10,color:"#A0AEC0",fontWeight:600}}>현장 위치</p>
-                  <p style={{margin:0,fontSize:12,fontWeight:700,color:"#4A5568"}}>{s.location}</p>
-                </div>
-              )}
-              {(!s.location||s.location==="-")&&(
-                <div style={{background:"#F8FAFC",borderRadius:8,padding:"8px 10px"}}>
-                  <p style={{margin:"0 0 2px",fontSize:10,color:"#A0AEC0",fontWeight:600}}>현장 위치</p>
-                  <p style={{margin:0,fontSize:12,fontWeight:700,color:"#A0AEC0"}}>-</p>
-                </div>
-              )}
             </div>
             {s.memo&&<p style={{margin:0,fontSize:12,color:"#718096",background:"#FFFBEB",borderRadius:8,padding:"8px 10px",lineHeight:1.5,borderLeft:"3px solid #FBBF24",whiteSpace:"pre-wrap"}}>{s.memo}</p>}
           </div>

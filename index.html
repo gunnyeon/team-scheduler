@@ -314,16 +314,20 @@ function App(){
   function onOrgSave(node){
     const row={...node};
     const skipApi=!!row._skipApi;
+    const skipBlock=!!row._skipBlock; // sort_order 저장 시 BLOCK 없음
     delete row._skipApi;
-    const BLOCK=60000; // 60초 차단 (API완료 후 추가 60초와 합산 → 충분한 보호)
+    delete row._skipBlock;
+    const BLOCK=skipBlock?0:60000; // sort_order 저장은 BLOCK 없음
     setOrgNodes(prev=>{
       const exists=prev.find(n=>n.id===row.id);
       const updated=exists?prev.map(n=>n.id===row.id?{...n,...row}:n):[...prev,row];
       // 최종 중복 방어
       return updated.filter((n,i,arr)=>arr.findIndex(x=>x.id===n.id)===i);
     });
-    orgLocalChange.current=Math.max(orgLocalChange.current,Date.now()+BLOCK);
-    lastLocalChange.current=Math.max(lastLocalChange.current,Date.now()+BLOCK);
+    if(!skipBlock){
+      orgLocalChange.current=Math.max(orgLocalChange.current,Date.now()+BLOCK);
+      lastLocalChange.current=Math.max(lastLocalChange.current,Date.now()+BLOCK);
+    }
     if(!skipApi){
       pendingOrgIds.current.add(row.id); // 저장 시작 → pending 등록
       apiUpsert("org_nodes",row)
@@ -1592,8 +1596,18 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
   },[nodes]);
 
   // 순서를 서버에 저장하는 헬퍼: 영향받은 노드들에 sort_order 값 부여 후 upsert
+  // BLOCK 없이 API만 호출 (순서 저장은 폴링 차단 불필요)
   function saveNodeOrders(updatedNodes){
     updatedNodes.forEach(n=>{ onOrgSave({...n,_skipApi:false}); });
+  }
+  // sort_order 전용 저장: BLOCK 없이 API만 직접 호출
+  function saveSortOrder(nodesWithOrder){
+    if(!nodesWithOrder||nodesWithOrder.length===0)return;
+    // onOrgSave 대신 apiUpsert 직접 호출 (BLOCK 없음)
+    // 로컬 노드 반영은 onOrgSave의 낙관적 업데이트를 우회해서 부모에 위임
+    nodesWithOrder.forEach(row=>{
+      onOrgSave({...row,_skipBlock:true});
+    });
   }
   const [dragChild,setDragChild]=useState(null); // 드래그 중인 노드 ID
   const [dragOverChild,setDragOverChild]=useState(null); // 드롭 대상 노드 ID
@@ -1830,13 +1844,15 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
           const nx=[...base]; nx.splice(fi,1); nx.splice(ti,0,childId);
           // 서버 저장: 형제 순서를 각 노드의 sort_order 마지막 자리에 기록
           setTimeout(()=>{
+            const toSave=[];
             nx.forEach((childNodeId,childIdx)=>{
               const nd=nodes.find(x=>x.id===childNodeId);
               if(!nd)return;
               const parts=(nd.sort_order||"999_999_999").split("_");
               const newOrder=`${parts[0]||999}_${parts[1]||999}_${childIdx}`;
-              if(nd.sort_order!==newOrder) onOrgSave({...nd,sort_order:newOrder});
+              if(nd.sort_order!==newOrder) toSave.push({...nd,sort_order:newOrder});
             });
+            if(toSave.length>0) saveSortOrder(toSave);
           },0);
           return {...prev,[n.id]:nx};
         });
@@ -2053,13 +2069,15 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
           // 서버 저장: 직군 순서를 각 노드의 sort_order 중간자리에 기록
           setTimeout(()=>{
             const jtIdx=sectionOrder.indexOf(jt);
+            const toSave=[];
             next.forEach((rgKey,rgIdx)=>{
               nodes.filter(nd=>nd.job_type===jt&&nd.role_group===rgKey).forEach(nd=>{
                 const parts=(nd.sort_order||"999_999_999").split("_");
                 const newOrder=`${jtIdx>=0?jtIdx:parts[0]}_${rgIdx}_${parts[2]||999}`;
-                if(nd.sort_order!==newOrder) onOrgSave({...nd,sort_order:newOrder});
+                if(nd.sort_order!==newOrder) toSave.push({...nd,sort_order:newOrder});
               });
             });
+            if(toSave.length>0) saveSortOrder(toSave);
           },0);
           return newPrev;
         });
@@ -2113,13 +2131,15 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
           next.splice(ti,0,jt);
           // 서버 저장: 직종 순서를 각 노드의 sort_order 앞자리에 기록
           setTimeout(()=>{
+            const toSave=[];
             next.forEach((jtKey,jtIdx)=>{
               nodes.filter(nd=>nd.job_type===jtKey).forEach(nd=>{
                 const parts=(nd.sort_order||"999_999_999").split("_");
                 const newOrder=`${jtIdx}_${parts[1]||999}_${parts[2]||999}`;
-                if(nd.sort_order!==newOrder) onOrgSave({...nd,sort_order:newOrder});
+                if(nd.sort_order!==newOrder) toSave.push({...nd,sort_order:newOrder});
               });
             });
+            if(toSave.length>0) saveSortOrder(toSave);
           },0);
           return next;
         });

@@ -50,12 +50,12 @@
 const {useState,useEffect,useRef,useCallback}=React;
 
 // ── API 설정 ───────────────────────────────────────────
-const API_URL = "https://script.google.com/macros/s/AKfycbyPS-flBKUF7iIV6aoMi2dBWaf8-tRqlgf81bQXrp1HVPtBJxsJAEZMYxJ1Gm1x-rAwaw/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbwlxUzrB5FXhXJElSr-fD6RjwfrvoAFG0mgH4pgaS02W4-crA3NtayhgF1R4QiSvGjLTQ/exec";
 const SCHED_HEADERS = ["id","title","description","owner_name","owner_email","start_date","start_time","end_date","end_time","priority"];
 const TASK_HEADERS  = ["id","title","owner_name","part","start_date","due_date","progress","status"];
 const TRIP_HEADERS  = ["id","title","description","owner_name","owner_email","start_date","start_time","end_date","end_time","priority","part"];
 const LEAVE_HEADERS = ["id","title","description","owner_name","owner_email","start_date","start_time","end_date","end_time","priority"];
-const SITE_HEADERS  = ["id","name","pm","start_date","completion","location","scale","client","contract_amount","cost_rate","order_type","equity_rate","memo"];
+const SITE_HEADERS  = ["id","name","pm","start_date","completion","location","scale","client","contract_amount","cost_rate","order_type","equity_rate","estimate_pm","memo"];
 const ORG_HEADERS       = ["id","site_id","emp_id","job_type","role_group","position","rank","emp_type","name","age","phone","color","parentId","memo","is_manual","sort_order"];
 const MIN_STAFF_HEADERS = ["site_id","role_group","min_count"];
 const PERSONNEL_HEADERS = ["id","emp_id","name","department","dept_type","emp_type","position","rank","job_type","hire_date","age","phone","license","leave_status","leave_start","leave_end"];
@@ -2791,7 +2791,7 @@ function SitePMBoard({sites=[],onSave,onDelete,orgNodes=[],onOrgSave,onOrgDelete
   const [filterCompletion,setFilterCompletion]=useState("전체");
   const [filterCostRate,setFilterCostRate]=useState("전체");
   const [filterOrderType,setFilterOrderType]=useState("전체");
-  const emptyForm={name:"",pm:"",start_date:"",completion:"",location:"",scale:"",client:"",contract_amount:"",cost_rate:"",order_type:"",equity_rate:"",memo:""};
+  const emptyForm={name:"",pm:"",start_date:"",completion:"",location:"",scale:"",client:"",contract_amount:"",cost_rate:"",order_type:"",equity_rate:"",estimate_pm:"",memo:""};
   const [form,setForm]=useState(emptyForm);
   const sf=k=>e=>setForm(f=>({...f,[k]:e.target.value}));
   function saveSite(){
@@ -2804,7 +2804,7 @@ function SitePMBoard({sites=[],onSave,onDelete,orgNodes=[],onOrgSave,onOrgDelete
     onDelete(id);
   }
   function openNew(){setEditing(null);setForm(emptyForm);setShowModal(true);}
-  function openEdit(s){setEditing(s);setForm({name:s.name,pm:s.pm,start_date:s.start_date||"",completion:s.completion||"",location:s.location||"",scale:s.scale||"",client:s.client||"",contract_amount:s.contract_amount||"",cost_rate:s.cost_rate||"",order_type:s.order_type||"",equity_rate:s.equity_rate||"",memo:s.memo||""});setShowModal(true);}
+  function openEdit(s){setEditing(s);setForm({name:s.name,pm:s.pm,start_date:s.start_date||"",completion:s.completion||"",location:s.location||"",scale:s.scale||"",client:s.client||"",contract_amount:s.contract_amount||"",cost_rate:s.cost_rate||"",order_type:s.order_type||"",equity_rate:s.equity_rate||"",estimate_pm:s.estimate_pm||"",memo:s.memo||""});setShowModal(true);}
   const daysLeft=d=>{if(!d)return null;return Math.ceil((new Date(d+"T00:00:00")-new Date())/(1000*60*60*24));};
   // 착공일~준공일 기준 오늘 공정율 계산 (0~100%)
   const calcProgress=(start,end)=>{
@@ -2966,6 +2966,7 @@ function SitePMBoard({sites=[],onSave,onDelete,orgNodes=[],onOrgSave,onOrgDelete
                 {label:"발주처",value:s.client||"-",color:"#4A5568"},
                 {label:"발주방식",value:s.order_type||"-",color:"#4A5568"},
                 {label:"지분율",value:s.equity_rate||"-",color:"#4A5568"},
+                {label:"견적담당",value:s.estimate_pm||"-",color:"#4A5568"},
               ].map(({label,value,color})=><div key={label} style={{background:"#F8FAFC",borderRadius:8,padding:"8px 10px"}}>
                 <p style={{margin:"0 0 2px",fontSize:10,color:"#A0AEC0",fontWeight:600}}>{label}</p>
                 <p style={{margin:0,fontSize:12,fontWeight:700,color}}>{value}</p>
@@ -3004,6 +3005,7 @@ function SitePMBoard({sites=[],onSave,onDelete,orgNodes=[],onOrgSave,onOrgDelete
             <div>{lbl("원가율 (%)")}<input type="number" min="0" max="200" value={form.cost_rate} onChange={sf("cost_rate")} placeholder="예: 85" style={inpSt}/></div>
             <div>{lbl("발주방식")}<input value={form.order_type} onChange={sf("order_type")} placeholder="예: 일괄도급" style={inpSt}/></div>
             <div>{lbl("지분율")}<input value={form.equity_rate} onChange={sf("equity_rate")} placeholder="예: 50% (단독)" style={inpSt}/></div>
+            <div>{lbl("견적담당")}<input value={form.estimate_pm||""} onChange={sf("estimate_pm")} placeholder="담당자 이름" style={inpSt}/></div>
             <div style={{gridColumn:"1/-1"}}>{lbl("비고")}<textarea value={form.memo} onChange={sf("memo")} rows={2} placeholder="특이사항 메모" style={{...inpSt,resize:"vertical"}}/></div>
           </div>
         </div>

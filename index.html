@@ -25,8 +25,8 @@
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700;800&display=swap" rel="stylesheet"/>
 <style>
-  *{box-sizing:border-box;margin:0;padding:0;}
-  body{background:#F4F6FA;color:#1A1A2E;font-family:'Noto Sans KR',sans-serif;font-size:15px;}
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  body{background:#F4F6FA;color:#1A1A2E;font-family:'Noto Sans KR',sans-serif;font-size:15px;-webkit-text-size-adjust:100%;}
   ::-webkit-scrollbar{width:5px;height:5px;}
   ::-webkit-scrollbar-track{background:#E2E8F0;}
   ::-webkit-scrollbar-thumb{background:#A0AEC0;border-radius:3px;}
@@ -34,10 +34,30 @@
   .cal-day:hover .add-btn{opacity:1!important;}
   select option{background:#fff;color:#1A1A2E;}
 
-  /* ── 반응형 (CSS 보조용 - 주요 반응형은 JS useWindowSize로 처리) ── */
+  /* ── 모바일 터치 피드백 ── */
+  .touch-btn{transition:transform 0.1s,opacity 0.1s;}
+  .touch-btn:active{transform:scale(0.95);opacity:0.85;}
+
+  /* ── 모바일 하단 탭 ── */
+  .mob-tab{display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:3px;flex:1;min-height:56px;cursor:pointer;transition:color 0.15s;}
+  .mob-tab:active{opacity:0.7;}
+  .mob-tab-icon{font-size:20px;line-height:1;}
+  .mob-tab-label{font-size:10px;font-weight:600;line-height:1.2;text-align:center;white-space:nowrap;}
+
+  /* ── 더보기 드로어 ── */
+  .mob-drawer-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:200;animation:mFadeIn 0.2s ease;}
+  .mob-drawer{position:fixed;bottom:0;left:0;right:0;background:#fff;border-radius:20px 20px 0 0;
+    z-index:201;padding-bottom:env(safe-area-inset-bottom);animation:mSlideUp 0.25s cubic-bezier(0.34,1.56,0.64,1);}
+  @keyframes mFadeIn{from{opacity:0}to{opacity:1}}
+  @keyframes mSlideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+
+  /* ── 반응형 ── */
   @media(max-width:767px){
     .sidebar{display:none!important;}
     .mobile-nav{display:flex!important;}
+    button{min-height:44px;}
+    input,select,textarea{font-size:16px!important;}
   }
   @media(min-width:768px){
     .mobile-nav{display:none!important;}
@@ -560,6 +580,7 @@ function App(){
   const menuIcons=Object.fromEntries(menuGroups.flatMap(g=>g.children?[[g.key,g.icon],...g.children.map(c=>[c.key||c.label,c.icon])]:[[g.key,g.icon]]));
   // 그룹 펼침 state
   const [expandedGroups,setExpandedGroups]=useState({"대시보드(건축공사팀)":true,"대시보드(현장관리플랫폼)":false});
+  const [showMoreMenu,setShowMoreMenu]=useState(false); // 모바일 더보기 드로어
   function toggleGroup(key){setExpandedGroups(v=>({...v,[key]:!v[key]}));}
   function handleMenuChange(m){
     if(activeMenu==="현장관리플랫폼"&&m!=="현장관리플랫폼"){setSitePMLocked(true);setSitepmPwInput("");setSitepmPwError("");}
@@ -735,10 +756,10 @@ function App(){
         <input value={nameInput} onChange={e=>{setNameInput(e.target.value);setLoginError("");}}
           onKeyDown={e=>{if(e.key==="Enter")handleLogin();}}
           placeholder="홍길동" autoFocus
-          style={{width:"100%",background:"#EEF2F7",border:`1px solid ${loginError?"#F8717166":"#6C63FF66"}`,borderRadius:10,padding:"11px 14px",fontSize:15,color:"#2D3748",outline:"none",boxSizing:"border-box",marginBottom:loginError?8:12}}/>
+          style={{width:"100%",background:"#EEF2F7",border:`1px solid ${loginError?"#F8717166":"#6C63FF66"}`,borderRadius:10,padding:"14px 16px",fontSize:16,color:"#2D3748",outline:"none",boxSizing:"border-box",marginBottom:loginError?8:12,minHeight:50}}/>
         {loginError&&<p style={{color:"#F87171",fontSize:12,margin:"0 0 12px",textAlign:"left"}}>{loginError}</p>}
         <button onClick={handleLogin} disabled={loginLoading}
-          style={{width:"100%",background:loginLoading?"#CBD5E0":"linear-gradient(90deg,#6C63FF,#9C5CF7)",border:"none",borderRadius:10,padding:12,fontSize:14,fontWeight:700,color:loginLoading?"#718096":"#fff",cursor:loginLoading?"not-allowed":"pointer"}}>
+          style={{width:"100%",background:loginLoading?"#CBD5E0":"linear-gradient(90deg,#6C63FF,#9C5CF7)",border:"none",borderRadius:10,padding:14,fontSize:15,fontWeight:700,color:loginLoading?"#718096":"#fff",cursor:loginLoading?"not-allowed":"pointer",minHeight:50}}>
           {loginLoading?"확인 중...":"입장하기 →"}
         </button>
         <p style={{color:"#A0AEC0",fontSize:11,marginTop:16}}>※ 건축공사팀 등록 인원만 입장 가능합니다</p>
@@ -823,25 +844,35 @@ function App(){
 
       {/* 메인 */}
       <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column"}}>
-        <div style={{padding:isMobile?"10px 12px":"16px 28px",borderBottom:"1px solid #EEF2F7",background:"#F4F6FA",display:"flex",alignItems:"center",gap:isMobile?8:16,flexShrink:0}}>
+        <div style={{padding:isMobile?"10px 14px":"16px 28px",borderBottom:"1px solid #EEF2F7",background:"#FFFFFF",display:"flex",alignItems:"center",gap:isMobile?10:16,flexShrink:0,boxShadow:isMobile?"0 1px 8px rgba(0,0,0,0.06)":"none"}}>
           <div style={{flex:1,minWidth:0}}>
-            <h1 style={{margin:0,fontSize:isMobile?16:22,fontWeight:800,color:"#1A1A2E",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{activeMenu==="대시보드(건축공사팀)"?"대시보드":activeMenu}</h1>
+            <h1 style={{margin:0,fontSize:isMobile?17:22,fontWeight:800,color:"#1A1A2E",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",letterSpacing:isMobile?-0.3:-0.5}}>
+              {activeMenu==="대시보드(건축공사팀)"?"대시보드":
+               activeMenu==="캘린더(주요일정)"?"주요일정":
+               activeMenu==="캘린더(출장일정)"?"출장일정":
+               activeMenu==="캘린더(연차일정)"?"연차일정":
+               activeMenu==="업무 관리"?"업무":
+               activeMenu==="현장관리플랫폼"?"현장":
+               activeMenu==="대시보드(현장관리플랫폼)"?"현장 DB":activeMenu}
+            </h1>
             {!isMobile&&<p style={{margin:0,fontSize:12,color:"#718096"}}>마지막 동기화: {lastSync.toLocaleTimeString("ko-KR")}</p>}
+            {isMobile&&<p style={{margin:"1px 0 0",fontSize:11,color:"#A0AEC0"}}>{lastSync.toLocaleTimeString("ko-KR")} 동기화</p>}
           </div>
           <div style={{display:"flex",gap:isMobile?6:10,alignItems:"center",flexShrink:0}}>
-            {(activeMenu==="일정 관리"||activeMenu==="캘린더(주요일정)")&&<button onClick={()=>{setEditingSched(null);setShowSchedModal(true);}} style={{...btn("#6C63FF"),fontSize:isMobile?11:13,padding:isMobile?"6px 10px":"8px 16px"}}>{isMobile?"+ 추가":"+ 일정 추가"}</button>}
-            {activeMenu==="캘린더(출장일정)"&&<button onClick={()=>{setEditingTrip(null);setShowTripModal(true);}} style={{...btn("#FB923C"),fontSize:isMobile?11:13,padding:isMobile?"6px 10px":"8px 16px"}}>{isMobile?"+ 추가":"+ 출장일정 추가"}</button>}
-            {activeMenu==="캘린더(연차일정)"&&<button onClick={()=>{setEditingLeave(null);setShowLeaveModal(true);}} style={{...btn("#4ADE80","#15803D"),fontSize:isMobile?11:13,padding:isMobile?"6px 10px":"8px 16px"}}>{isMobile?"+ 추가":"+ 연차 추가"}</button>}
-            {activeMenu==="업무 관리"&&<button onClick={()=>{setEditingTask(null);setShowTaskModal(true);}} style={{...btn("#2EC4B6"),fontSize:isMobile?11:13,padding:isMobile?"6px 10px":"8px 16px"}}>{isMobile?"+ 추가":"+ 업무 추가"}</button>}
-            <button onClick={loadData} style={{...btn("#CBD5E0","#6C63FF"),padding:"8px 12px"}}>↻</button>
-            <div style={{display:"flex",alignItems:"center",gap:6,background:"#F7FAFC",border:"1px solid #E2E8F0",borderRadius:10,padding:isMobile?"5px 8px":"6px 12px"}}>
-              <div style={{width:24,height:24,borderRadius:"50%",background:getAvatarColor(myName),display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:"#fff",flexShrink:0}}>{myName[0]}</div>
+            {(activeMenu==="일정 관리"||activeMenu==="캘린더(주요일정)")&&<button className="touch-btn" onClick={()=>{setEditingSched(null);setShowSchedModal(true);}} style={{...btn("#6C63FF"),fontSize:isMobile?12:13,padding:isMobile?"10px 14px":"8px 16px",minHeight:44,borderRadius:10,fontWeight:700}}>{isMobile?"＋ 추가":"+ 일정 추가"}</button>}
+            {activeMenu==="캘린더(출장일정)"&&<button className="touch-btn" onClick={()=>{setEditingTrip(null);setShowTripModal(true);}} style={{...btn("#FB923C"),fontSize:isMobile?12:13,padding:isMobile?"10px 14px":"8px 16px",minHeight:44,borderRadius:10,fontWeight:700}}>{isMobile?"＋ 추가":"+ 출장일정 추가"}</button>}
+            {activeMenu==="캘린더(연차일정)"&&<button className="touch-btn" onClick={()=>{setEditingLeave(null);setShowLeaveModal(true);}} style={{...btn("#4ADE80","#15803D"),fontSize:isMobile?12:13,padding:isMobile?"10px 14px":"8px 16px",minHeight:44,borderRadius:10,fontWeight:700}}>{isMobile?"＋ 추가":"+ 연차 추가"}</button>}
+            {activeMenu==="업무 관리"&&<button className="touch-btn" onClick={()=>{setEditingTask(null);setShowTaskModal(true);}} style={{...btn("#2EC4B6"),fontSize:isMobile?12:13,padding:isMobile?"10px 14px":"8px 16px",minHeight:44,borderRadius:10,fontWeight:700}}>{isMobile?"＋ 추가":"+ 업무 추가"}</button>}
+            <button className="touch-btn" onClick={loadData} style={{...btn("#CBD5E0","#6C63FF"),padding:"10px 12px",minHeight:44,borderRadius:10,fontSize:15}}>↻</button>
+            <div style={{display:"flex",alignItems:"center",gap:6,background:"#F7FAFC",border:"1px solid #E2E8F0",borderRadius:10,padding:isMobile?"8px 10px":"6px 12px",minHeight:44,cursor:"pointer"}}
+              onClick={()=>{try{sessionStorage.removeItem("ts-name");}catch{}setMyName("");setNameInput("");}}>
+              <div style={{width:26,height:26,borderRadius:"50%",background:getAvatarColor(myName),display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:"#fff",flexShrink:0}}>{myName[0]}</div>
               {!isMobile&&<span style={{fontSize:13,fontWeight:600}}>{myName}</span>}
-              <span title="이름 변경" onClick={()=>{try{sessionStorage.removeItem("ts-name");}catch{}setMyName("");setNameInput("");}} style={{fontSize:14,color:"#718096",cursor:"pointer"}}>⏏</span>
+              <span style={{fontSize:13,color:"#A0AEC0"}}>⏏</span>
             </div>
           </div>
         </div>
-        <div style={{flex:1,overflowX:"auto",overflowY:"auto",padding:isMobile?"10px 8px 72px 8px":isTablet?"16px 16px":"24px 28px"}}>
+        <div style={{flex:1,overflowX:"auto",overflowY:"auto",padding:isMobile?"12px 12px 80px 12px":isTablet?"16px 16px":"24px 28px"}}>
           {(activeMenu==="대시보드(건축공사팀)"||activeMenu==="대시보드")&&<Dashboard schedules={schedules} trips={trips} tasks={tasks} sites={sites} todaySchedules={todaySchedules} weekSchedules={weekSchedules} weekTrips={weekTrips} urgentSchedules={urgentSchedules} inProgressTasks={inProgressTasks} overdueTasks={overdueTasks} setActiveMenu={setActiveMenu} todayStr={todayStr} weekEndStr={weekEndStr} isMobile={isMobile} onSchedClick={s=>{setCurrentMonth(new Date(s.start_date+"T00:00:00"));setSelectedSched(s);setActiveMenu("캘린더(주요일정)");}} onTripClick={s=>{setCurrentMonth2(new Date(s.start_date+"T00:00:00"));setSelectedSched2(s);setActiveMenu("캘린더(출장일정)");}}/>}
           {activeMenu==="대시보드(현장관리플랫폼)"&&(hqDashLocked?(
             <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
@@ -916,20 +947,82 @@ function App(){
         </div>
       )}
     {/* 모바일 하단 내비 */}
-      <div className="mobile-nav" style={{display:isMobile?"flex":"none",position:"fixed",bottom:0,left:0,right:0,background:"#FFFFFF",borderTop:"1px solid #CBD5E0",zIndex:50,padding:"6px 0 calc(6px + env(safe-area-inset-bottom))",justifyContent:"space-around",alignItems:"center"}}>
-        {[
-          {key:"대시보드(건축공사팀)",icon:"▦",label:"대시보드"},
-          {key:"캘린더(주요일정)",icon:"🗓",label:"일정"},
-          {key:"업무 관리",icon:"✓",label:"업무"},
-          {key:"대시보드(현장관리플랫폼)",icon:"👥",label:"현장DB"},
-          {key:"현장관리플랫폼",icon:"🏗",label:"현장"},
-        ].map(m=>(
-          <div key={m.key} onClick={()=>handleMenuChange(m.key)} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2,padding:"4px 8px",cursor:"pointer",color:activeMenu===m.key?"#6C63FF":"#718096",flex:1}}>
-            <span style={{fontSize:18}}>{m.icon}</span>
-            <span style={{fontSize:9,fontWeight:activeMenu===m.key?700:400,textAlign:"center",lineHeight:1.2}}>{m.label}</span>
+      {isMobile&&<>
+        {/* 더보기 드로어 오버레이 */}
+        {showMoreMenu&&<div className="mob-drawer-overlay" onClick={()=>setShowMoreMenu(false)}>
+          <div className="mob-drawer" onClick={e=>e.stopPropagation()}>
+            {/* 드래그 핸들 */}
+            <div style={{width:40,height:4,background:"#CBD5E0",borderRadius:2,margin:"12px auto 8px"}}/>
+            <p style={{textAlign:"center",fontSize:11,color:"#A0AEC0",fontWeight:600,marginBottom:12,letterSpacing:0.5}}>더보기 메뉴</p>
+            <div style={{padding:"0 16px 16px",display:"flex",flexDirection:"column",gap:4}}>
+              {[
+                {key:"캘린더(출장일정)",icon:"✈️",label:"출장일정"},
+                {key:"캘린더(연차일정)",icon:"🌴",label:"연차일정"},
+                {key:"일정 관리",icon:"📅",label:"일정 관리"},
+                {key:"대시보드(현장관리플랫폼)",icon:"👥",label:"현장 DB"},
+              ].map(m=>(
+                <div key={m.key} onClick={()=>{handleMenuChange(m.key);setShowMoreMenu(false);}}
+                  className="touch-btn"
+                  style={{display:"flex",alignItems:"center",gap:14,padding:"14px 18px",borderRadius:14,
+                    background:activeMenu===m.key?"#EDE9FE":"#F8FAFC",
+                    border:`1.5px solid ${activeMenu===m.key?"#C4B5FD":"#E2E8F0"}`,
+                    cursor:"pointer"}}>
+                  <span style={{fontSize:22,width:32,textAlign:"center"}}>{m.icon}</span>
+                  <span style={{fontSize:15,fontWeight:activeMenu===m.key?700:500,
+                    color:activeMenu===m.key?"#6C63FF":"#2D3748"}}>{m.label}</span>
+                  {activeMenu===m.key&&<span style={{marginLeft:"auto",fontSize:12,color:"#6C63FF"}}>●</span>}
+                </div>
+              ))}
+              {/* 외부 링크 */}
+              <div style={{height:1,background:"#EEF2F7",margin:"8px 0"}}/>
+              <p style={{fontSize:11,color:"#A0AEC0",fontWeight:600,padding:"0 4px",marginBottom:4}}>외부 플랫폼</p>
+              {[
+                {href:"https://cloud.meissa.ai/projects",icon:"🚁",label:"메이사(드론) 플랫폼"},
+                {href:"https://check.builderhub.io/project/list/0",icon:"✅",label:"스마트체커"},
+              ].map(m=>(
+                <a key={m.href} href={m.href} target="_blank" rel="noopener noreferrer"
+                  className="touch-btn"
+                  style={{display:"flex",alignItems:"center",gap:14,padding:"14px 18px",borderRadius:14,
+                    background:"#F8FAFC",border:"1.5px solid #E2E8F0",
+                    cursor:"pointer",textDecoration:"none"}}>
+                  <span style={{fontSize:22,width:32,textAlign:"center"}}>{m.icon}</span>
+                  <span style={{fontSize:15,fontWeight:500,color:"#2D3748",flex:1}}>{m.label}</span>
+                  <span style={{fontSize:12,color:"#A0AEC0"}}>↗</span>
+                </a>
+              ))}
+            </div>
           </div>
-        ))}
-      </div>
+        </div>}
+
+        {/* 하단 탭 바 */}
+        <div className="mobile-nav" style={{display:"flex",position:"fixed",bottom:0,left:0,right:0,
+          background:"#FFFFFF",borderTop:"1px solid #E2E8F0",zIndex:50,
+          paddingBottom:"env(safe-area-inset-bottom)",
+          boxShadow:"0 -2px 16px rgba(0,0,0,0.08)"}}>
+          {[
+            {key:"대시보드(건축공사팀)",icon:"▦",label:"대시보드"},
+            {key:"캘린더(주요일정)",icon:"🗓",label:"일정"},
+            {key:"업무 관리",icon:"✓",label:"업무"},
+            {key:"현장관리플랫폼",icon:"🏗",label:"현장"},
+          ].map(m=>(
+            <div key={m.key} className="mob-tab" onClick={()=>handleMenuChange(m.key)}
+              style={{color:activeMenu===m.key?"#6C63FF":"#A0AEC0"}}>
+              {activeMenu===m.key&&<div style={{position:"absolute",top:0,left:"50%",transform:"translateX(-50%)",
+                width:32,height:3,background:"#6C63FF",borderRadius:"0 0 3px 3px"}}/>}
+              <span className="mob-tab-icon">{m.icon}</span>
+              <span className="mob-tab-label">{m.label}</span>
+            </div>
+          ))}
+          {/* 더보기 탭 */}
+          <div className="mob-tab" onClick={()=>setShowMoreMenu(v=>!v)}
+            style={{color:showMoreMenu?"#6C63FF":"#A0AEC0"}}>
+            {showMoreMenu&&<div style={{position:"absolute",top:0,left:"50%",transform:"translateX(-50%)",
+              width:32,height:3,background:"#6C63FF",borderRadius:"0 0 3px 3px"}}/>}
+            <span className="mob-tab-icon">☰</span>
+            <span className="mob-tab-label">더보기</span>
+          </div>
+        </div>
+      </>}
     </div>
   );
 }
@@ -956,7 +1049,7 @@ function Dashboard({schedules,trips,tasks,sites=[],todaySchedules,weekSchedules,
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
               <div>
                 <p style={{margin:"0 0 8px",fontSize:12,fontWeight:600,color:"#718096"}}>{s.label}</p>
-                <p style={{margin:0,fontSize:28,fontWeight:800,color:s.color}}>{s.value}</p>
+                <p style={{margin:0,fontSize:isMobile?22:28,fontWeight:800,color:s.color}}>{s.value}</p>
               </div>
               <div style={{width:44,height:44,borderRadius:12,background:"rgba(255,255,255,0.7)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,boxShadow:"0 1px 4px rgba(0,0,0,0.08)"}}>{s.icon}</div>
             </div>
@@ -1028,7 +1121,7 @@ function Dashboard({schedules,trips,tasks,sites=[],todaySchedules,weekSchedules,
       })()}
 
       {/* 하단 섹션 - 6개 카드를 하나의 그리드로 정렬 */}
-      <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr 1fr",gap:isMobile?12:20}}>
+      <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr 1fr",gap:isMobile?10:20}}>
         <SecCard title="오늘 일정" accent="#6C63FF">{todaySchedules.length===0?<Empty text="오늘 일정 없음"/>:todaySchedules.map(s=><SchedRow key={s.id} s={s} onClick={onSchedClick}/>)}</SecCard>
         <SecCard title="이번주 일정 (주요)" accent="#F9A8D4">{weekSchedules.length===0?<Empty text="이번주 일정 없음"/>:weekSchedules.map(s=><SchedRow key={s.id} s={s} onClick={onSchedClick}/>)}</SecCard>
         <SecCard title="이번주 출장일정 ✈️" accent="#FB923C">{(weekTrips||[]).length===0?<Empty text="이번주 출장일정 없음"/>:(weekTrips||[]).map(s=><SchedRow key={s.id} s={s} onClick={onTripClick}/>)}</SecCard>
@@ -1068,7 +1161,7 @@ function ScheduleBoard({schedules,onEdit,onDelete,isMobile=false}){
   return <div>
     <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:isMobile?"nowrap":"wrap",alignItems:"center",overflowX:isMobile?"auto":"visible",paddingBottom:isMobile?4:0}}>
       {["all","high","medium","low"].map(f=>(
-        <button key={f} onClick={()=>setPriority(f)} style={{padding:"6px 14px",borderRadius:20,border:"none",cursor:"pointer",fontSize:12,fontWeight:600,background:priority===f?"#6C63FF":"#EEF2F7",color:priority===f?"#fff":"#4A5568"}}>
+        <button key={f} onClick={()=>setPriority(f)} style={{padding:"8px 16px",borderRadius:20,border:"none",cursor:"pointer",fontSize:12,fontWeight:600,background:priority===f?"#6C63FF":"#EEF2F7",color:priority===f?"#fff":"#4A5568",minHeight:36}}>
           {f==="all"?"전체":f==="high"?"높음":f==="medium"?"중간":"낮음"}
         </button>
       ))}
@@ -1233,7 +1326,7 @@ function TaskBoard({tasks,onEdit,onDelete,onStatusChange,isMobile=false}){
                 </div>
                 <span style={{fontSize:10,color:sc.border,fontWeight:700,flexShrink:0,minWidth:28}}>{task.progress}%</span>
                 <select value={task.status} onChange={e=>onStatusChange(task.id,e.target.value)}
-                  style={{fontSize:10,padding:"3px 6px",borderRadius:6,border:`1px solid ${sc.border}`,background:sc.bg,color:sc.text,fontWeight:700,cursor:"pointer",outline:"none"}}>
+                  style={{fontSize:isMobile?15:10,padding:"4px 6px",borderRadius:6,border:`1px solid ${sc.border}`,background:sc.bg,color:sc.text,fontWeight:700,cursor:"pointer",outline:"none",minHeight:isMobile?38:undefined}}>
                   {TASK_STATUSES.map(s=><option key={s} value={s}>{s}</option>)}
                 </select>
               </div>
@@ -1256,7 +1349,7 @@ function TaskBoard({tasks,onEdit,onDelete,onStatusChange,isMobile=false}){
                 <span style={{fontSize:10,color:sc.border,fontWeight:700,flexShrink:0}}>{task.progress}%</span>
               </div>
               <select value={task.status} onChange={e=>onStatusChange(task.id,e.target.value)}
-                style={{fontSize:11,padding:"4px 8px",borderRadius:8,border:`1px solid ${sc.border}`,background:sc.bg,color:sc.text,fontWeight:700,cursor:"pointer",outline:"none"}}>
+                style={{fontSize:isMobile?16:11,padding:"4px 8px",borderRadius:8,border:`1px solid ${sc.border}`,background:sc.bg,color:sc.text,fontWeight:700,cursor:"pointer",outline:"none"}}>
                 {TASK_STATUSES.map(s=><option key={s} value={s}>{s}</option>)}
               </select>
               <div style={{display:"flex",gap:4,justifyContent:"flex-end"}}>
@@ -1357,7 +1450,7 @@ function CalendarView({schedules,currentMonth,setCurrentMonth,todayStr,selectedS
           const isSun=idx%7===0; const isSat=idx%7===6;
           const col=(isSun||holiday)?"#F87171":isSat?"#60A5FA":"#2D3748";
           return <div key={day} className="cal-day" onClick={()=>onDateClick(ds)}
-            style={{minHeight:isMobile?60:90,minWidth:isMobile?48:undefined,padding:isMobile?"3px 2px":"8px 6px",borderRight:"1px solid #CBD5E0",borderBottom:"1px solid #EEF2F7",background:isToday?"#EDE9FE":holiday?"#FFF5F5":"transparent",cursor:"pointer",transition:"background 0.15s",position:"relative",overflow:"visible",zIndex:expandedDay===ds?10:1}}>
+            style={{minHeight:isMobile?64:90,minWidth:isMobile?48:undefined,padding:isMobile?"3px 2px":"8px 6px",borderRight:"1px solid #CBD5E0",borderBottom:"1px solid #EEF2F7",background:isToday?"#EDE9FE":holiday?"#FFF5F5":"transparent",cursor:"pointer",transition:"background 0.15s",position:"relative",overflow:"visible",zIndex:expandedDay===ds?10:1}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:1}}>
               <span style={{width:isMobile?20:26,height:isMobile?20:26,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:"50%",background:isToday?"#6C63FF":"transparent",fontSize:isMobile?11:13,fontWeight:isToday?800:400,color:isToday?"#fff":col,flexShrink:0}}>{day}</span>
               {!isMobile&&<span className="add-btn" style={{fontSize:16,color:"#6C63FF",fontWeight:700,lineHeight:1,paddingRight:2}}>+</span>}
@@ -2875,7 +2968,7 @@ function SitePMBoard({sites=[],onSave,onDelete,orgNodes=[],onOrgSave,onOrgDelete
         {searchQ&&<button onClick={()=>setSearchQ("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#A0AEC0",cursor:"pointer",fontSize:18,lineHeight:1}}>×</button>}
       </div>
       <span style={{fontSize:13,color:"#718096",whiteSpace:"nowrap"}}>{filtered.length}개 현장</span>
-      <button onClick={openNew} style={{...btn("#6C63FF"),fontSize:13,padding:"10px 20px",whiteSpace:"nowrap"}}>+ 현장 추가</button>
+      <button onClick={openNew} className="touch-btn" style={{...btn("#6C63FF"),fontSize:isMobile?14:13,padding:isMobile?"12px 18px":"10px 20px",whiteSpace:"nowrap",minHeight:44,borderRadius:10,fontWeight:700}}>+ 현장 추가</button>
     </div>
     {/* 필터 행 */}
     <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
@@ -2989,9 +3082,9 @@ function SitePMBoard({sites=[],onSave,onDelete,orgNodes=[],onOrgSave,onOrgDelete
           </div>
           {/* 액션 버튼 */}
           <div style={{padding:isMobile?"8px 14px 12px":"10px 20px 14px",display:"flex",gap:isMobile?6:8,borderTop:"1px solid #F0F4F8"}}>
-            <button onClick={()=>setOrgSite(s)} style={{flex:1,...btn("#F0FDF4","#15803D"),fontSize:12,padding:"7px 0"}}>🏢 조직도</button>
-            <button onClick={()=>openEdit(s)} style={{flex:1,...btn("#EEF2F7","#6C63FF"),fontSize:12,padding:"7px 0"}}>✏ 수정</button>
-            <button onClick={()=>del(s.id)} style={{flex:1,...btn("#FFF5F5","#F87171"),fontSize:12,padding:"7px 0"}}>🗑 삭제</button>
+            <button onClick={()=>setOrgSite(s)} className="touch-btn" style={{flex:1,...btn("#F0FDF4","#15803D"),fontSize:isMobile?13:12,padding:isMobile?"12px 0":"7px 0",minHeight:44,borderRadius:10,fontWeight:700}}>🏢 조직도</button>
+            <button onClick={()=>openEdit(s)} className="touch-btn" style={{flex:1,...btn("#EEF2F7","#6C63FF"),fontSize:isMobile?13:12,padding:isMobile?"12px 0":"7px 0",minHeight:44,borderRadius:10,fontWeight:700}}>✏ 수정</button>
+            <button onClick={()=>del(s.id)} className="touch-btn" style={{flex:1,...btn("#FFF5F5","#F87171"),fontSize:isMobile?13:12,padding:isMobile?"12px 0":"7px 0",minHeight:44,borderRadius:10,fontWeight:700}}>🗑 삭제</button>
           </div>
         </div>;
       })}
@@ -4284,7 +4377,7 @@ function Reports({schedules,tasks}){
 
 // ── 모달 공통 ─────────────────────────────────────────
 function ModalWrap({title,children,onClose,onSave}){
-  const mobileModal=window.innerWidth<=767;
+  const mobileModal=window.innerWidth<=767; // 모바일: 바텀시트
   return <div style={{position:"fixed",inset:0,background:"rgba(30,30,60,0.45)",display:"flex",alignItems:mobileModal?"flex-end":"center",justifyContent:"center",zIndex:100,padding:mobileModal?0:20}} onClick={e=>e.target===e.currentTarget&&onClose()}>
     <div style={{background:"#FFFFFF",border:"1px solid #CBD5E0",borderRadius:mobileModal?"20px 20px 0 0":16,width:"100%",maxWidth:mobileModal?"100%":480,padding:mobileModal?"20px 16px 32px":"24px 28px",maxHeight:mobileModal?"92vh":"90vh",overflow:"auto"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>

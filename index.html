@@ -1372,9 +1372,30 @@ function CalendarView({schedules,currentMonth,setCurrentMonth,todayStr,selectedS
   const days=new Date(year,month+1,0).getDate();
   const firstDay=new Date(year,month,1).getDay();
   const pad=n=>String(n).padStart(2,"0");
+
+  // 전월 말일
+  const prevMonthDays=new Date(year,month,0).getDate();
+
+  // cells: {date:"YYYY-MM-DD", day:숫자, isCurrentMonth:bool}
   const cells=[];
-  for(let i=0;i<firstDay;i++)cells.push(null);
-  for(let d=1;d<=days;d++)cells.push(d);
+  // 전월 날짜 채우기
+  for(let i=0;i<firstDay;i++){
+    const d=prevMonthDays-firstDay+1+i;
+    const m2=month===0?12:month;
+    const y2=month===0?year-1:year;
+    cells.push({date:`${y2}-${pad(m2)}-${pad(d)}`,day:d,isCurrentMonth:false});
+  }
+  // 이번달
+  for(let d=1;d<=days;d++){
+    cells.push({date:`${year}-${pad(month+1)}-${pad(d)}`,day:d,isCurrentMonth:true});
+  }
+  // 다음달: 마지막 주 채우기 (총 셀이 7의 배수가 되도록)
+  const remaining=(7-cells.length%7)%7;
+  for(let d=1;d<=remaining;d++){
+    const m2=month===11?1:month+2;
+    const y2=month===11?year+1:year;
+    cells.push({date:`${y2}-${pad(m2)}-${pad(d)}`,day:d,isCurrentMonth:false});
+  }
   // 시간순 정렬
   const getDay=ds=>[...schedules.filter(s=>s.start_date<=ds&&s.end_date>=ds)]
     .sort((a,b)=>(a.start_time||"00:00").localeCompare(b.start_time||"00:00"));
@@ -1443,16 +1464,16 @@ function CalendarView({schedules,currentMonth,setCurrentMonth,todayStr,selectedS
         {["일","월","화","수","목","금","토"].map((d,i)=><div key={d} className="cal-header-label" style={{padding:isMobile?"6px 0":"12px 0",textAlign:"center",fontSize:isMobile?11:12,fontWeight:700,color:i===0?"#F87171":i===6?"#60A5FA":"#4A5568"}}>{d}</div>)}
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(7,minmax(80px,1fr))",minWidth:isMobile?336:560}}>
-        {cells.map((day,idx)=>{
-          if(!day)return <div key={`e${idx}`} style={{minHeight:isMobile?50:90,borderRight:"1px solid #CBD5E0",borderBottom:"1px solid #EEF2F7"}}/>;
-          const ds=`${year}-${pad(month+1)}-${pad(day)}`;
+        {cells.map((cell,idx)=>{
+          const{date:ds,day,isCurrentMonth}=cell;
           const daySch=getDay(ds);
           const isToday=ds===todayFull;
           const holiday=getHoliday(ds);
           const isSun=idx%7===0; const isSat=idx%7===6;
           const col=(isSun||holiday)?"#F87171":isSat?"#60A5FA":"#2D3748";
-          return <div key={day} className="cal-day" onClick={()=>onDateClick(ds)}
-            style={{minHeight:isMobile?64:90,minWidth:isMobile?48:undefined,padding:isMobile?"3px 2px":"8px 6px",borderRight:"1px solid #CBD5E0",borderBottom:"1px solid #EEF2F7",background:isToday?"#EDE9FE":holiday?"#FFF5F5":"transparent",cursor:"pointer",transition:"background 0.15s",position:"relative",overflow:"visible",zIndex:expandedDay===ds?10:1}}>
+          const dimmed=!isCurrentMonth;
+          return <div key={ds} className="cal-day" onClick={()=>onDateClick(ds)}
+            style={{minHeight:isMobile?64:90,minWidth:isMobile?48:undefined,padding:isMobile?"3px 2px":"8px 6px",borderRight:"1px solid #CBD5E0",borderBottom:"1px solid #EEF2F7",background:isToday?"#EDE9FE":holiday&&isCurrentMonth?"#FFF5F5":"transparent",cursor:"pointer",transition:"background 0.15s",position:"relative",overflow:"visible",zIndex:expandedDay===ds?10:1,opacity:dimmed?0.38:1}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:1}}>
               <span style={{width:isMobile?20:26,height:isMobile?20:26,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:"50%",background:isToday?"#6C63FF":"transparent",fontSize:isMobile?11:13,fontWeight:isToday?800:400,color:isToday?"#fff":col,flexShrink:0}}>{day}</span>
               {!isMobile&&<span className="add-btn" style={{fontSize:16,color:"#6C63FF",fontWeight:700,lineHeight:1,paddingRight:2}}>+</span>}

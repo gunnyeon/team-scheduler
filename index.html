@@ -10,7 +10,7 @@
 <title>TeamSync</title>
 
 <!-- PWA 기본 설정 -->
-<link rel="manifest" href="manifest.json"/>
+<!-- manifest: PWA 비활성화 (서비스워커 없음) -->
 <meta name="theme-color" content="#F4F6FA"/>
 <meta name="mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
@@ -4499,19 +4499,15 @@ class ErrorBoundary extends React.Component{
 ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(ErrorBoundary,null,React.createElement(App)));
 </script>
 <script>
-  // 서비스워커 캐시 완전 초기화 + 강제 업데이트
-  if('serviceWorker' in navigator){
-    // 1) 기존 서비스워커 전체 해제
-    navigator.serviceWorker.getRegistrations().then(regs=>{
-      regs.forEach(r=>r.unregister());
-    });
-    // 2) 모든 캐시 삭제
-    if('caches' in window){
-      caches.keys().then(keys=>{
-        keys.forEach(k=>caches.delete(k));
-      });
-    }
-  }
+// 기존 서비스워커 및 캐시 완전 제거 (구버전 캐시로 인한 흰 화면 방지)
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.getRegistrations().then(regs=>{
+    regs.forEach(r=>{ console.log('[TeamSync] SW 해제:', r.scope); r.unregister(); });
+  });
+}
+if('caches' in window){
+  caches.keys().then(keys=>keys.forEach(k=>{ console.log('[TeamSync] 캐시 삭제:', k); caches.delete(k); }));
+}
 </script>
 </body>
 </html>

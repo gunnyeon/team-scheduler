@@ -3,6 +3,10 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<!-- 캐시 완전 비활성화 -->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
+<meta http-equiv="Pragma" content="no-cache"/>
+<meta http-equiv="Expires" content="0"/>
 <title>TeamSync</title>
 
 <!-- PWA 기본 설정 -->
@@ -4475,15 +4479,38 @@ function TaskModal_({initial,onSave,onClose,isEdit}){
   </ModalWrap>;
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+// ── 에러 바운더리 (흰 화면 방지) ──────────────────────
+class ErrorBoundary extends React.Component{
+  constructor(props){super(props);this.state={error:null};}
+  static getDerivedStateFromError(e){return{error:e};}
+  componentDidCatch(e,info){console.error("TeamSync 에러:",e,info);}
+  render(){
+    if(this.state.error){
+      return React.createElement("div",{style:{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100vh",fontFamily:"sans-serif",gap:16,padding:24}},
+        React.createElement("div",{style:{fontSize:48}},"⚠️"),
+        React.createElement("h2",{style:{color:"#DC2626",margin:0}},"오류가 발생했습니다"),
+        React.createElement("p",{style:{color:"#6B7280",textAlign:"center",maxWidth:400}},String(this.state.error?.message||"알 수 없는 오류")),
+        React.createElement("button",{onClick:()=>{if('caches' in window)caches.keys().then(k=>k.forEach(n=>caches.delete(n)));window.location.reload(true);},style:{background:"#6C63FF",color:"#fff",border:"none",borderRadius:10,padding:"12px 24px",fontSize:15,fontWeight:700,cursor:"pointer"}},"🔄 캐시 초기화 후 새로고침")
+      );
+    }
+    return this.props.children;
+  }
+}
+ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(ErrorBoundary,null,React.createElement(App)));
 </script>
 <script>
+  // 서비스워커 캐시 완전 초기화 + 강제 업데이트
   if('serviceWorker' in navigator){
-    window.addEventListener('load', ()=>{
-      navigator.serviceWorker.register('service-worker.js')
-        .then(r=>console.log('SW 등록 완료:', r.scope))
-        .catch(e=>console.log('SW 등록 실패:', e));
+    // 1) 기존 서비스워커 전체 해제
+    navigator.serviceWorker.getRegistrations().then(regs=>{
+      regs.forEach(r=>r.unregister());
     });
+    // 2) 모든 캐시 삭제
+    if('caches' in window){
+      caches.keys().then(keys=>{
+        keys.forEach(k=>caches.delete(k));
+      });
+    }
   }
 </script>
 </body>

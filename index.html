@@ -1371,6 +1371,9 @@ function TaskBoard({tasks,onEdit,onDelete,onStatusChange,isMobile=false}){
 
 // ── 캘린더 ────────────────────────────────────────────
 function CalendarView({schedules,currentMonth,setCurrentMonth,todayStr,selectedSched,setSelectedSched,onDateClick,onEditSched,onDeleteSched,showOwner=false,showPartColor=false,showOwnerColor=false,isMobile=false}){
+  // ── Hooks 최상단 선언 (Rules of Hooks) ──
+  const [expandedDay,setExpandedDay]=useState(null);
+
   const year=currentMonth.getFullYear(),month=currentMonth.getMonth();
   const days=new Date(year,month+1,0).getDate();
   const firstDay=new Date(year,month,1).getDay();
@@ -1403,7 +1406,6 @@ function CalendarView({schedules,currentMonth,setCurrentMonth,todayStr,selectedS
   const getDay=ds=>[...schedules.filter(s=>s.start_date<=ds&&s.end_date>=ds)]
     .sort((a,b)=>(a.start_time||"00:00").localeCompare(b.start_time||"00:00"));
   const todayFull=getLocalDateStr(new Date());
-  const [expandedDay,setExpandedDay]=useState(null);
   // 뱃지 색 팔레트
   const PART_LIGHT=[
     {bg:"#EDE9FE",text:"#4338CA"},{bg:"#DBEAFE",text:"#1D4ED8"},

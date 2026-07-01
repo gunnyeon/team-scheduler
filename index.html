@@ -73,7 +73,7 @@
 const {useState,useEffect,useRef,useCallback}=React;
 
 // ── API 설정 ───────────────────────────────────────────
-const API_URL = "https://script.google.com/macros/s/AKfycbwlxUzrB5FXhXJElSr-fD6RjwfrvoAFG0mgH4pgaS02W4-crA3NtayhgF1R4QiSvGjLTQ/exec";
+const API_URL = "YOUR_APPS_SCRIPT_URL_HERE";
 const SCHED_HEADERS = ["id","title","description","owner_name","owner_email","start_date","start_time","end_date","end_time","priority"];
 const TASK_HEADERS  = ["id","title","owner_name","part","start_date","due_date","progress","status"];
 const TRIP_HEADERS  = ["id","title","description","owner_name","owner_email","start_date","start_time","end_date","end_time","priority","part"];
@@ -84,8 +84,20 @@ const MIN_STAFF_HEADERS = ["site_id","role_group","min_count"];
 const PERSONNEL_HEADERS = ["id","emp_id","name","department","dept_type","emp_type","position","rank","job_type","hire_date","age","phone","license","leave_status","leave_start","leave_end"];
 
 async function apiGet(sheet){
-  const r=await fetch(`${API_URL}?sheet=${sheet}`);
-  const d=await r.json();
+  // GET 대신 POST로 데이터 조회 (CORS 우회)
+  let d;
+  try{
+    const r=await fetch(API_URL,{
+      method:"POST",
+      headers:{"Content-Type":"text/plain;charset=utf-8"},
+      body:JSON.stringify({sheet,action:"read"})
+    });
+    d=await r.json();
+  }catch(e){
+    // POST 재시도
+    const r=await fetch(API_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({sheet,action:"read"})});
+    d=await r.json();
+  }
   if(!d.ok)return[];
   // Sheets에서 날짜가 Date 객체 문자열로 올 경우 yyyy-MM-dd 형식으로 정규화
   return (d.data||[]).map(row=>{
@@ -129,9 +141,8 @@ async function apiPost(payload){
       body:JSON.stringify(payload)
     });
   }catch(e){
-    // POST 실패 시 GET fallback
-    const params=new URLSearchParams({payload:JSON.stringify(payload)});
-    await fetch(`${API_URL}?${params}`);
+    // 재시도 (동일 POST)
+    await fetch(API_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(payload)});
   }
 }
 async function apiInit(sheet,headers){await apiPost({sheet,action:"init",headers});}
@@ -142,7 +153,7 @@ async function apiDelete(sheet,id){await apiPost({sheet,action:"delete",id});}
 async function apiReplaceAll(sheet,headers,rows){
   // 1단계: 시트의 기존 데이터 조회 → id 목록 추출
   try{
-    const r=await fetch(`${API_URL}?sheet=${sheet}`);
+    const r=await fetch(API_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({sheet,action:"read"})});
     const d=await r.json();
     if(d.ok&&d.data&&d.data.length>0){
       const existIds=d.data.map(row=>row.id).filter(Boolean);
@@ -417,7 +428,7 @@ function App(){
       // POST 실패 시 순차 upsert fallback
       console.warn("POST replaceAll 실패, fallback:", e.message);
       try{
-        const r2=await fetch(`${API_URL}?sheet=org_nodes`);
+        const r2=await fetch(API_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({sheet:"org_nodes",action:"read"})});
         const d2=await r2.json();
         const existIds=(d2.ok&&d2.data?d2.data:[])
           .filter(n=>n.site_id===siteId).map(n=>n.id).filter(Boolean);
@@ -476,7 +487,7 @@ function App(){
       // fallback: 순차 삭제 + upsert
       console.warn("POST replaceAll 실패, 순차로 fallback:",e);
       try{
-        const r2=await fetch(`${API_URL}?sheet=org_nodes`);
+        const r2=await fetch(API_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({sheet:"org_nodes",action:"read"})});
         const d2=await r2.json();
         const existHqIds=(d2.ok&&d2.data?d2.data:[])
           .filter(n=>n.site_id==="__hq__").map(n=>n.id).filter(Boolean);
@@ -707,7 +718,7 @@ function App(){
     setLoginError("");
     try{
       // API URL 미설정 체크
-      if(!API_URL||API_URL==="YOUR_APPS_SCRIPT_URL_HERE"){
+      if(!API_URL||API_URL==="https://script.google.com/macros/s/AKfycbwlxUzrB5FXhXJElSr-fD6RjwfrvoAFG0mgH4pgaS02W4-crA3NtayhgF1R4QiSvGjLTQ/exec"){
         setLoginError("⚠️ API URL이 설정되지 않았습니다. index.html의 API_URL을 실제 주소로 교체해 주세요.");
         setLoginLoading(false);return;
       }
@@ -716,7 +727,12 @@ function App(){
       const timer=setTimeout(()=>controller.abort(),10000);
       let json;
       try{
-        const membersRes=await fetch(`${API_URL}?sheet=members`,{signal:controller.signal});
+        const membersRes=await fetch(API_URL,{
+          method:"POST",
+          headers:{"Content-Type":"text/plain;charset=utf-8"},
+          body:JSON.stringify({sheet:"members",action:"read"}),
+          signal:controller.signal
+        });
         clearTimeout(timer);
         json=await membersRes.json();
       }catch(fetchErr){

@@ -73,7 +73,7 @@
 const {useState,useEffect,useRef,useCallback}=React;
 
 // ── API 설정 ───────────────────────────────────────────
-const API_URL = "https://script.google.com/macros/s/AKfycbwlxUzrB5FXhXJElSr-fD6RjwfrvoAFG0mgH4pgaS02W4-crA3NtayhgF1R4QiSvGjLTQ/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbyJeK3_zB-BnLDVGCSOThzXJ-gUAPn6HLXpQRjbTwmxGGVTknOfGevxMR7tPFau53EhGw/exec";
 const SCHED_HEADERS = ["id","title","description","owner_name","owner_email","start_date","start_time","end_date","end_time","priority"];
 const TASK_HEADERS  = ["id","title","owner_name","part","start_date","due_date","progress","status"];
 const TRIP_HEADERS  = ["id","title","description","owner_name","owner_email","start_date","start_time","end_date","end_time","priority","part"];
@@ -83,14 +83,35 @@ const ORG_HEADERS       = ["id","site_id","emp_id","job_type","role_group","posi
 const MIN_STAFF_HEADERS = ["site_id","role_group","min_count"];
 const PERSONNEL_HEADERS = ["id","emp_id","name","department","dept_type","emp_type","position","rank","job_type","hire_date","age","phone","license","leave_status","leave_start","leave_end"];
 
+// JSONP 방식으로 GET 요청 (CORS 완전 우회)
+function jsonpGet(url){
+  return new Promise((resolve,reject)=>{
+    const cbName="ts_cb_"+Date.now()+"_"+Math.random().toString(36).slice(2);
+    const script=document.createElement("script");
+    const timer=setTimeout(()=>{
+      cleanup();reject(new Error("JSONP timeout"));
+    },15000);
+    function cleanup(){
+      delete window[cbName];
+      document.head.removeChild(script);
+      clearTimeout(timer);
+    }
+    window[cbName]=function(data){
+      cleanup();resolve(data);
+    };
+    script.src=url+(url.includes("?")?"&":"?")+`callback=${cbName}`;
+    script.onerror=()=>{cleanup();reject(new Error("JSONP load error"));};
+    document.head.appendChild(script);
+  });
+}
+
 async function apiGet(sheet){
-  // Apps Script GET 방식 (CORS 허용됨 - 배포 설정이 "모든 사람"이면 동작)
   let d;
   try{
-    const r=await fetch(`${API_URL}?sheet=${sheet}`,{method:"GET"});
-    d=await r.json();
+    // JSONP 방식 (CORS 우회)
+    d=await jsonpGet(`${API_URL}?sheet=${sheet}`);
   }catch(e){
-    // GET 실패 시 POST fallback
+    // JSONP 실패 시 POST fallback
     try{
       const r=await fetch(API_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({sheet,action:"read"})});
       d=await r.json();
@@ -720,7 +741,7 @@ function App(){
     setLoginError("");
     try{
       // API URL 미설정 체크
-      if(!API_URL||API_URL==="https://script.google.com/macros/s/AKfycbwlxUzrB5FXhXJElSr-fD6RjwfrvoAFG0mgH4pgaS02W4-crA3NtayhgF1R4QiSvGjLTQ/exec"){
+      if(!API_URL||API_URL==="YOUR_APPS_SCRIPT_URL_HERE"){
         setLoginError("⚠️ API URL이 설정되지 않았습니다. index.html의 API_URL을 실제 주소로 교체해 주세요.");
         setLoginLoading(false);return;
       }
@@ -729,9 +750,12 @@ function App(){
       const timer=setTimeout(()=>controller.abort(),10000);
       let json;
       try{
-        const membersRes=await fetch(`${API_URL}?sheet=members`,{signal:controller.signal});
+        // JSONP 방식으로 members 조회 (CORS 완전 우회)
+        json=await Promise.race([
+          jsonpGet(`${API_URL}?sheet=members`),
+          new Promise((_,reject)=>setTimeout(()=>reject(new Error("AbortError")),10000))
+        ]);
         clearTimeout(timer);
-        json=await membersRes.json();
       }catch(fetchErr){
         clearTimeout(timer);
         if(fetchErr.name==="AbortError"){

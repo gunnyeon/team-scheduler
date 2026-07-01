@@ -720,7 +720,7 @@ function App(){
     setLoginError("");
     try{
       // API URL 미설정 체크
-      if(!API_URL||API_URL==="YOUR_APPS_SCRIPT_URL_HERE"){
+      if(!API_URL||API_URL==="https://script.google.com/macros/s/AKfycbwlxUzrB5FXhXJElSr-fD6RjwfrvoAFG0mgH4pgaS02W4-crA3NtayhgF1R4QiSvGjLTQ/exec"){
         setLoginError("⚠️ API URL이 설정되지 않았습니다. index.html의 API_URL을 실제 주소로 교체해 주세요.");
         setLoginLoading(false);return;
       }

@@ -169,6 +169,15 @@ async function apiPost(payload){
   }
 }
 async function apiInit(sheet,headers){await apiPost({sheet,action:"init",headers});}
+
+// ── 저장 디바운스 (연속 클릭/변경 시 마지막 1회만 저장) ──────────
+function makeDebounce(fn, delay){
+  let timer=null;
+  return function(...args){
+    clearTimeout(timer);
+    timer=setTimeout(()=>fn(...args), delay);
+  };
+}
 async function apiUpsert(sheet,row){await apiPost({sheet,action:"upsert",row});}
 async function apiDelete(sheet,id){await apiPost({sheet,action:"delete",id});}
 // replace_all: GET 방식 유지 (Apps Script CORS 안정)
@@ -305,7 +314,8 @@ function App(){
     try{
       setSyncStatus("연결 중");
       // apiInit은 백그라운드 (시트 생성은 오래 걸릴 수 있음)
-      Promise.all([apiInit("schedules",SCHED_HEADERS),apiInit("trips",TRIP_HEADERS),apiInit("tasks",TASK_HEADERS),apiInit("leaves",LEAVE_HEADERS),apiInit("sites",SITE_HEADERS),apiInit("org_nodes",ORG_HEADERS),apiInit("personnel",PERSONNEL_HEADERS)]).catch(()=>{});
+      // init_all: 7개 시트 초기화를 단일 요청으로 처리
+      apiPost({action:"init_all"}).catch(()=>{});
       await loadData();
       initialized.current=true;
     }catch(e){
@@ -463,8 +473,8 @@ function App(){
       // POST 실패 시 순차 upsert fallback
       console.warn("POST replaceAll 실패, fallback:", e.message);
       try{
-        const r2=await fetch(`${API_URL}?sheet=org_nodes`);
-        const d2=await r2.json();
+        const _r2=await fetch(API_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action:"read",sheet:"org_nodes"})});
+        const d2=await _r2.json();
         const existIds=(d2.ok&&d2.data?d2.data:[])
           .filter(n=>n.site_id===siteId).map(n=>n.id).filter(Boolean);
         for(const id of existIds){
@@ -489,7 +499,7 @@ function App(){
       pendingOrgIds.current.clear();
       orgLocalChange.current=Date.now()+30000;
       lastLocalChange.current=Date.now()+5000;
-      polling.current=setInterval(loadData,15000);
+      polling.current=setInterval(loadData,30000);
     }
   }
   
@@ -522,8 +532,8 @@ function App(){
       // fallback: 순차 삭제 + upsert
       console.warn("POST replaceAll 실패, 순차로 fallback:",e);
       try{
-        const r2=await fetch(`${API_URL}?sheet=org_nodes`);
-        const d2=await r2.json();
+        const _r2=await fetch(API_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action:"read",sheet:"org_nodes"})});
+        const d2=await _r2.json();
         const existHqIds=(d2.ok&&d2.data?d2.data:[])
           .filter(n=>n.site_id==="__hq__").map(n=>n.id).filter(Boolean);
         let saved=0;
@@ -552,7 +562,7 @@ function App(){
       pendingOrgIds.current.clear();
       orgLocalChange.current=Date.now()+30000;
       lastLocalChange.current=Date.now()+5000;
-      polling.current=setInterval(loadData,15000);
+      polling.current=setInterval(loadData,30000);
     }
   }
   function onPersonnelSave(row){
@@ -575,15 +585,10 @@ function App(){
   }
 
   function afterSave(){
-    // 저장 직후 1.5초간 폴링 응답 무시 (충돌 방지)
-    lastLocalChange.current=Date.now()+1500;
+    // 저장 직후 5초간 폴링 응답 무시 (충돌 방지)
+    lastLocalChange.current=Date.now()+5000;
     setSyncStatus("동기화됨");
-    // 폴링 리셋 후 2초 뒤 1회 로드 (저장 완료 후 서버 반영 시간 확보)
-    clearInterval(polling.current);
-    setTimeout(()=>{
-      loadData();
-      polling.current=setInterval(loadData,15000);
-    },800);
+    // 즉시 loadData 제거 → 폴링(15초)이 알아서 반영 (트래픽 절감)
   }
 
   useEffect(()=>{
@@ -591,10 +596,10 @@ function App(){
     if(initialized.current){
       // 로그인 시 이미 데이터 로드됨 → 로딩화면 없이 바로 시작
       setAppLoading(false);
-      polling.current=setInterval(loadData,15000);
+      polling.current=setInterval(loadData,30000);
     } else {
       initialize().then(()=>{
-        polling.current=setInterval(loadData,15000);
+        polling.current=setInterval(loadData,30000);
       });
     }
     return()=>clearInterval(polling.current);

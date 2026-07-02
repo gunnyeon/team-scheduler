@@ -3018,7 +3018,13 @@ function SitePMBoard({sites=[],onSave,onDelete,orgNodes=[],onOrgSave,onOrgDelete
   // 필터 적용 + 준공일자 오름차순 정렬
   const filtered=[...sites]
     .filter(s=>{
-      if(q&&!(s.name.toLowerCase().includes(q)||s.pm.toLowerCase().includes(q)||(s.location||"").toLowerCase().includes(q)||(s.client||"").toLowerCase().includes(q)))return false;
+      if(q){
+        const ql=q.toLowerCase();
+        const basicMatch=s.name.toLowerCase().includes(ql)||s.pm.toLowerCase().includes(ql)||(s.location||"").toLowerCase().includes(ql)||(s.client||"").toLowerCase().includes(ql)||(s.estimate_pm||"").toLowerCase().includes(ql);
+        // 현장 배치 직원 이름 검색
+        const empMatch=orgNodes.some(n=>n.site_id===s.id&&(n.name||"").toLowerCase().includes(ql));
+        if(!basicMatch&&!empMatch)return false;
+      }
       // 준공일자 필터
       if(filterCompletion!=="전체"){
         const days=s.completion?Math.ceil((new Date(s.completion+"T00:00:00")-new Date())/(1000*60*60*24)):null;
@@ -3053,7 +3059,7 @@ function SitePMBoard({sites=[],onSave,onDelete,orgNodes=[],onOrgSave,onOrgDelete
     <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:12,flexWrap:"wrap"}}>
       <div style={{flex:1,minWidth:200,position:"relative"}}>
         <span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",color:"#A0AEC0",fontSize:16,pointerEvents:"none"}}>🔍</span>
-        <input value={searchQ} onChange={e=>setSearchQ(e.target.value)} placeholder="현장명, PM, 위치, 발주처 검색..."
+        <input value={searchQ} onChange={e=>setSearchQ(e.target.value)} placeholder="현장명, PM, 위치, 발주처, 직원명 검색..."
           style={{width:"100%",border:"1px solid #CBD5E0",borderRadius:10,padding:isMobile?"8px 10px 8px 34px":"10px 12px 10px 38px",fontSize:isMobile?13:14,color:"#2D3748",outline:"none",boxSizing:"border-box",background:"#fff"}}/>
         {searchQ&&<button onClick={()=>setSearchQ("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#A0AEC0",cursor:"pointer",fontSize:18,lineHeight:1}}>×</button>}
       </div>

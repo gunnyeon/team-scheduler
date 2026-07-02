@@ -318,7 +318,19 @@ function App(){
   async function loadData(){
     const reqAt=Date.now();
     try{
-      const [s,tr,t,lv,sv,on,pr,ms]=await Promise.all([apiGet("schedules"),apiGet("trips"),apiGet("tasks"),apiGet("leaves"),apiGet("sites"),apiGet("org_nodes"),apiGet("personnel"),apiGet("site_min_staff")]);
+      // 단일 POST로 전체 데이터 한 번에 수신 (트래픽 8배 절감)
+      const _allRes=await fetch(API_URL,{
+        method:"POST",
+        headers:{"Content-Type":"text/plain;charset=utf-8"},
+        body:JSON.stringify({action:"read_all"})
+      });
+      const _allData=await _allRes.json();
+      if(!_allData.ok) throw new Error(_allData.error||"read_all 실패");
+      const _d=_allData.data;
+      const [s,tr,t,lv,sv,on,pr,ms]=[
+        _d.schedules||[],_d.trips||[],_d.tasks||[],_d.leaves||[],
+        _d.sites||[],_d.org_nodes||[],_d.personnel||[],_d.site_min_staff||[]
+      ];
       // 요청 시작 후 로컬 변경이 있으면 무시 (내가 방금 저장한 데이터를 서버가 덮어쓰지 않도록)
       if(lastLocalChange.current>=reqAt)return;
       // JSON 문자열 비교로 실제 변경 시에만 setState → 불필요한 리렌더 방지
@@ -477,7 +489,7 @@ function App(){
       pendingOrgIds.current.clear();
       orgLocalChange.current=Date.now()+30000;
       lastLocalChange.current=Date.now()+5000;
-      polling.current=setInterval(loadData,3000);
+      polling.current=setInterval(loadData,15000);
     }
   }
   
@@ -540,7 +552,7 @@ function App(){
       pendingOrgIds.current.clear();
       orgLocalChange.current=Date.now()+30000;
       lastLocalChange.current=Date.now()+5000;
-      polling.current=setInterval(loadData,3000);
+      polling.current=setInterval(loadData,15000);
     }
   }
   function onPersonnelSave(row){
@@ -570,7 +582,7 @@ function App(){
     clearInterval(polling.current);
     setTimeout(()=>{
       loadData();
-      polling.current=setInterval(loadData,3000);
+      polling.current=setInterval(loadData,15000);
     },800);
   }
 
@@ -579,10 +591,10 @@ function App(){
     if(initialized.current){
       // 로그인 시 이미 데이터 로드됨 → 로딩화면 없이 바로 시작
       setAppLoading(false);
-      polling.current=setInterval(loadData,3000);
+      polling.current=setInterval(loadData,15000);
     } else {
       initialize().then(()=>{
-        polling.current=setInterval(loadData,3000);
+        polling.current=setInterval(loadData,15000);
       });
     }
     return()=>clearInterval(polling.current);
@@ -1789,16 +1801,20 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
   function saveNodeOrders(updatedNodes){
     updatedNodes.forEach(n=>{ onOrgSave({...n,_skipApi:false}); });
   }
-  // sort_order 전용 저장: BLOCK 없이 API만 직접 호출
+  // sort_order 전용 저장: 배치로 한 번에 저장 (트래픽 최소화)
   function saveSortOrder(nodesWithOrder){
     if(!nodesWithOrder||nodesWithOrder.length===0)return;
-    // 드래그로 변경한 순서는 이미 로컬 state(sectionOrder/rgOrder/childOrder)에 반영됨
-    // orderRestored=true 유지 → 폴링이 와도 useEffect가 덮어쓰지 않음
+    // 로컬 state 즉시 반영
     orderRestored.current=true;
-    // API 저장만 수행 (_skipBlock + _skipPending으로 BLOCK/30초보호 없음)
     nodesWithOrder.forEach(row=>{
-      onOrgSave({...row,_skipBlock:true,_skipPending:true});
+      setOrgNodes(prev=>{
+        const r={...row};delete r._skipBlock;delete r._skipPending;
+        return prev.map(n=>n.id===r.id?{...n,sort_order:r.sort_order}:n);
+      });
     });
+    // API: 배치 단일 요청 (개별 N회 → 1회)
+    const rows=nodesWithOrder.map(r=>{const n={...r};delete n._skipBlock;delete n._skipPending;return n;});
+    apiPost({sheet:"org_nodes",action:"upsert_batch",rows}).catch(e=>console.warn("sort_order 배치 저장 오류:",e));
   }
   const [dragChild,setDragChild]=useState(null); // 드래그 중인 노드 ID
   const [dragOverChild,setDragOverChild]=useState(null); // 드롭 대상 노드 ID

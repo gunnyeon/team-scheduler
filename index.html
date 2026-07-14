@@ -1809,15 +1809,14 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
   // sort_order 전용 저장: 배치로 한 번에 저장 (트래픽 최소화)
   function saveSortOrder(nodesWithOrder){
     if(!nodesWithOrder||nodesWithOrder.length===0)return;
-    // 로컬 state 즉시 반영
     orderRestored.current=true;
+    // 로컬 state 반영: onOrgSave(_skipBlock+_skipPending)로 처리
+    // setOrgNodes는 App 레벨이라 직접 접근 불가 → onOrgSave 사용
     nodesWithOrder.forEach(row=>{
-      setOrgNodes(prev=>{
-        const r={...row};delete r._skipBlock;delete r._skipPending;
-        return prev.map(n=>n.id===r.id?{...n,sort_order:r.sort_order}:n);
-      });
+      const r={...row};delete r._skipBlock;delete r._skipPending;
+      onOrgSave({...r,_skipBlock:true,_skipPending:true,_skipApi:true}); // 로컬만
     });
-    // API: 배치 단일 요청 (개별 N회 → 1회)
+    // API: 배치 단일 요청
     const rows=nodesWithOrder.map(r=>{const n={...r};delete n._skipBlock;delete n._skipPending;return n;});
     apiPost({sheet:"org_nodes",action:"upsert_batch",rows}).catch(e=>console.warn("sort_order 배치 저장 오류:",e));
   }

@@ -1071,6 +1071,7 @@ function App(){
   onOrgSave={onOrgSave} onOrgDelete={onOrgDelete} onOrgSaveBump={onOrgSaveBump} onOrgReplaceForSite={onOrgReplaceForSite}
   personnel={personnel} onPersonnelSave={onPersonnelSave} onPersonnelDelete={onPersonnelDelete}
   siteMinStaff={siteMinStaff} onMinStaffSave={onMinStaffSave} isMobile={isMobile}
+  onPrintOrg={printOrgChart} onPrintAllOrg={printAllOrgCharts}
 />
 )}
 
@@ -3066,7 +3067,7 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
 }
 
 
-function SitePMBoard({sites=[],onSave,onDelete,orgNodes=[],onOrgSave,onOrgDelete,onOrgSaveBump,onOrgReplaceForSite,personnel=[],onPersonnelSave,onPersonnelDelete,siteMinStaff=[],onMinStaffSave,isMobile=false}){
+function SitePMBoard({sites=[],onSave,onDelete,orgNodes=[],onOrgSave,onOrgDelete,onOrgSaveBump,onOrgReplaceForSite,personnel=[],onPersonnelSave,onPersonnelDelete,siteMinStaff=[],onMinStaffSave,isMobile=false,onPrintOrg=()=>{},onPrintAllOrg=()=>{}}){
   const [showModal,setShowModal]=useState(false);
   const [orgSite,setOrgSite]=useState(null);
   const [editing,setEditing]=useState(null);
@@ -3152,7 +3153,7 @@ function SitePMBoard({sites=[],onSave,onDelete,orgNodes=[],onOrgSave,onOrgDelete
       </div>
       <span style={{fontSize:13,color:"#718096",whiteSpace:"nowrap"}}>{filtered.length}개 현장</span>
       <button onClick={openNew} className="touch-btn" style={{...btn("#6C63FF"),fontSize:isMobile?14:13,padding:isMobile?"12px 18px":"10px 20px",whiteSpace:"nowrap",minHeight:44,borderRadius:10,fontWeight:700}}>+ 현장 추가</button>
-          <button onClick={printAllOrgCharts} className="touch-btn" style={{...btn("#EFF6FF","#3B82F6"),fontSize:isMobile?13:12,padding:isMobile?"12px 14px":"10px 16px",whiteSpace:"nowrap",minHeight:44,borderRadius:10,fontWeight:700}}>🖨 전체 조직도 출력</button>
+          <button onClick={onPrintAllOrg} className="touch-btn" style={{...btn("#EFF6FF","#3B82F6"),fontSize:isMobile?13:12,padding:isMobile?"12px 14px":"10px 16px",whiteSpace:"nowrap",minHeight:44,borderRadius:10,fontWeight:700}}>🖨 전체 조직도 출력</button>
     </div>
     {/* 필터 행 */}
     <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
@@ -3284,7 +3285,7 @@ function SitePMBoard({sites=[],onSave,onDelete,orgNodes=[],onOrgSave,onOrgDelete
           {/* 액션 버튼 */}
           <div style={{padding:isMobile?"8px 14px 12px":"10px 20px 14px",display:"flex",gap:isMobile?6:8,borderTop:"1px solid #F0F4F8"}}>
             <button onClick={()=>setOrgSite(s)} className="touch-btn" style={{flex:1,...btn("#F0FDF4","#15803D"),fontSize:isMobile?13:12,padding:isMobile?"12px 0":"7px 0",minHeight:44,borderRadius:10,fontWeight:700}}>🏢 조직도</button>
-            <button onClick={()=>printOrgChart(s)} className="touch-btn" style={{flex:1,...btn("#EFF6FF","#3B82F6"),fontSize:isMobile?13:12,padding:isMobile?"12px 0":"7px 0",minHeight:44,borderRadius:10,fontWeight:700}}>🖨 출력</button>
+            <button onClick={()=>onPrintOrg(s)} className="touch-btn" style={{flex:1,...btn("#EFF6FF","#3B82F6"),fontSize:isMobile?13:12,padding:isMobile?"12px 0":"7px 0",minHeight:44,borderRadius:10,fontWeight:700}}>🖨 출력</button>
             <button onClick={()=>openEdit(s)} className="touch-btn" style={{flex:1,...btn("#EEF2F7","#6C63FF"),fontSize:isMobile?13:12,padding:isMobile?"12px 0":"7px 0",minHeight:44,borderRadius:10,fontWeight:700}}>✏ 수정</button>
             <button onClick={()=>del(s.id)} className="touch-btn" style={{flex:1,...btn("#FFF5F5","#F87171"),fontSize:isMobile?13:12,padding:isMobile?"12px 0":"7px 0",minHeight:44,borderRadius:10,fontWeight:700}}>🗑 삭제</button>
           </div>

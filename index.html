@@ -476,36 +476,45 @@ function App(){
   }
 
   function openPrintWindow(blocks, title){
-    const css=`
-      @page{size:A4 landscape;margin:12mm 10mm;}
-      *{box-sizing:border-box;margin:0;padding:0;font-family:'Noto Sans KR',sans-serif;}
-      body{background:#fff;color:#1A1A2E;}
-      .print-header{text-align:center;margin-bottom:14px;}
-      .print-header h1{font-size:18px;font-weight:800;color:#1A1A2E;}
-      .print-header p{font-size:11px;color:#718096;margin-top:3px;}
-      .site-block{page-break-after:always;padding-bottom:4mm;}
-      .site-block:last-child{page-break-after:avoid;}
-      .site-title{display:flex;align-items:baseline;gap:14px;margin-bottom:10px;padding-bottom:7px;border-bottom:2.5px solid #6C63FF;}
-      .site-name{font-size:15px;font-weight:800;color:#1A1A2E;}
-      .site-meta{font-size:10px;color:#718096;}
-      .org-row{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start;}
-      .group-col{flex:1;min-width:90px;max-width:160px;}
-      .group-header{color:#fff;font-size:10px;font-weight:700;text-align:center;padding:4px 6px;border-radius:6px 6px 0 0;letter-spacing:0.3px;}
-      .members-wrap{border:1.5px solid #E2E8F0;border-top:none;border-radius:0 0 6px 6px;overflow:hidden;}
-      .member-card{padding:5px 7px;border-bottom:1px solid #F0F4F8;background:#fff;}
-      .member-card:last-child{border-bottom:none;}
-      .member-card:nth-child(even){background:#F8FAFC;}
-      .member-pos{font-size:9px;color:#718096;font-weight:600;}
-      .member-name{font-size:11px;font-weight:700;color:#1A1A2E;margin-top:1px;}
-      .member-phone{font-size:9px;color:#A0AEC0;margin-top:1px;}
-    `;
+    const css=[
+      "@page{size:A4 landscape;margin:12mm 10mm;}",
+      "*{box-sizing:border-box;margin:0;padding:0;font-family:'Noto Sans KR',sans-serif;}",
+      "body{background:#fff;color:#1A1A2E;}",
+      ".print-header{text-align:center;margin-bottom:14px;}",
+      ".print-header h1{font-size:18px;font-weight:800;color:#1A1A2E;}",
+      ".print-header p{font-size:11px;color:#718096;margin-top:3px;}",
+      ".site-block{page-break-after:always;padding-bottom:4mm;}",
+      ".site-block:last-child{page-break-after:avoid;}",
+      ".site-title{display:flex;align-items:baseline;gap:14px;margin-bottom:10px;padding-bottom:7px;border-bottom:2.5px solid #6C63FF;}",
+      ".site-name{font-size:15px;font-weight:800;color:#1A1A2E;}",
+      ".site-meta{font-size:10px;color:#718096;}",
+      ".org-row{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start;}",
+      ".group-col{flex:1;min-width:90px;max-width:160px;}",
+      ".group-header{color:#fff;font-size:10px;font-weight:700;text-align:center;padding:4px 6px;border-radius:6px 6px 0 0;letter-spacing:0.3px;}",
+      ".members-wrap{border:1.5px solid #E2E8F0;border-top:none;border-radius:0 0 6px 6px;overflow:hidden;}",
+      ".member-card{padding:5px 7px;border-bottom:1px solid #F0F4F8;background:#fff;}",
+      ".member-card:last-child{border-bottom:none;}",
+      ".member-card:nth-child(even){background:#F8FAFC;}",
+      ".member-pos{font-size:9px;color:#718096;font-weight:600;}",
+      ".member-name{font-size:11px;font-weight:700;color:#1A1A2E;margin-top:1px;}",
+      ".member-phone{font-size:9px;color:#A0AEC0;margin-top:1px;}"
+    ].join("\n");
     const now=new Date().toLocaleDateString("ko-KR");
     const body=blocks.join("\n");
+    const gfont='<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700;800&display=swap" rel="stylesheet">';
+    // <script> 태그를 문자열 연결로 분리 (Babel 파서 혼동 방지)
+    const scriptTag='<'+'script'+'>'+'window.onload=()=>{window.print();}'+'<'+'/'+'script'+'>';
+    const html='<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"><title>'+title+'</title>'+gfont+'<style>'+css+'</style></head><body>'
+      +'<div class="print-header"><h1>'+title+'</h1><p>출력일: '+now+'</p></div>'
+      +body+scriptTag+'</body></html>';
     const win=window.open("","_blank","width=1200,height=800");
-    win.document.write(`<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"><title>${title}</title><link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700;800&display=swap" rel="stylesheet"><style>${css}</style></head><body><div class="print-header"><h1>${title}</h1><p>출력일: ${now}</p></div>${body}<script>window.onload=()=>{window.print();}<\/script></body></html>`);
+    if(!win){alert("팝업 차단을 해제해 주세요.");return;}
+    win.document.write(html);
     win.document.close();
   }
-  // ────────────────────────────────────────────────────ids){
+  // ────────────────────────────────────────────────────
+  // 단건/다건 삭제
+  function onOrgDelete(ids){
     const idArr=Array.isArray(ids)?ids:[ids];
     const BLOCK=60000;
     setOrgNodes(prev=>prev.filter(n=>!idArr.includes(n.id)));

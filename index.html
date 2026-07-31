@@ -425,93 +425,7 @@ function App(){
         });
     }
   }
-  // ── 조직도 인쇄 헬퍼 ──────────────────────────────────
-  function buildOrgPrintHtml(site, nodes){
-    const ORG_COLORS={"현장소장":"#6C63FF","공사":"#3B82F6","공무":"#0EA5E9","기계":"#F59E0B","전기":"#EAB308","안전":"#22C55E","품질":"#EC4899","관리":"#F97316","토목":"#10B981","기타":"#94A3B8"};
-    // 직종별로 노드 그룹화
-    const byGroup={};
-    nodes.filter(n=>n.site_id===site.id&&n.role_group!=="__job_type__"&&n.role_group!=="__role_group__").forEach(n=>{
-      const g=n.role_group||"기타";
-      if(!byGroup[g])byGroup[g]=[];
-      byGroup[g].push(n);
-    });
-    const groups=Object.entries(byGroup).filter(([,arr])=>arr.length>0);
-    if(groups.length===0)return null;
 
-    const groupHtml=groups.map(([grp,members])=>{
-      const col=ORG_COLORS[grp]||"#94A3B8";
-      const memberHtml=members.map(m=>`
-        <div class="member-card">
-          <div class="member-pos">${m.position||m.rank||""}</div>
-          <div class="member-name">${m.name||"-"}</div>
-          ${m.phone?`<div class="member-phone">${m.phone}</div>`:""}
-        </div>`).join("");
-      return `
-        <div class="group-col">
-          <div class="group-header" style="background:${col};">${grp}</div>
-          <div class="members-wrap">${memberHtml}</div>
-        </div>`;
-    }).join("");
-
-    return `
-      <div class="site-block">
-        <div class="site-title">
-          <span class="site-name">${site.name}</span>
-          <span class="site-meta">PM: ${site.pm||"-"} | 위치: ${site.location||"-"} | ${site.completion?"준공: "+site.completion:""}</span>
-        </div>
-        <div class="org-row">${groupHtml}</div>
-      </div>`;
-  }
-
-  function printOrgChart(site){
-    const html=buildOrgPrintHtml(site, orgNodes);
-    if(!html){alert("조직도에 등록된 인원이 없습니다.");return;}
-    openPrintWindow([html], site.name+" 조직도");
-  }
-
-  function printAllOrgCharts(){
-    const htmlBlocks=sites.map(s=>buildOrgPrintHtml(s,orgNodes)).filter(Boolean);
-    if(htmlBlocks.length===0){alert("출력할 조직도가 없습니다.");return;}
-    openPrintWindow(htmlBlocks,"전체 현장 조직도");
-  }
-
-  function openPrintWindow(blocks, title){
-    const css=[
-      "@page{size:A4 landscape;margin:12mm 10mm;}",
-      "*{box-sizing:border-box;margin:0;padding:0;font-family:'Noto Sans KR',sans-serif;}",
-      "body{background:#fff;color:#1A1A2E;}",
-      ".print-header{text-align:center;margin-bottom:14px;}",
-      ".print-header h1{font-size:18px;font-weight:800;color:#1A1A2E;}",
-      ".print-header p{font-size:11px;color:#718096;margin-top:3px;}",
-      ".site-block{page-break-after:always;padding-bottom:4mm;}",
-      ".site-block:last-child{page-break-after:avoid;}",
-      ".site-title{display:flex;align-items:baseline;gap:14px;margin-bottom:10px;padding-bottom:7px;border-bottom:2.5px solid #6C63FF;}",
-      ".site-name{font-size:15px;font-weight:800;color:#1A1A2E;}",
-      ".site-meta{font-size:10px;color:#718096;}",
-      ".org-row{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start;}",
-      ".group-col{flex:1;min-width:90px;max-width:160px;}",
-      ".group-header{color:#fff;font-size:10px;font-weight:700;text-align:center;padding:4px 6px;border-radius:6px 6px 0 0;letter-spacing:0.3px;}",
-      ".members-wrap{border:1.5px solid #E2E8F0;border-top:none;border-radius:0 0 6px 6px;overflow:hidden;}",
-      ".member-card{padding:5px 7px;border-bottom:1px solid #F0F4F8;background:#fff;}",
-      ".member-card:last-child{border-bottom:none;}",
-      ".member-card:nth-child(even){background:#F8FAFC;}",
-      ".member-pos{font-size:9px;color:#718096;font-weight:600;}",
-      ".member-name{font-size:11px;font-weight:700;color:#1A1A2E;margin-top:1px;}",
-      ".member-phone{font-size:9px;color:#A0AEC0;margin-top:1px;}"
-    ].join("\n");
-    const now=new Date().toLocaleDateString("ko-KR");
-    const body=blocks.join("\n");
-    const gfont='<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700;800&display=swap" rel="stylesheet">';
-    // <script> 태그를 문자열 연결로 분리 (Babel 파서 혼동 방지)
-    const scriptTag='<'+'script'+'>'+'window.onload=()=>{window.print();}'+'<'+'/'+'script'+'>';
-    const html='<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"><title>'+title+'</title>'+gfont+'<style>'+css+'</style></head><body>'
-      +'<div class="print-header"><h1>'+title+'</h1><p>출력일: '+now+'</p></div>'
-      +body+scriptTag+'</body></html>';
-    const win=window.open("","_blank","width=1200,height=800");
-    if(!win){alert("팝업 차단을 해제해 주세요.");return;}
-    win.document.write(html);
-    win.document.close();
-  }
   // ────────────────────────────────────────────────────
   // 단건/다건 삭제
   function onOrgDelete(ids){
@@ -1071,7 +985,6 @@ function App(){
   onOrgSave={onOrgSave} onOrgDelete={onOrgDelete} onOrgSaveBump={onOrgSaveBump} onOrgReplaceForSite={onOrgReplaceForSite}
   personnel={personnel} onPersonnelSave={onPersonnelSave} onPersonnelDelete={onPersonnelDelete}
   siteMinStaff={siteMinStaff} onMinStaffSave={onMinStaffSave} isMobile={isMobile}
-  onPrintOrg={printOrgChart} onPrintAllOrg={printAllOrgCharts}
 />
 )}
 
@@ -3067,7 +2980,7 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
 }
 
 
-function SitePMBoard({sites=[],onSave,onDelete,orgNodes=[],onOrgSave,onOrgDelete,onOrgSaveBump,onOrgReplaceForSite,personnel=[],onPersonnelSave,onPersonnelDelete,siteMinStaff=[],onMinStaffSave,isMobile=false,onPrintOrg=()=>{},onPrintAllOrg=()=>{}}){
+function SitePMBoard({sites=[],onSave,onDelete,orgNodes=[],onOrgSave,onOrgDelete,onOrgSaveBump,onOrgReplaceForSite,personnel=[],onPersonnelSave,onPersonnelDelete,siteMinStaff=[],onMinStaffSave,isMobile=false}){
   const [showModal,setShowModal]=useState(false);
   const [orgSite,setOrgSite]=useState(null);
   const [editing,setEditing]=useState(null);
@@ -3153,7 +3066,6 @@ function SitePMBoard({sites=[],onSave,onDelete,orgNodes=[],onOrgSave,onOrgDelete
       </div>
       <span style={{fontSize:13,color:"#718096",whiteSpace:"nowrap"}}>{filtered.length}개 현장</span>
       <button onClick={openNew} className="touch-btn" style={{...btn("#6C63FF"),fontSize:isMobile?14:13,padding:isMobile?"12px 18px":"10px 20px",whiteSpace:"nowrap",minHeight:44,borderRadius:10,fontWeight:700}}>+ 현장 추가</button>
-          <button onClick={onPrintAllOrg} className="touch-btn" style={{...btn("#EFF6FF","#3B82F6"),fontSize:isMobile?13:12,padding:isMobile?"12px 14px":"10px 16px",whiteSpace:"nowrap",minHeight:44,borderRadius:10,fontWeight:700}}>🖨 전체 조직도 출력</button>
     </div>
     {/* 필터 행 */}
     <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
@@ -3285,7 +3197,6 @@ function SitePMBoard({sites=[],onSave,onDelete,orgNodes=[],onOrgSave,onOrgDelete
           {/* 액션 버튼 */}
           <div style={{padding:isMobile?"8px 14px 12px":"10px 20px 14px",display:"flex",gap:isMobile?6:8,borderTop:"1px solid #F0F4F8"}}>
             <button onClick={()=>setOrgSite(s)} className="touch-btn" style={{flex:1,...btn("#F0FDF4","#15803D"),fontSize:isMobile?13:12,padding:isMobile?"12px 0":"7px 0",minHeight:44,borderRadius:10,fontWeight:700}}>🏢 조직도</button>
-            <button onClick={()=>onPrintOrg(s)} className="touch-btn" style={{flex:1,...btn("#EFF6FF","#3B82F6"),fontSize:isMobile?13:12,padding:isMobile?"12px 0":"7px 0",minHeight:44,borderRadius:10,fontWeight:700}}>🖨 출력</button>
             <button onClick={()=>openEdit(s)} className="touch-btn" style={{flex:1,...btn("#EEF2F7","#6C63FF"),fontSize:isMobile?13:12,padding:isMobile?"12px 0":"7px 0",minHeight:44,borderRadius:10,fontWeight:700}}>✏ 수정</button>
             <button onClick={()=>del(s.id)} className="touch-btn" style={{flex:1,...btn("#FFF5F5","#F87171"),fontSize:isMobile?13:12,padding:isMobile?"12px 0":"7px 0",minHeight:44,borderRadius:10,fontWeight:700}}>🗑 삭제</button>
           </div>

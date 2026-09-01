@@ -946,9 +946,9 @@ function App(){
                 placeholder="암호 입력" autoFocus
                 style={{border:"1px solid #C4B5FD",borderRadius:10,padding:"10px 16px",
                   fontSize:14,outline:"none",textAlign:"center",width:200}}
-                onKeyDown={e=>{if(e.key==="Enter"){if(hqDashPwInput==="dongbu"){setHqDashLocked(false);setHqDashPwInput("");}else{setHqDashPwError("암호가 올바르지 않습니다.");}}}}/>
+                onKeyDown={e=>{if(e.key==="Enter"){if(hqDashPwInput==="dongbu02348"){setHqDashLocked(false);setHqDashPwInput("");}else{setHqDashPwError("암호가 올바르지 않습니다.");}}}}/>
               {hqDashPwError&&<p style={{margin:0,fontSize:12,color:"#F87171",fontWeight:600}}>{hqDashPwError}</p>}
-              <button onClick={()=>{if(hqDashPwInput==="dongbu"){setHqDashLocked(false);setHqDashPwInput("");}else{setHqDashPwError("암호가 올바르지 않습니다.");}}}
+              <button onClick={()=>{if(hqDashPwInput==="dongbu02348"){setHqDashLocked(false);setHqDashPwInput("");}else{setHqDashPwError("암호가 올바르지 않습니다.");}}}
                 style={{background:"linear-gradient(90deg,#9F7AEA,#B794F4)",color:"#fff",border:"none",
                   borderRadius:10,padding:"10px 32px",fontWeight:700,fontSize:14,cursor:"pointer"}}>
                 입력
@@ -970,12 +970,12 @@ function App(){
         type="password"
         value={sitepmPwInput}
         onChange={e=>{setSitepmPwInput(e.target.value);setSitepmPwError("");}}
-        onKeyDown={e=>{if(e.key==="Enter"){if(sitepmPwInput==="dongbu"){setSitePMLocked(false);setSitepmPwInput("");}else{setSitepmPwError("암호가 올바르지 않습니다.");}}} }
+        onKeyDown={e=>{if(e.key==="Enter"){if(sitepmPwInput==="dongbu02348"){setSitePMLocked(false);setSitepmPwInput("");}else{setSitepmPwError("암호가 올바르지 않습니다.");}}} }
         placeholder="암호 입력"
         autoFocus
         style={{width:"100%",background:"#EEF2F7",border:`1px solid ${sitepmPwError?"#F87171":"#6C63FF66"}`,borderRadius:10,padding:"11px 14px",fontSize:15,color:"#2D3748",outline:"none",boxSizing:"border-box",marginBottom:sitepmPwError?8:14,textAlign:"center",letterSpacing:4}}/>
       {sitepmPwError&&<p style={{color:"#F87171",fontSize:12,margin:"0 0 12px"}}>{sitepmPwError}</p>}
-      <button onClick={()=>{if(sitepmPwInput==="dongbu"){setSitePMLocked(false);setSitepmPwInput("");}else{setSitepmPwError("암호가 올바르지 않습니다.");}}}
+      <button onClick={()=>{if(sitepmPwInput==="dongbu02348"){setSitePMLocked(false);setSitepmPwInput("");}else{setSitepmPwError("암호가 올바르지 않습니다.");}}}
         style={{width:"100%",background:"linear-gradient(90deg,#9F7AEA,#B794F4)",border:"none",borderRadius:10,padding:12,fontSize:14,fontWeight:700,color:"#fff",cursor:"pointer"}}>
         확인 →
       </button>
@@ -2959,12 +2959,12 @@ function OrgChartModal({site,onClose,orgNodes=[],onOrgSave,onOrgDelete,onOrgSave
               <div style={{fontSize:36,marginBottom:12}}>🔐</div>
               <h3 style={{margin:"0 0 8px",fontSize:15,fontWeight:800,color:"#1A1A2E"}}>관리자 인증</h3>
               <input type="password" value={adminPwInput} onChange={e=>setAdminPwInput(e.target.value)}
-                onKeyDown={e=>{if(e.key==="Enter"){if(adminPwInput==="dongbu"){setShowAdminPw(false);setShowPersonnelMgr(true);}else setAdminPwError("암호가 틀렸습니다.");}}}
+                onKeyDown={e=>{if(e.key==="Enter"){if(adminPwInput==="dongbu02348"){setShowAdminPw(false);setShowPersonnelMgr(true);}else setAdminPwError("암호가 틀렸습니다.");}}}
                 placeholder="관리자 암호" autoFocus
                 style={{width:"100%",border:`1px solid ${adminPwError?"#F87171":"#CBD5E0"}`,
                 borderRadius:10,padding:"10px 14px",fontSize:14,outline:"none",boxSizing:"border-box",marginBottom:6}}/>
               {adminPwError&&<p style={{margin:"0 0 10px",fontSize:11,color:"#F87171"}}>{adminPwError}</p>}
-              <button onClick={()=>{if(adminPwInput==="dongbu"){setShowAdminPw(false);setShowPersonnelMgr(true);}else setAdminPwError("암호가 틀렸습니다.");}}
+              <button onClick={()=>{if(adminPwInput==="dongbu02348"){setShowAdminPw(false);setShowPersonnelMgr(true);}else setAdminPwError("암호가 틀렸습니다.");}}
                 style={{width:"100%",background:"#6C63FF",border:"none",borderRadius:10,
                 padding:"11px",fontSize:13,color:"#fff",cursor:"pointer",fontWeight:700,marginTop:4}}>확인</button>
             </div>

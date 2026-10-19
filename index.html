@@ -3108,7 +3108,7 @@ function SitePMBoard({sites=[],onSave,onDelete,orgNodes=[],onOrgSave,onOrgDelete
         // 원가 기준 공정률
         const pc=Number(s.planned_cost||0);
         const cc=Number(s.cumulative_cost||0);
-        const progress=(pc>0&&cc>=0)?Math.min(Math.round((cc/pc)*100),100):null;
+        const progress=(pc>0&&cc>=0)?Math.min(Math.floor((cc/pc)*1000)/10,100):null;
         const progColor=done?"#94A3B8":progress===null?"#6C63FF":progress>=100?"#DC2626":progress>=80?"#D97706":"#6C63FF";
         const dTag=done
           ?<span style={{fontSize:11,padding:"3px 10px",borderRadius:12,background:"#F7FAFC",color:"#A0AEC0",fontWeight:700,border:"1px solid #CBD5E0"}}>준공완료</span>
@@ -3171,7 +3171,7 @@ function SitePMBoard({sites=[],onSave,onDelete,orgNodes=[],onOrgSave,onOrgDelete
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
                 <span style={{fontSize:12,fontWeight:700,color:"#4A5568"}}>📊 공정률</span>
                 <div style={{display:"flex",alignItems:"center",gap:6}}>
-                  <span style={{fontSize:15,fontWeight:800,color:progColor}}>{progress}%</span>
+                  <span style={{fontSize:15,fontWeight:800,color:progColor}}>{progress.toFixed(1)}%</span>
                   {done&&<span style={{fontSize:10,color:"#A0AEC0",fontWeight:600}}>완료</span>}
                 </div>
               </div>
@@ -3252,11 +3252,11 @@ function SitePMBoard({sites=[],onSave,onDelete,orgNodes=[],onOrgSave,onOrgDelete
                 const pc=Number(form.planned_cost||0);
                 const cc=Number(form.cumulative_cost||0);
                 if(pc>0&&cc>=0){
-                  const prog=Math.round((cc/pc)*100);
+                  const prog=Math.min(Math.floor((cc/pc)*1000)/10,100);
                   const progColor=prog>=100?"#DC2626":prog>=80?"#D97706":"#15803D";
                   return <div style={{marginTop:10,padding:"8px 12px",background:"#fff",borderRadius:8,display:"flex",alignItems:"center",gap:10}}>
                     <span style={{fontSize:12,color:"#718096"}}>자동 계산 공정률:</span>
-                    <span style={{fontSize:18,fontWeight:800,color:progColor}}>{prog}%</span>
+                    <span style={{fontSize:18,fontWeight:800,color:progColor}}>{prog.toFixed(1)}%</span>
                     <div style={{flex:1,background:"#E2E8F0",borderRadius:99,height:8,overflow:"hidden"}}>
                       <div style={{background:progColor,width:`${Math.min(prog,100)}%`,height:"100%",borderRadius:99}}/>
                     </div>

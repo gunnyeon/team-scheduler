@@ -3105,8 +3105,11 @@ function SitePMBoard({sites=[],onSave,onDelete,orgNodes=[],onOrgSave,onOrgDelete
         const days=daysLeft(s.completion);
         const urgent=days!==null&&days>=0&&days<=30;
         const done=days!==null&&days<0;
-        const progress=calcProgress(s.start_date,s.completion);
-        const progColor=done?"#94A3B8":progress>=80?"#F87171":progress>=50?"#FBBF24":"#6C63FF";
+        // 원가 기준 공정률
+        const pc=Number(s.planned_cost||0);
+        const cc=Number(s.cumulative_cost||0);
+        const progress=(pc>0&&cc>=0)?Math.min(Math.round((cc/pc)*100),100):null;
+        const progColor=done?"#94A3B8":progress===null?"#6C63FF":progress>=100?"#DC2626":progress>=80?"#D97706":"#6C63FF";
         const dTag=done
           ?<span style={{fontSize:11,padding:"3px 10px",borderRadius:12,background:"#F7FAFC",color:"#A0AEC0",fontWeight:700,border:"1px solid #CBD5E0"}}>준공완료</span>
           :urgent?<span style={{fontSize:11,padding:"3px 10px",borderRadius:12,background:"#FFFBEB",color:"#D97706",fontWeight:800,border:"1px solid #FBBF24"}}>⚠ D-{days}</span>
@@ -3163,22 +3166,22 @@ function SitePMBoard({sites=[],onSave,onDelete,orgNodes=[],onOrgSave,onOrgDelete
                 </a>
               )}
             </div>
-            {/* 공정율 바 */}
+            {/* 공정율 바 (원가 기준) */}
             {progress!==null&&<div style={{marginBottom:14}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-                <span style={{fontSize:12,fontWeight:700,color:"#4A5568"}}>📊 공정율</span>
+                <span style={{fontSize:12,fontWeight:700,color:"#4A5568"}}>📊 공정률</span>
                 <div style={{display:"flex",alignItems:"center",gap:6}}>
                   <span style={{fontSize:15,fontWeight:800,color:progColor}}>{progress}%</span>
                   {done&&<span style={{fontSize:10,color:"#A0AEC0",fontWeight:600}}>완료</span>}
                 </div>
               </div>
               <div style={{height:10,background:"#E2E8F0",borderRadius:6,overflow:"hidden",position:"relative"}}>
-                <div style={{height:"100%",width:`${progress}%`,background:done?"#CBD5E0":`linear-gradient(90deg,#6C63FF,${progColor})`,borderRadius:6,transition:"width 0.6s ease"}}/>
+                <div style={{height:"100%",width:`${progress}%`,background:progColor==="#DC2626"?"#DC2626":progColor==="#D97706"?"linear-gradient(90deg,#FBBF24,#D97706)":`linear-gradient(90deg,#6C63FF,#9F7AEA)`,borderRadius:6,transition:"width 0.6s ease"}}/>
               </div>
-              {s.start_date&&s.completion&&<div style={{display:"flex",justifyContent:"space-between",marginTop:4}}>
-                <span style={{fontSize:10,color:"#A0AEC0"}}>착공 {s.start_date}</span>
-                <span style={{fontSize:10,color:"#A0AEC0"}}>준공 {s.completion}</span>
-              </div>}
+              <div style={{display:"flex",justifyContent:"space-between",marginTop:4}}>
+                <span style={{fontSize:10,color:"#A0AEC0"}}>전체예정원가 {Number(s.planned_cost).toLocaleString()}백만원</span>
+                <span style={{fontSize:10,color:"#A0AEC0"}}>누계투입 {Number(s.cumulative_cost).toLocaleString()}백만원</span>
+              </div>
             </div>}
             {/* 현장 상세 정보 */}
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
@@ -3198,29 +3201,6 @@ function SitePMBoard({sites=[],onSave,onDelete,orgNodes=[],onOrgSave,onOrgDelete
                 <p style={{margin:0,fontSize:12,fontWeight:700,color}}>{value}</p>
               </div>)}
             </div>
-            {/* 공정률 */}
-            {(()=>{
-              const pc=Number(s.planned_cost||0);
-              const cc=Number(s.cumulative_cost||0);
-              const prog=(pc>0&&cc>=0)?Math.round((cc/pc)*100):null;
-              if(s.planned_cost||s.cumulative_cost){
-                const progColor=prog===null?"#A0AEC0":prog>=100?"#DC2626":prog>=80?"#D97706":"#15803D";
-                return <div style={{background:"#F8FAFC",borderRadius:8,padding:"10px 12px",marginBottom:8}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-                    <span style={{fontSize:10,color:"#A0AEC0",fontWeight:600}}>공정률</span>
-                    <span style={{fontSize:14,fontWeight:800,color:progColor}}>{prog!==null?`${prog}%`:"-"}</span>
-                  </div>
-                  <div style={{background:"#E2E8F0",borderRadius:99,height:8,overflow:"hidden"}}>
-                    <div style={{background:progColor,width:`${Math.min(prog||0,100)}%`,height:"100%",borderRadius:99,transition:"width 0.4s"}}/>
-                  </div>
-                  <div style={{display:"flex",justifyContent:"space-between",marginTop:5,fontSize:10,color:"#718096"}}>
-                    <span>전체예정원가: <b style={{color:"#2D3748"}}>{s.planned_cost?`${Number(s.planned_cost).toLocaleString()}백만원`:"-"}</b></span>
-                    <span>누계투입원가: <b style={{color:"#2D3748"}}>{s.cumulative_cost?`${Number(s.cumulative_cost).toLocaleString()}백만원`:"-"}</b></span>
-                  </div>
-                </div>;
-              }
-              return null;
-            })()}
             {s.memo&&<p style={{margin:0,fontSize:12,color:"#718096",background:"#FFFBEB",borderRadius:8,padding:"8px 10px",lineHeight:1.5,borderLeft:"3px solid #FBBF24",whiteSpace:"pre-wrap"}}>{s.memo}</p>}
           </div>
           {/* 액션 버튼 */}

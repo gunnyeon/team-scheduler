@@ -752,10 +752,12 @@ function App(){
 
   const [loginError,setLoginError]=useState("");
   const [loginLoading,setLoginLoading]=useState(false);
+  const [pwInput,setPwInput]=useState("");
 
   async function handleLogin(){
     const n=nameInput.trim();
-    if(!n)return;
+    if(!n){setLoginError("이름을 입력해 주세요.");return;}
+    if(pwInput!=="dongbu02348"){setLoginError("❌ 비밀번호가 올바르지 않습니다.");return;}
     setLoginLoading(true);
     setLoginError("");
     try{
@@ -814,10 +816,14 @@ function App(){
         <div style={{width:64,height:64,borderRadius:18,background:"linear-gradient(135deg,#6C63FF,#FF6B9D)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,margin:"0 auto 20px"}}>🏢</div>
         <h1 style={{margin:"0 0 6px",fontSize:24,fontWeight:800,color:"#6C63FF"}}>TeamSync</h1>
         <p style={{color:"#718096",fontSize:13,margin:"0 0 28px"}}>건축공사팀 일정관리 플랫폼</p>
-        <p style={{color:"#4A5568",fontSize:13,margin:"0 0 10px",textAlign:"left"}}>이름을 입력하고 시작하세요</p>
+        <p style={{color:"#4A5568",fontSize:13,margin:"0 0 10px",textAlign:"left"}}>이름과 비밀번호를 입력하세요</p>
         <input value={nameInput} onChange={e=>{setNameInput(e.target.value);setLoginError("");}}
           onKeyDown={e=>{if(e.key==="Enter")handleLogin();}}
           placeholder="홍길동" autoFocus
+          style={{width:"100%",background:"#EEF2F7",border:`1px solid ${loginError?"#F8717166":"#6C63FF66"}`,borderRadius:10,padding:"14px 16px",fontSize:16,color:"#2D3748",outline:"none",boxSizing:"border-box",marginBottom:10,minHeight:50}}/>
+        <input type="password" value={pwInput} onChange={e=>{setPwInput(e.target.value);setLoginError("");}}
+          onKeyDown={e=>{if(e.key==="Enter")handleLogin();}}
+          placeholder="비밀번호"
           style={{width:"100%",background:"#EEF2F7",border:`1px solid ${loginError?"#F8717166":"#6C63FF66"}`,borderRadius:10,padding:"14px 16px",fontSize:16,color:"#2D3748",outline:"none",boxSizing:"border-box",marginBottom:loginError?8:12,minHeight:50}}/>
         {loginError&&<p style={{color:"#F87171",fontSize:12,margin:"0 0 12px",textAlign:"left"}}>{loginError}</p>}
         <button onClick={handleLogin} disabled={loginLoading}
@@ -927,7 +933,7 @@ function App(){
             {activeMenu==="업무 관리"&&<button className="touch-btn" onClick={()=>{setEditingTask(null);setShowTaskModal(true);}} style={{...btn("#2EC4B6"),fontSize:isMobile?12:13,padding:isMobile?"10px 14px":"8px 16px",minHeight:44,borderRadius:10,fontWeight:700}}>{isMobile?"＋ 추가":"+ 업무 추가"}</button>}
             <button className="touch-btn" onClick={loadData} style={{...btn("#CBD5E0","#6C63FF"),padding:"10px 12px",minHeight:44,borderRadius:10,fontSize:15}}>↻</button>
             <div style={{display:"flex",alignItems:"center",gap:6,background:"#F7FAFC",border:"1px solid #E2E8F0",borderRadius:10,padding:isMobile?"8px 10px":"6px 12px",minHeight:44,cursor:"pointer"}}
-              onClick={()=>{try{sessionStorage.removeItem("ts-name");}catch{}setMyName("");setNameInput("");}}>
+              onClick={()=>{try{sessionStorage.removeItem("ts-name");}catch{}setMyName("");setNameInput("");setPwInput("");}}>
               <div style={{width:26,height:26,borderRadius:"50%",background:getAvatarColor(myName),display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:"#fff",flexShrink:0}}>{myName[0]}</div>
               {!isMobile&&<span style={{fontSize:13,fontWeight:600}}>{myName}</span>}
               <span style={{fontSize:13,color:"#A0AEC0"}}>⏏</span>
